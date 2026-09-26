@@ -2,7 +2,7 @@
    Errors are caught and kept so a coach can attach them to a report. */
 const Help = (() => {
   const { esc, $, $$, toast, modal } = UI;
-  const VERSION = '1.9';
+  const VERSION = '2.1';
   const TOUR_KEY = 'raincy-tour-seen', ERR_KEY = 'raincy-errors';
 
   /* ---------- error log ---------- */
@@ -29,7 +29,7 @@ const Help = (() => {
   /* ---------- first-use tour ---------- */
   const SLIDES = [
     ['crest', 'Bienvenue !', "Raincy Coach, c'est l'appli des éducateurs du club : tableau tactique animé, effectifs, séances, matchs et statistiques. Elle marche aussi sans internet."],
-    ['whistle', 'Ton compte', "Le responsable crée le premier compte. Ensuite, chaque dirigeant choisit son nom dans la liste et crée son mot de passe à sa première connexion."],
+    ['whistle', 'Ton compte', "Première fois : ouvre le lien d'invitation du responsable, choisis ton nom et crée ton mot de passe. Ensuite, connecte-toi sur n'importe quel téléphone, tablette ou ordinateur avec ton nom, ton prénom et ton mot de passe : tes données te suivent."],
     ['team', 'Équipes et joueurs', "Dans Équipes, retrouve chaque catégorie avec ses joueurs et dirigeants. Pour charger les licenciés : Réglages → Recevoir un fichier. Touche un joueur pour ajouter son numéro et le téléphone des parents."],
     ['board', 'Le tableau tactique', "Dans Schémas : choisis un outil (joueur, ballon, flèche, zone) puis touche le terrain. Touche « + Étape », déplace les joueurs : la flèche se dessine toute seule. « Jouer » lance l'animation."],
     ['training', 'Séances et matchs', "Prépare tes exercices, coche les présents, note les joueurs avec les étoiles, ajoute photos et vidéos. Pour un match : convocation, composition, score, buteurs… et les smileys !"],
@@ -73,7 +73,7 @@ const Help = (() => {
     equipes: ['Équipes', ['Chaque carte est une catégorie (U11, Seniors…). Touche-la pour voir ses joueurs et ses dirigeants.', '« Tous les joueurs » montre tout le club, avec une recherche et un filtre par catégorie.', '« Nouvelle catégorie » : choisis le format foot à 11, à 8 ou à 5.']],
     equipe: ['Une catégorie', ['Touche un joueur pour ouvrir sa fiche : numéro, poste, téléphone, parents, infos santé, et ses notes.', 'Le menu « Ajouter un joueur d\'une autre catégorie » permet de mettre un joueur dans plusieurs catégories.', 'La croix retire le joueur de la catégorie seulement : il reste dans le club.']],
     joueurs: ['Tous les joueurs', ['Cherche un nom ou filtre par catégorie.', '« Coller une liste » : colle des lignes copiées depuis Footclubs, les joueurs sont rangés tout seuls dans leur catégorie.', 'Pour charger le fichier des licenciés : Réglages → Recevoir un fichier.']],
-    dirigeants: ['Dirigeants', ['Ajoute chaque dirigeant avec son rôle, son téléphone et ses catégories.', 'À sa première connexion, le dirigeant choisit son nom et crée son mot de passe.']],
+    dirigeants: ['Dirigeants', ['Ajoute chaque dirigeant avec son rôle, son téléphone et ses catégories.', 'À sa première connexion (lien d\'invitation : Réglages → Inviter les éducateurs), le dirigeant choisit son nom et crée son mot de passe.']],
     schemas: ['Schémas', ['Un schéma est un exercice ou une tactique animée. « Nouveau schéma » : foot à 11, à 8, à 5 ou zone libre.', 'La Bibliothèque permet de dessiner sur une vidéo, un PDF ou une image.', '« Recevoir » ouvre un schéma envoyé par un autre éducateur.']],
     schema: ['Le tableau tactique', ['1. Choisis un outil à gauche (ou en haut sur téléphone), puis touche le terrain.', '2. « Bouger » : fais glisser un joueur. Touche-le pour changer son numéro, sa couleur ou son nom.', '3. Flèche : glisse ton doigt. Zone : dessine un rectangle et donne-lui un nom.', '4. « + Étape » copie la position : déplace les joueurs et le ballon, la flèche du mouvement se dessine toute seule.', '5. « Jouer » lance l\'animation. « Exporter » : image, vidéo, PDF à imprimer.', 'Sur téléphone, le bouton en forme de pile ouvre les options (couloirs, zones de jeu, formations…).']],
     entrainements: ['Séances', ['Une fiche AssistCoachAI (PDF) : Bibliothèque → Importer → ouvre le PDF → Créer une séance. Chaque exercice est repris avec sa durée, ses consignes et son matériel.', '« Nouvel entraînement » : un thème, une date, une équipe.', 'Tu peux aussi créer une séance d\'un coup à partir d\'un PDF : Bibliothèque → ouvre le PDF → Créer une séance.']],
@@ -83,7 +83,7 @@ const Help = (() => {
     stats: ['Statistiques', ['Bilan de l\'équipe : victoires, nuls, défaites, buts et points.', 'Tableau des joueurs : touche un titre de colonne pour trier (buts, passes, présences, notes).']],
     planning: ['Planning du terrain', ['« Chaque semaine » réserve ton créneau d\'entraînement toutes les semaines jusqu\'au 30 juin, en une fois. Les semaines déjà prises sont listées.', 'Touche une case vide du planning (ou « Réserver ») pour prendre un créneau : date, heure de début et de fin, grand terrain ou demi-terrain, entraînement ou match.', 'Pas besoin de connaître l\'adversaire : il suffit de l\'horaire.', 'Un grand terrain bloque tout le terrain. Deux demi-terrains peuvent être utilisés en même temps (A et B).', 'L\'appli refuse tout chevauchement, même si deux coachs réservent en même temps.', 'Touche une réservation pour la libérer ou préparer la séance ou la fiche match.', 'Le responsable fixe les créneaux disponibles de la semaine.']],
     messages: ['Messages', ['« Tout le club » : pour tous les éducateurs.', 'Chaque catégorie a sa conversation.', '« Écrire à un éducateur » ouvre une conversation privée.', 'Les nouveaux messages arrivent tout seuls ; le chiffre rouge dans le menu indique ceux que tu n\'as pas lus.']],
-    reglages: ['Réglages', ['Recevoir un fichier : licenciés ou données d\'un autre éducateur.', 'Envoyer toutes mes données : pour partager avec un autre éducateur ou faire une sauvegarde.', 'Le responsable gère les comptes des dirigeants et l\'e-mail qui reçoit les signalements.']],
+    reglages: ['Réglages', ['Recevoir un fichier : licenciés ou données d\'un autre éducateur.', 'Les données se partagent toutes seules par le serveur du club. « Envoyer toutes mes données » fait une sauvegarde.', 'Inviter les éducateurs : un lien à envoyer par WhatsApp pour leur première connexion.', 'Le responsable gère les comptes des dirigeants et l\'e-mail qui reçoit les signalements.']],
     bibliotheque: ['Bibliothèque', ['« Importer » : choisis une vidéo, un montage, un PDF ou une image (Fichiers, Photos…).', 'Vidéo : mets sur pause puis « Dessiner sur cette image ».', 'PDF : « Créer une séance » ou « Dessiner sur cette page ».', '« Joindre… » ajoute le fichier à une séance ou à un match.']],
   };
   const pageKey = () => (location.hash || '#/').split('/')[1] || '';

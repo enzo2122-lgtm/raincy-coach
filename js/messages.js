@@ -59,7 +59,7 @@ const Messages = (() => {
     if (!Cloud.ready()) {
       root.innerHTML = `<header class="page-head"><div><h1>Messages</h1><p class="sub">La messagerie des éducateurs du club</p></div></header>
         <div class="empty"><p>La messagerie passe par le serveur du club, qui n'est pas encore connecté sur cet appareil.</p>
-        ${Auth.isAdmin() ? `<a class="btn primary" href="#/reglages">${I.settings}<span>Configurer le serveur</span></a>` : '<p class="muted">Demande au responsable le fichier du club, puis Réglages → Recevoir un fichier.</p>'}</div>`;
+        ${Auth.isAdmin() ? `<a class="btn primary" href="#/reglages">${I.settings}<span>Configurer le serveur</span></a>` : '<p class="muted">Déconnecte-toi puis reconnecte-toi avec ton nom et ton mot de passe. Si ça ne marche pas, préviens le responsable.</p>'}</div>`;
       return;
     }
     const ch = chParam ? decodeURIComponent(chParam) : '';

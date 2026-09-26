@@ -22,7 +22,7 @@ const Planning = (() => {
   function notReady(root) {
     root.innerHTML = `<header class="page-head"><div><h1>Planning du terrain</h1><p class="sub">Entraînements et matchs de toutes les catégories</p></div></header>
       <div class="empty"><p>Le planning est partagé par tous les éducateurs grâce au serveur du club, qui n'est pas encore connecté sur cet appareil.</p>
-      ${Auth.isAdmin() ? `<a class="btn primary" href="#/reglages">${I.settings}<span>Configurer le serveur</span></a>` : '<p class="muted">Demande au responsable le fichier du club, puis Réglages → Recevoir un fichier.</p>'}</div>`;
+      ${Auth.isAdmin() ? `<a class="btn primary" href="#/reglages">${I.settings}<span>Configurer le serveur</span></a>` : '<p class="muted">Déconnecte-toi puis reconnecte-toi avec ton nom et ton mot de passe. Si ça ne marche pas, préviens le responsable.</p>'}</div>`;
   }
 
   async function load(from, to) {

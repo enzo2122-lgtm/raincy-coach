@@ -7,7 +7,7 @@ const Library = (() => {
   const PDFW = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/pdf.worker.min.js';
   const MAX_PAGES = 40;
   const S = () => Store.state;
-  const KIND = { video: ['Vidéo', 'video'], pdf: ['PDF', 'pdf'], image: ['Image', 'image'] };
+  const KIND = { video: ['Vidéo', 'video'], pdf: ['PDF', 'pdf'], image: ['Image', 'image'], link: ['Lien', 'share'] };
 
   /* ---------- PDF reading (pdf.js, loaded on first use then kept offline) ---------- */
   let pdfjsP = null;
@@ -62,8 +62,56 @@ const Library = (() => {
     }
     return ids;
   }
+  /* ---------- share links (OneDrive, Google Drive, Dropbox, YouTube…) ---------- */
+  function directUrl(u) {
+    try {
+      const x = new URL(u), h = x.hostname;
+      if (/(^|\.)drive\.google\.com$/.test(h)) { const id = (x.pathname.match(/\/d\/([\w-]+)/) || [])[1] || x.searchParams.get('id'); if (id) return `https://drive.google.com/uc?export=download&id=${id}`; }
+      if (/(^|\.)dropbox\.com$/.test(h)) { x.searchParams.set('dl', '1'); return x.href; }
+      if (/(^|\.)(1drv\.ms|onedrive\.live\.com|sharepoint\.com)$/.test(h)) {
+        const b = btoa(unescape(encodeURIComponent(u))).replace(/=+$/, '').replace(/\//g, '_').replace(/\+/g, '-');
+        return `https://api.onedrive.com/v1.0/shares/u!${b}/root/content`;
+      }
+    } catch (e) {}
+    return u;
+  }
+  // Tries to get the file itself (so the app can read the PDF or draw on the picture); many sites refuse, then the link is kept
+  async function fetchFile(u, name) {
+    const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 30000);
+    try {
+      const r = await fetch(directUrl(u), { signal: ctl.signal }); if (!r.ok) throw new Error('refusé');
+      const blob = await r.blob(), type = blob.type || '';
+      if (!/pdf|image\/|video\//.test(type)) throw new Error('pas un fichier');
+      const ext = type.includes('pdf') ? '.pdf' : type.startsWith('image/') ? '.jpg' : '.mp4';
+      return new File([blob], /\.[a-z0-9]{2,4}$/i.test(name) ? name : name + ext, { type });
+    } finally { clearTimeout(t); }
+  }
+  function addLink(cb) {
+    return new Promise(res => {
+      modal({ title: 'Ajouter un lien', body: `<label class="fld"><span>Lien de partage</span><input id="lkUrl" type="url" inputmode="url" placeholder="https://1drv.ms/…  ou  https://drive.google.com/…" autocapitalize="off" autocorrect="off"></label>
+        <label class="fld"><span>Nom (facultatif)</span><input id="lkName" placeholder="Ex : Séance passes U13"></label>
+        <p class="muted small">Dans OneDrive ou Google Drive : <b>Partager</b> → <b>Copier le lien</b>, puis colle-le ici. L'appli essaie de récupérer le fichier pour l'utiliser avec ses outils ; sinon elle garde le lien, qui s'ouvre d'un toucher.</p>`,
+        actions: [{ label: 'Annuler', onClick: () => res() }, { label: 'Ajouter', kind: 'primary', onClick: (close, r) => {
+          const url = $('#lkUrl', r).value.trim(); let host = '';
+          try { const x = new URL(url); if (!/^https?:$/.test(x.protocol)) throw 0; host = x.hostname.replace(/^www\./, ''); } catch (e) { toast('Colle un lien qui commence par https://', 'err'); return false; }
+          const name = $('#lkName', r).value.trim() || decodeURIComponent((url.split(/[?#]/)[0].split('/').pop() || '')).slice(0, 60) || host;
+          close();
+          (async () => {
+            const b = busy('Récupération du fichier…'), step = t => { const p = document.querySelector('#busy p'); if (p) p.textContent = t; };
+            let ids = [];
+            try { ids = await importFiles([await fetchFile(url, name)], step); toast('Fichier récupéré depuis le lien'); }
+            catch (e) {
+              const me = Auth.current(), id = Store.uid();
+              await Media.put({ id, ref: 'lib', kind: 'link', url, name, host, createdAt: Date.now(), by: me ? me.id : null });
+              ids = [id]; toast('Lien enregistré : il s\'ouvre dans ' + host);
+            } finally { b.done(); }
+            cb && cb(ids); res();
+          })();
+        } }] });
+    });
+  }
   function pickFiles(cb) {
-    UI.pickFiles({ accept: 'video/*,image/*,application/pdf', multiple: true }).then(async files => {
+    UI.chooseFiles({ accept: 'video/*,image/*,application/pdf', multiple: true, link: () => addLink(cb) }).then(async files => {
       if (!files.length) return;
       const b = busy('Import en cours…');
       const step = t => { const p = document.querySelector('#busy p'); if (p) p.textContent = t; };
@@ -141,6 +189,8 @@ const Library = (() => {
     const rec = await Media.get(id); if (!rec) return toast('Fichier introuvable sur cet appareil', 'err');
     const urls = [], url = b => { const u = URL.createObjectURL(b); urls.push(u); return u; };
     let body = `<label class="fld"><span>Nom</span><input id="docName" value="${esc(rec.name || '')}"></label>`;
+    if (rec.kind === 'link') body += `<p class="link-box">${I.share}<a href="${esc(rec.url)}" target="_blank" rel="noopener noreferrer">${esc(rec.url)}</a></p>
+      <p class="muted small">Pour dessiner dessus ou en faire une séance, télécharge le fichier sur l'appareil depuis ${esc(rec.host || 'le site')}, puis importe-le avec « Fichiers ».</p>`;
     if (rec.kind === 'image') body += `<div class="viewer"><img alt="" src="${url(rec.blob)}"></div>`;
     if (rec.kind === 'video') body += `<div class="viewer"><video id="docVideo" src="${url(rec.blob)}" controls playsinline></video></div>
       <p class="tip">Mets la vidéo sur pause au bon moment, puis touche « Dessiner sur cette image » pour analyser l'action avec les flèches et les joueurs.</p>`;
@@ -154,8 +204,9 @@ const Library = (() => {
         const sc = await drawOn(c.blob, c.w, c.h, `${cleanName(rec.name)} · ${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`); location.hash = '#/schema/' + sc.id; })();
       return false; } });
     if (rec.kind === 'pdf') actions.push({ label: 'Créer une séance', kind: 'primary', icon: I.training, onClick: () => { setTimeout(() => toTraining(rec), 60); } });
+    if (rec.kind === 'link') actions.push({ label: 'Ouvrir', kind: 'primary', icon: I.share, onClick: () => { window.open(rec.url, '_blank', 'noopener'); return false; } });
     actions.push({ label: 'Joindre…', icon: I.layers, onClick: () => { setTimeout(() => attach(rec), 60); } });
-    actions.push({ label: 'Partager', icon: I.share, onClick: () => { Exporter.deliver(rec.blob, rec.name || 'document'); return false; } });
+    if (rec.blob) actions.push({ label: 'Partager', icon: I.share, onClick: () => { Exporter.deliver(rec.blob, rec.name || 'document'); return false; } });
     if (Auth.isAdmin() || (Auth.current() && rec.by === Auth.current().id)) actions.push({ label: 'Supprimer', kind: 'danger', icon: I.trash, onClick: () => { setTimeout(async () => { if (await confirmBox(`Supprimer « ${rec.name} » de la bibliothèque ?`)) { await Media.del(rec.id); toast('Supprimé'); after && after(); } }, 60); } });
     modal({ title: KIND[rec.kind][0], noFocus: true, body, actions,
       onOpen: (r, close) => {
@@ -181,8 +232,9 @@ const Library = (() => {
         <li>${I.video}<span><b>Vidéo ou montage</b> : mets sur pause et dessine sur l'image avec les flèches et les joueurs.</span></li>
         <li>${I.pdf}<span><b>PDF</b> (séance, exercice, fiche) : l'appli le lit page par page, en fait une séance ou te laisse dessiner sur une page.</span></li>
         <li>${I.image}<span><b>Image ou capture d'écran</b> : dessine dessus comme sur le tableau tactique.</span></li>
+        <li>${I.share}<span><b>OneDrive, Google Drive, Dropbox</b> : « Importer » → « Fichiers », ou colle un lien de partage.</span></li>
         <li>${I.layers}<span>Joins n'importe quel fichier à un entraînement ou un match : il apparaît sur sa page et dans son PDF.</span></li></ul></section>
-      <div class="chips filter">${[['', 'Tout'], ['video', 'Vidéos'], ['pdf', 'PDF'], ['image', 'Images']].map(([v, l]) => `<button class="chip ${v === filt ? 'on' : ''}" data-f="${v}">${l}</button>`).join('')}</div>
+      <div class="chips filter">${[['', 'Tout'], ['video', 'Vidéos'], ['pdf', 'PDF'], ['image', 'Images'], ['link', 'Liens']].map(([v, l]) => `<button class="chip ${v === filt ? 'on' : ''}" data-f="${v}">${l}</button>`).join('')}</div>
       <div class="lib-grid" id="libGrid"><p class="muted">Chargement…</p></div>`;
     const grid = $('#libGrid', root);
     const fill = async () => {
@@ -234,6 +286,20 @@ const Library = (() => {
     }
     return JSON.stringify(obj);
   }
+  // One schema at a time, for the club server
+  async function withBackground(sc) {
+    const m = await Media.get(sc.field.bgId).catch(() => null);
+    return m ? Object.assign({}, sc, { bgData: await toDataURL(m.blob) }) : sc;
+  }
+  async function saveBackground(sc) {
+    if (!sc.bgData || !sc.field || !sc.field.bgId) return;
+    if (!(await Media.get(sc.field.bgId).catch(() => null))) {
+      const blob = await (await fetch(sc.bgData)).blob();
+      await Media.put({ id: sc.field.bgId, ref: 'bg', kind: 'image', name: sc.name, blob, mime: blob.type, createdAt: Date.now() });
+    }
+    Board.BG.delete(sc.field.bgId);
+    await Board.ensureBg(Object.assign({}, sc, { bgData: undefined })).catch(() => {});
+  }
   async function restoreBackgrounds() {
     let n = 0;
     for (const sc of S().schemas) {
@@ -252,9 +318,10 @@ const Library = (() => {
       if (m.kind === 'image') out.push({ name: m.name, images: [await toDataURL(m.blob)] });
       if (m.kind === 'pdf') out.push({ name: m.name, images: await Promise.all(m.pages.map(p => toDataURL(p.blob))), dims: m.pages.map(p => [p.w, p.h]) });
       if (m.kind === 'video') out.push({ name: m.name, video: true });
+      if (m.kind === 'link') out.push({ name: m.name, link: m.url });
     }
     return out;
   }
 
-  return { page, open, pickFiles, importFiles, docsPlaceholder, mountDocs, withBackgrounds, restoreBackgrounds, docImages };
+  return { page, open, pickFiles, importFiles, docsPlaceholder, mountDocs, withBackgrounds, withBackground, saveBackground, restoreBackgrounds, docImages };
 })();

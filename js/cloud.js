@@ -2,10 +2,28 @@
    Tables are closed (row level security, no policy). Everything goes through SQL functions that check the club code;
    managing the available slots also needs the responsable code, which only stays on responsables' devices. */
 const Cloud = (() => {
-  const cfg = () => Store.state.club.cloud || null;
-  const ready = () => { const c = cfg(); return !!(c && c.url && c.key && c.clubKey); };
-  const adminKey = () => (Store.state.auth && Store.state.auth.cloudAdminKey) || '';
+  const builtIn = () => (typeof CLUB_SERVER !== 'undefined' && CLUB_SERVER.url && CLUB_SERVER.key ? CLUB_SERVER : null);
+  const session = () => (Store.state.auth && Store.state.auth.session) || null;
+  const token = () => { const s = session(); return (s && s.token) || ''; };
+  const ownAdminKey = () => (Store.state.auth && Store.state.auth.cloudAdminKey) || '';
+  // Server address: the one of the club file / setup if any, otherwise the one built into the app
+  function cfg() {
+    const c = Store.state.club.cloud || {}, b = builtIn() || {};
+    const url = c.url || b.url, key = c.url ? c.key : b.key;
+    return url && key ? { url, key, clubKey: c.clubKey || '' } : null;
+  }
+  const canLogin = () => !!cfg();
+  const access = () => token() || ownAdminKey() || (cfg() || {}).clubKey;
+  const ready = () => !!(cfg() && access());
+  // A responsable's login works as responsable code; the code itself stays only where it was created
+  const adminKey = () => ownAdminKey() || (session() && session().admin ? token() : '');
   const ERRORS = {
+    COMPTE_INCONNU: 'Aucun compte à ce nom sur le serveur du club.',
+    MOT_DE_PASSE: 'Mot de passe incorrect.',
+    BLOQUE: 'Trop d\'essais : attends 5 minutes avant de réessayer.',
+    DEJA_INSCRIT: 'Ce dirigeant a déjà un mot de passe : connecte-toi, ou demande au responsable de le réinitialiser.',
+    SESSION: 'Ta connexion a expiré : reconnecte-toi.',
+    DONNEES: 'Informations incomplètes.',
     CRENEAU_PRIS: 'Ce créneau est déjà pris sur cette partie du terrain. Choisis un autre horaire ou l\'autre moitié.',
     HORS_CRENEAU: 'Cet horaire est en dehors des créneaux disponibles du terrain.',
     CLE_CLUB: 'Le code du club est incorrect : demande au responsable de te renvoyer le fichier du club.',
@@ -21,12 +39,20 @@ const Cloud = (() => {
     const headers = { apikey: c.key, 'Content-Type': 'application/json' };
     if (!String(c.key).startsWith('sb_')) headers.Authorization = 'Bearer ' + c.key;
     let r;
-    try { r = await fetch(`${c.url.replace(/\/+$/, '')}/rest/v1/rpc/${name}`, { method: 'POST', headers, body: JSON.stringify(Object.assign({ k: c.clubKey }, args)) }); }
-    catch (e) { throw new Error('Pas de connexion internet.'); }
+    const body = name in NO_K ? args : Object.assign({ k: c.test ? c.clubKey : access() }, args);
+    try { r = await fetch(`${c.url.replace(/\/+$/, '')}/rest/v1/rpc/${name}`, { method: 'POST', headers, body: JSON.stringify(body) }); }
+    catch (e) { const err = new Error('Pas de connexion internet.'); err.offline = true; throw err; }
     const txt = await r.text();
-    if (!r.ok) { let m = txt; try { m = JSON.parse(txt).message || txt; } catch (e) {} throw new Error(nice(m)); }
+    if (!r.ok) {
+      let m = txt; try { m = JSON.parse(txt).message || txt; } catch (e) {}
+      const err = new Error(nice(m)); err.code = Object.keys(ERRORS).find(x => String(m).includes(x)) || '';
+      if (r.status === 404 || /could not find the function/i.test(m)) { err.code = 'MISE_A_JOUR'; err.message = 'Le serveur du club doit être mis à jour (Réglages → Serveur du club → Mettre à jour le serveur).'; }
+      throw err;
+    }
     return txt ? JSON.parse(txt) : null;
   }
+  // Functions that identify the dirigeant by his login instead of the club code
+  const NO_K = { club_login: 1, club_me: 1, club_teams_done: 1, club_change_pw: 1, club_logout: 1 };
   function genKey(n = 24) {
     const a = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789', r = crypto.getRandomValues(new Uint8Array(n));
     return Array.from(r, x => a[x % a.length]).join('');
@@ -47,18 +73,143 @@ create table if not exists bookings (
   team_id text, team_name text, author_id text, author_name text, note text, series text);
 alter table bookings add column if not exists series text;
 create table if not exists slots (id uuid primary key default gen_random_uuid(), weekday int not null, start_min int not null, end_min int not null, field text not null default 'T1');
+alter table club_config add column if not exists invite text;
+-- Accounts of the dirigeants (nom + prénom + mot de passe), usable on any device
+create table if not exists accounts (
+  staff_id text primary key, last_key text not null, first_keys text[] not null default '{}', display text not null default '',
+  salt text, pw_hash text, admin boolean not null default false, teams_set boolean not null default false,
+  fails int not null default 0, locked_until timestamptz, created_at timestamptz not null default now(), updated_at timestamptz not null default now());
+create table if not exists sessions (token_hash text primary key, staff_id text not null, created_at timestamptz not null default now(), expires_at timestamptz not null);
+-- The club's data (licenciés, dirigeants, séances, matchs, schémas…), one row per item, shared by every device
+create table if not exists items (col text not null, id text not null, data jsonb, updated_at bigint not null default 0,
+  deleted boolean not null default false, rev bigint not null, primary key (col, id));
+create sequence if not exists items_rev;
+create index if not exists items_rev_idx on items (rev);
 alter table club_config enable row level security;
 alter table messages enable row level security;
 alter table bookings enable row level security;
 alter table slots enable row level security;
+alter table accounts enable row level security;
+alter table sessions enable row level security;
+alter table items enable row level security;
 insert into club_config (id, club_key_hash, admin_key_hash)
   values (1, encode(sha256(convert_to(${q(clubKey)}, 'UTF8')), 'hex'), encode(sha256(convert_to(${q(admKey)}, 'UTF8')), 'hex'))
   on conflict (id) do update set club_key_hash = excluded.club_key_hash, admin_key_hash = excluded.admin_key_hash;
 
+create or replace function raincy_hash(t text) returns text language sql immutable as $$
+  select encode(sha256(convert_to(coalesce(t, ''), 'UTF8')), 'hex') $$;
+create or replace function raincy_token() returns text language sql volatile as $$
+  select replace(gen_random_uuid()::text, '-', '') || replace(gen_random_uuid()::text, '-', '') $$;
+-- Access: the club code, the responsable code, the invitation code, or a dirigeant's login
 create or replace function club_ok(k text) returns boolean language sql stable security definer set search_path = public as $$
-  select exists (select 1 from club_config where id = 1 and club_key_hash = encode(sha256(convert_to(coalesce(k, ''), 'UTF8')), 'hex')) $$;
+  select coalesce(k, '') <> '' and (
+    exists (select 1 from club_config where id = 1 and (club_key_hash = raincy_hash(k) or admin_key_hash = raincy_hash(k) or invite = k))
+    or exists (select 1 from sessions where token_hash = raincy_hash(k) and expires_at > now())) $$;
 create or replace function admin_ok(k text) returns boolean language sql stable security definer set search_path = public as $$
-  select exists (select 1 from club_config where id = 1 and admin_key_hash = encode(sha256(convert_to(coalesce(k, ''), 'UTF8')), 'hex')) $$;
+  select coalesce(k, '') <> '' and (
+    exists (select 1 from club_config where id = 1 and admin_key_hash = raincy_hash(k))
+    or exists (select 1 from sessions s join accounts a on a.staff_id = s.staff_id where s.token_hash = raincy_hash(k) and s.expires_at > now() and a.admin)) $$;
+create or replace function session_staff(t text) returns text language sql stable security definer set search_path = public as $$
+  select staff_id from sessions where coalesce(t, '') <> '' and token_hash = raincy_hash(t) and expires_at > now() $$;
+
+-- Accounts. The app never sends the password itself, only a slow hash of it; the server salts and hashes it again.
+create or replace function raincy_new_session(p_staff text) returns jsonb language plpgsql security definer set search_path = public as $$
+declare t text := raincy_token(); a accounts;
+begin
+  select * into a from accounts where staff_id = p_staff;
+  delete from sessions where expires_at < now();
+  insert into sessions (token_hash, staff_id, expires_at) values (raincy_hash(t), p_staff, now() + interval '400 days');
+  update accounts set fails = 0, locked_until = null where staff_id = p_staff;
+  return jsonb_build_object('token', t, 'staff_id', a.staff_id, 'admin', a.admin, 'teams_set', a.teams_set, 'display', a.display, 'last_key', a.last_key);
+end $$;
+revoke all on function raincy_new_session(text) from public, anon, authenticated;
+create or replace function club_login(p_last text, p_first text, p_h text) returns jsonb language plpgsql security definer set search_path = public as $$
+declare a accounts; f1 text := split_part(coalesce(p_first, ''), ' ', 1);
+begin
+  select * into a from accounts where last_key = p_last and pw_hash is not null and (p_first = any(first_keys) or f1 = any(first_keys))
+    order by (p_first = any(first_keys)) desc, updated_at desc limit 1;
+  if a.staff_id is null then return jsonb_build_object('error', 'COMPTE_INCONNU'); end if;
+  if a.locked_until > now() then return jsonb_build_object('error', 'BLOQUE'); end if;
+  if raincy_hash(a.salt || coalesce(p_h, '')) <> a.pw_hash then
+    update accounts set fails = case when fails >= 4 then 0 else fails + 1 end,
+      locked_until = case when fails >= 4 then now() + interval '5 minutes' else locked_until end where staff_id = a.staff_id;
+    return jsonb_build_object('error', 'MOT_DE_PASSE');
+  end if;
+  return raincy_new_session(a.staff_id);
+end $$;
+-- First connection (or new password after a reset). The responsable code also lets a responsable reset any password.
+create or replace function club_register(k text, admin_k text, p jsonb) returns jsonb language plpgsql security definer set search_path = public as $$
+declare is_adm boolean := admin_ok(admin_k); sid text := p->>'staff_id'; s text := raincy_token(); a accounts;
+begin
+  if not (is_adm or club_ok(k)) then raise exception 'CLE_CLUB'; end if;
+  if coalesce(sid, '') = '' or coalesce(p->>'last_key', '') = '' or length(coalesce(p->>'h', '')) < 32 then raise exception 'DONNEES'; end if;
+  select * into a from accounts where staff_id = sid;
+  if a.pw_hash is not null and not is_adm then raise exception 'DEJA_INSCRIT'; end if;
+  insert into accounts (staff_id, last_key, first_keys, display, salt, pw_hash, admin)
+    values (sid, p->>'last_key', array(select jsonb_array_elements_text(coalesce(p->'first_keys', '[]'::jsonb))), coalesce(p->>'display', ''), s,
+            raincy_hash(s || (p->>'h')), coalesce((p->>'admin')::boolean, false) and is_adm)
+    on conflict (staff_id) do update set last_key = excluded.last_key, first_keys = excluded.first_keys, display = excluded.display, salt = excluded.salt,
+      pw_hash = excluded.pw_hash, admin = accounts.admin or excluded.admin, updated_at = now();
+  delete from sessions where staff_id = sid;
+  return raincy_new_session(sid);
+end $$;
+create or replace function club_accounts(k text) returns jsonb language plpgsql security definer set search_path = public as $$
+begin if not club_ok(k) then raise exception 'CLE_CLUB'; end if;
+  return (select coalesce(jsonb_agg(jsonb_build_object('staff_id', staff_id, 'display', display, 'admin', admin, 'teams_set', teams_set, 'has_pw', pw_hash is not null)), '[]'::jsonb) from accounts); end $$;
+create or replace function club_account_set(k text, admin_k text, p jsonb) returns jsonb language plpgsql security definer set search_path = public as $$
+declare sid text := p->>'staff_id';
+begin if not club_ok(k) then raise exception 'CLE_CLUB'; end if; if not admin_ok(admin_k) then raise exception 'ADMIN'; end if;
+  if p ? 'admin' then update accounts set admin = (p->>'admin')::boolean, updated_at = now() where staff_id = sid; end if;
+  if p ? 'teams_set' then update accounts set teams_set = (p->>'teams_set')::boolean, updated_at = now() where staff_id = sid; end if;
+  if coalesce((p->>'reset')::boolean, false) then update accounts set pw_hash = null, salt = null, updated_at = now() where staff_id = sid; delete from sessions where staff_id = sid; end if;
+  if coalesce((p->>'delete')::boolean, false) then delete from sessions where staff_id = sid; delete from accounts where staff_id = sid; end if;
+  return to_jsonb(true); end $$;
+create or replace function club_me(t text) returns jsonb language plpgsql security definer set search_path = public as $$
+declare sid text := session_staff(t); a accounts;
+begin if sid is null then return jsonb_build_object('error', 'SESSION'); end if;
+  select * into a from accounts where staff_id = sid;
+  if a.staff_id is null then return jsonb_build_object('error', 'SESSION'); end if;
+  return jsonb_build_object('staff_id', a.staff_id, 'admin', a.admin, 'teams_set', a.teams_set, 'display', a.display, 'last_key', a.last_key); end $$;
+create or replace function club_teams_done(t text) returns jsonb language plpgsql security definer set search_path = public as $$
+begin update accounts set teams_set = true, updated_at = now() where staff_id = session_staff(t); return to_jsonb(found); end $$;
+create or replace function club_change_pw(t text, p_old text, p_new text) returns jsonb language plpgsql security definer set search_path = public as $$
+declare sid text := session_staff(t); a accounts; s text := raincy_token();
+begin if sid is null then raise exception 'SESSION'; end if;
+  select * into a from accounts where staff_id = sid;
+  if raincy_hash(a.salt || coalesce(p_old, '')) <> a.pw_hash then return jsonb_build_object('error', 'MOT_DE_PASSE'); end if;
+  if length(coalesce(p_new, '')) < 32 then raise exception 'DONNEES'; end if;
+  update accounts set salt = s, pw_hash = raincy_hash(s || p_new), updated_at = now() where staff_id = sid;
+  delete from sessions where staff_id = sid and token_hash <> raincy_hash(t);
+  return to_jsonb(true); end $$;
+create or replace function club_logout(t text) returns jsonb language plpgsql security definer set search_path = public as $$
+begin delete from sessions where token_hash = raincy_hash(t); return to_jsonb(true); end $$;
+-- Invitation link for new dirigeants (a responsable can make a new one, which cancels the old one)
+create or replace function club_invite(k text, admin_k text, p_new boolean) returns jsonb language plpgsql security definer set search_path = public as $$
+declare c text;
+begin if not admin_ok(admin_k) then raise exception 'ADMIN'; end if;
+  select invite into c from club_config where id = 1;
+  if c is null or p_new then c := upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 12)); update club_config set invite = c where id = 1; end if;
+  return to_jsonb(c); end $$;
+
+-- Shared club data: each device sends what changed and receives what the others changed
+create or replace function club_pull(k text, p_since bigint) returns jsonb language plpgsql security definer set search_path = public as $$
+begin if not club_ok(k) then raise exception 'CLE_CLUB'; end if;
+  return (select coalesce(jsonb_agg(jsonb_build_object('col', col, 'id', id, 'data', data, 'u', updated_at, 'del', deleted, 'rev', rev) order by rev), '[]'::jsonb)
+    from (select * from items where rev > coalesce(p_since, 0) order by rev limit 1000) x); end $$;
+create or replace function club_push(k text, p jsonb) returns jsonb language plpgsql security definer set search_path = public as $$
+declare n int;
+begin if not club_ok(k) then raise exception 'CLE_CLUB'; end if;
+  perform pg_advisory_xact_lock(4242);
+  insert into items (col, id, data, updated_at, deleted, rev)
+    select x.col, x.id, case when coalesce(x.del, false) then null else x.data end, coalesce(x.u, 0), coalesce(x.del, false), nextval('items_rev')
+    from jsonb_to_recordset(p) as x(col text, id text, data jsonb, u bigint, del boolean)
+    where x.col in ('teams', 'players', 'staff', 'schemas', 'trainings', 'matches', 'reports', 'club') and coalesce(x.id, '') <> ''
+  on conflict (col, id) do update set data = excluded.data, updated_at = excluded.updated_at, deleted = excluded.deleted, rev = excluded.rev
+    where excluded.updated_at >= items.updated_at;
+  get diagnostics n = row_count; return to_jsonb(n); end $$;
+grant execute on function club_login(text, text, text), club_register(text, text, jsonb), club_accounts(text), club_account_set(text, text, jsonb),
+  club_me(text), club_teams_done(text), club_change_pw(text, text, text), club_logout(text), club_invite(text, text, boolean),
+  club_pull(text, bigint), club_push(text, jsonb) to anon, authenticated;
 create or replace function club_ping(k text) returns boolean language plpgsql security definer set search_path = public as $$
 begin if not club_ok(k) then raise exception 'CLE_CLUB'; end if; return true; end $$;
 create or replace function club_admin_ping(k text, admin_k text) returns boolean language plpgsql security definer set search_path = public as $$
@@ -143,18 +294,47 @@ notify pgrst, 'reload schema';
     book: async b => normDate(await rpc('club_book', { p: b })),
     unbook: id => rpc('club_unbook', { p_id: id, p_author: Auth.current().id, admin_k: adminKey() || null }),
     unbookSeries: series => rpc('club_unbook_series', { p_series: series, p_author: Auth.current().id, admin_k: adminKey() || null }),
+    // accounts
+    login: (last, first, h) => rpc('club_login', { p_last: last, p_first: first, p_h: h }),
+    register: (p, admK) => rpc('club_register', { admin_k: admK || adminKey() || null, p }),
+    accounts: () => rpc('club_accounts'),
+    accountSet: p => rpc('club_account_set', { admin_k: adminKey(), p }),
+    me: () => rpc('club_me', { t: token() }),
+    teamsDone: () => rpc('club_teams_done', { t: token() }),
+    changePw: (oldH, newH) => rpc('club_change_pw', { t: token(), p_old: oldH, p_new: newH }),
+    logout: t => rpc('club_logout', { t }),
+    invite: renew => rpc('club_invite', { admin_k: adminKey(), p_new: !!renew }),
+    // shared club data
+    pull: since => rpc('club_pull', { p_since: since || 0 }),
+    push: list => rpc('club_push', { p: list }),
   };
+  const inviteLink = code => `${location.origin}${location.pathname.replace(/index\.html$/, '')}#rejoindre=${encodeURIComponent(code)}`;
+  async function shareInvite(renew) {
+    let code;
+    try { code = await api.invite(renew); } catch (e) { return toast(e.message, 'err'); }
+    const link = inviteLink(code), text = `Raincy Coach : ouvre ce lien pour créer ton mot de passe (première connexion), puis ajoute l'appli à ton écran d'accueil.\n${link}`;
+    Store.state.ui.invited = true; Store.save();
+    modal({ title: 'Inviter les éducateurs', body: `<p>Envoie ce lien aux dirigeants (WhatsApp, SMS, e-mail). En l'ouvrant, chacun choisit son nom et crée son mot de passe. Ensuite, ils se connectent partout avec <b>nom, prénom et mot de passe</b>.</p>
+      <label class="fld"><span>Lien d'invitation</span><input id="invLink" value="${esc(link)}" readonly></label>
+      <p class="muted small">Garde ce lien dans le groupe des éducateurs : il donne accès aux données du club. « Nouveau lien » annule l'ancien.</p>`,
+      onOpen: r => { const i = $('#invLink', r); i.onclick = () => i.select(); },
+      actions: [{ label: 'Nouveau lien', onClick: () => { setTimeout(() => shareInvite(true), 60); } },
+        { label: 'Copier', icon: I.copy, onClick: () => { navigator.clipboard.writeText(link).then(() => toast('Lien copié')).catch(() => toast('Sélectionne le lien et copie-le')); return false; } },
+        ...(navigator.share ? [{ label: 'Envoyer', kind: 'primary', icon: I.share, onClick: () => { navigator.share({ title: 'Raincy Coach', text }).catch(() => {}); return false; } }] : [])] });
+  }
 
   /* ---------- setup (Réglages, responsable) ---------- */
   const { esc, $, toast, modal } = UI;
   function settingsSection() {
-    const c = cfg(), admin = Auth.isAdmin();
-    return `<section class="card"><h2>${I.share}Serveur du club (messagerie et planning)</h2>
-      <p>${ready() ? `<span class="res res-V">Connecté</span> ${esc(c.url.replace(/^https?:\/\//, ''))}` : '<span class="res res-D">Non connecté</span> La messagerie et le planning des terrains ont besoin du serveur du club.'}</p>
-      ${admin ? `<div class="chips"><button class="btn primary" data-cloud="setup">${I.edit}<span>${ready() ? 'Reconfigurer' : 'Configurer le serveur'}</span></button>
+    const c = cfg(), admin = Auth.isAdmin(), sync = typeof Sync !== 'undefined' ? Sync.status() : '';
+    return `<section class="card"><h2>${I.share}Serveur du club (comptes, données, messagerie, planning)</h2>
+      <p>${ready() ? `<span class="res res-V">Connecté</span> ${esc(c.url.replace(/^https?:\/\//, ''))}` : '<span class="res res-D">Non connecté</span> Les comptes, le partage des données, la messagerie et le planning ont besoin du serveur du club.'}</p>
+      ${sync ? `<p class="muted small">${esc(sync)}</p>` : ''}
+      ${admin ? `<div class="chips">${ready() ? `<button class="btn primary" data-cloud="invite">${I.share}<span>Inviter les éducateurs</span></button>` : ''}
+        ${!ready() || !builtIn() ? `<button class="btn" data-cloud="setup">${I.edit}<span>${ready() ? 'Reconfigurer' : 'Configurer le serveur'}</span></button>` : ''}
         ${ready() ? `<button class="btn" data-cloud="test">${I.check}<span>Tester</span></button><button class="btn" data-cloud="update">${I.rotate}<span>Mettre à jour le serveur</span></button><button class="btn" data-cloud="adminkey">${I.whistle}<span>Code responsable</span></button>` : ''}</div>
-        <p class="muted small">Les autres éducateurs reçoivent la connexion avec « Envoyer toutes mes données » (le fichier du club).</p>`
-      : `<p class="muted small">${ready() ? 'La connexion vient du fichier du club.' : 'Demande au responsable de t\'envoyer le fichier du club (Réglages → Envoyer toutes mes données), puis fais Recevoir un fichier.'}</p>`}
+        <p class="muted small">Les éducateurs rejoignent le club avec le lien d'invitation, puis se connectent sur n'importe quel appareil avec leur nom et leur mot de passe.</p>`
+      : `<p class="muted small">${ready() ? 'Tes données sont enregistrées sur le serveur du club : tu les retrouves en te connectant sur un autre appareil.' : 'Demande au responsable le lien d\'invitation du club.'}</p>`}
     </section>`;
   }
   function wizard(rerender) {
@@ -175,12 +355,12 @@ notify pgrst, 'reload schema';
         const url = $('#cUrl', r).value.trim().replace(/\/+$/, ''), key = $('#cKey', r).value.trim();
         if (!/^https:\/\/.+/.test(url) || !key) { toast('Colle la Project URL et la clé publique', 'err'); return false; }
         if (/service_role|sb_secret_/.test(key)) { toast('Cette clé est secrète : utilise la clé publique (anon ou publishable)', 'err'); return false; }
-        const c = { url, key, clubKey };
+        const c = { url, key, clubKey, test: true };
         (async () => {
           const b = UI.busy('Test de la connexion…');
           try {
             await api.ping(c);
-            Store.state.club.cloud = c; Store.state.auth.cloudAdminKey = admKey; Store.save();
+            delete c.test; Store.state.club.cloud = c; Store.state.auth.cloudAdminKey = admKey; Store.save();
             close(); toast('Serveur connecté !'); rerender && rerender();
           } catch (e) { toast(e.message.includes('code du club') ? 'Le script n\'a pas été exécuté (ou pas en entier) dans Supabase' : e.message, 'err'); }
           finally { b.done(); }
@@ -190,6 +370,7 @@ notify pgrst, 'reload schema';
   }
   async function onSettingsClick(b, rerender) {
     if (b.dataset.cloud === 'setup') return wizard(rerender);
+    if (b.dataset.cloud === 'invite') return shareInvite(false);
     if (b.dataset.cloud === 'test') {
       try { await api.ping(); const adm = adminKey() ? await api.adminPing() : false; toast(`Connexion OK${adm ? ' · code responsable valide' : ''}`); } catch (e) { toast(e.message, 'err'); }
     }
@@ -208,11 +389,12 @@ notify pgrst, 'reload schema';
           return false; } }] });
     }
     if (b.dataset.cloud === 'adminkey') {
-      modal({ title: 'Code responsable', body: `<p>Ce code permet de gérer les créneaux disponibles du terrain. Pour l'utiliser sur un autre appareil de responsable, recopie-le là-bas.</p>
-        <label class="fld"><span>Code responsable</span><input id="admKey" value="${esc(adminKey())}" autocapitalize="off" autocorrect="off"></label>`,
+      modal({ title: 'Code responsable', body: `<p>Ce code sert de <b>code de secours</b> : avec « Je suis le responsable » sur l'écran de connexion, il permet de retrouver l'accès responsable et de changer ton mot de passe. Note-le sur papier.</p>
+        ${ownAdminKey() ? '' : '<p class="tip">Ce code n\'est pas sur cet appareil. Tu n\'en as pas besoin tant que tu te connectes avec ton compte responsable.</p>'}
+        <label class="fld"><span>Code responsable</span><input id="admKey" value="${esc(ownAdminKey())}" autocapitalize="off" autocorrect="off"></label>`,
         actions: [{ label: 'Annuler' }, { label: 'Enregistrer', kind: 'primary', onClick: (c, r) => { Store.state.auth.cloudAdminKey = $('#admKey', r).value.trim(); Store.save(); toast('Code enregistré'); } }] });
     }
   }
 
-  return Object.assign(api, { ready, cfg, adminKey, settingsSection, onSettingsClick });
+  return Object.assign(api, { ready, canLogin, cfg, adminKey, token, genKey, sql, settingsSection, onSettingsClick, shareInvite });
 })();

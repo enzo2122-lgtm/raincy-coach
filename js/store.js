@@ -84,6 +84,8 @@ const Store = (() => {
     clearTimeout(saveTimer); saveTimer = setTimeout(persist, 300);
     listeners.forEach(f => f());
   }
+  // Save without telling the listeners (used by the sync, which is itself a listener)
+  function persistNow() { clearTimeout(saveTimer); saveTimer = setTimeout(persist, 50); }
   const get = (col, id) => state[col].find(x => x.id === id);
   function upsert(col, item) {
     item.updatedAt = Date.now();
@@ -143,7 +145,7 @@ const Store = (() => {
   const shortName = p => p ? (p.firstName ? p.firstName + (p.lastName ? ' ' + p.lastName[0].toUpperCase() + '.' : '') : fullName(p)) : '';
 
   return {
-    load, save, get, upsert, remove, uid, exportAll, exportTraining, exportSchema, importText, reset, removeExamples,
+    load, save, persistNow, get, upsert, remove, uid, exportAll, exportTraining, exportSchema, importText, reset, removeExamples,
     playersOf, staffOf, fullName, shortName, byName,
     get state() { return state; }, on: f => listeners.add(f), off: f => listeners.delete(f),
   };

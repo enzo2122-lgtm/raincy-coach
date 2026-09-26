@@ -52,7 +52,7 @@ const UI = (() => {
   }
 
   const fmtDate = (d, opts = { weekday: 'short', day: 'numeric', month: 'short' }) => d ? new Date(d + 'T12:00').toLocaleDateString('fr-FR', opts) : '';
-  const today = () => new Date().toISOString().slice(0, 10);
+  const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
   const accentFor = bib => ({ jaune: '#a16207', blanc: '#13245a', vert: '#3f7d0a', orange: '#c2410c' }[bib] || (Board.BIBS[bib] || Board.BIBS.bleu)[0]);
 
   // File picker that works on iPhone/iPad: the input must be in the page, and no unknown extensions in "accept"
@@ -70,5 +70,31 @@ const UI = (() => {
     });
   }
 
-  return { esc, $, $$, toast, modal, confirmBox, busy, thumb, fmtDate, today, accentFor, pickFiles };
+  // On phones and tablets: choose where the files come from (gallery, Files with OneDrive / Google Drive…, or a share link)
+  const touch = () => window.matchMedia && matchMedia('(pointer: coarse)').matches;
+  function chooseFiles({ accept = '', multiple = true, media = true, link = null } = {}) {
+    if (!touch() && !link) return pickFiles({ accept, multiple });
+    return new Promise(res => {
+      let picked = false;
+      const pick = opts => { picked = true; close(); pickFiles(opts).then(res); };
+      const close = modal({ title: 'Ajouter depuis…', noFocus: true, body: `<div class="src-list">
+        ${media ? `<button class="src-btn" data-src="gallery">${I.image}<span><b>Photos et vidéos</b><span class="muted small">Galerie ou appareil photo</span></span></button>` : ''}
+        <button class="src-btn" data-src="files">${I.upload}<span><b>Fichiers</b><span class="muted small">OneDrive, Google Drive, Dropbox, iCloud, Téléchargements…</span></span></button>
+        ${link ? `<button class="src-btn" data-src="link">${I.share}<span><b>Lien de partage</b><span class="muted small">Coller un lien OneDrive, Google Drive, YouTube…</span></span></button>` : ''}</div>
+        <details class="paste-box"><summary>OneDrive ou Google Drive n'apparaît pas ?</summary>
+          <p class="muted small"><b>iPhone / iPad</b> : installe l'appli OneDrive ou Google Drive. Dans « Fichiers », touche <b>Parcourir</b>, puis <b>…</b> → <b>Modifier</b> et active-la. Elle apparaît ensuite quand tu touches « Fichiers » ici (choisis « Choisir un fichier » ou « Parcourir »).<br>
+          <b>Android</b> : dans « Fichiers », ouvre le menu ☰ et choisis Drive ou OneDrive.<br>Tu peux aussi, dans l'appli OneDrive ou Drive, <b>télécharger</b> le fichier sur l'appareil, puis le choisir ici.</p></details>`,
+        onOpen: r => {
+          r.querySelectorAll('[data-src]').forEach(b => b.onclick = () => {
+            if (b.dataset.src === 'gallery') return pick({ accept: accept && /image|video/.test(accept) ? accept.split(',').filter(a => /image|video/.test(a)).join(',') : 'image/*,video/*', multiple });
+            if (b.dataset.src === 'files') return pick({ multiple });
+            picked = true; close(); link().then(() => res([]));
+          });
+        } });
+      const mo = new MutationObserver(() => { if (document.getElementById('modal').hidden) { mo.disconnect(); if (!picked) res([]); } });
+      mo.observe(document.getElementById('modal'), { attributes: true });
+    });
+  }
+
+  return { esc, $, $$, toast, modal, confirmBox, busy, thumb, fmtDate, today, accentFor, pickFiles, chooseFiles };
 })();

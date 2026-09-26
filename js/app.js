@@ -54,11 +54,15 @@ const App = (() => {
   }
   async function start() {
     await Store.load();
+    // Invitation link sent by the responsable: …#rejoindre=CODE
+    const join = (location.hash.match(/^#rejoindre=([A-Za-z0-9]+)/) || [])[1];
+    if (join) { Auth.setInvite(join); history.replaceState(null, '', location.pathname + location.search); }
     refreshChrome();
-    await Auth.gate();
+    await Auth.gate({ joined: !!join });
     try { await Board.preloadBackgrounds(Store.state.schemas); } catch (e) {}
     window.addEventListener('hashchange', route);
     route();
+    Sync.start();
     Messages.start();
     if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
   }

@@ -59,7 +59,7 @@ const Media = (() => {
 
   /* ---------- gallery ---------- */
   const placeholder = (ref, title = 'Photos et vidéos') => `<section class="card gallery-card"><div class="row-head"><h2>${I.image}${esc(title)}</h2>
-      <label class="btn primary file-btn">${I.plus}<span>Ajouter</span><input type="file" accept="image/*,video/*" multiple data-media-add="${esc(ref)}" hidden></label></div>
+      <button class="btn primary" data-media-add="${esc(ref)}">${I.plus}<span>Ajouter</span></button></div>
       <div class="gallery" data-gallery="${esc(ref)}"><p class="muted">Chargement…</p></div></section>`;
   async function mount(root) {
     for (const el of root.querySelectorAll('[data-gallery]')) {
@@ -68,10 +68,11 @@ const Media = (() => {
           ${m.thumb ? `<img alt="" src="${m.thumb}">` : `<span class="no-thumb">${I.video}</span>`}${m.kind === 'video' ? `<span class="play-badge">${I.play}</span>` : ''}</button>`).join('')
         : '<p class="muted">Pas encore de photo ni de vidéo. Touche « Ajouter » pour en mettre depuis l\'appareil photo ou la galerie.</p>';
     }
-    root.querySelectorAll('[data-media-add]').forEach(inp => inp.onchange = async () => {
-      const files = [...inp.files]; inp.value = ''; if (!files.length) return;
+    root.querySelectorAll('[data-media-add]').forEach(btn => btn.onclick = async e => {
+      e.stopPropagation();
+      const files = await UI.chooseFiles({ accept: 'image/*,video/*', multiple: true }); if (!files.length) return;
       const b = UI.busy('Ajout des photos et vidéos…');
-      try { const n = await add(inp.dataset.mediaAdd, files); if (n) toast(`${n} ajoutée${n > 1 ? 's' : ''}`); }
+      try { const n = await add(btn.dataset.mediaAdd, files); if (n) toast(`${n} ajoutée${n > 1 ? 's' : ''}`); else toast('Choisis des photos ou des vidéos (pour un PDF, utilise « Documents »)', 'err'); }
       catch (e) { toast("Impossible d'enregistrer ce fichier : l'appareil manque peut-être de place", 'err'); }
       finally { b.done(); mount(root); }
     });

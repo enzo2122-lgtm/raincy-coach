@@ -38,7 +38,7 @@ const Views = (() => {
       [st.staff.length > 1, 'Ajouter les éducateurs et dirigeants', 'Équipes → Dirigeants → Coller une liste ou Nouveau dirigeant', '#/dirigeants'],
       [Cloud.ready(), 'Connecter le serveur du club', 'Réglages → Serveur du club', '#/reglages'],
       [!!st.club.reportEmail, 'Indiquer ton e-mail pour les signalements', 'Réglages → Aide et signalements', '#/reglages'],
-      [!!st.ui.clubFileSent, 'Envoyer le fichier du club aux éducateurs', 'Réglages → Envoyer toutes mes données', '#/reglages'],
+      [!!(st.ui.invited || st.ui.clubFileSent), 'Inviter les éducateurs', 'Réglages → Serveur du club → Inviter les éducateurs (lien à envoyer par WhatsApp)', '#/reglages'],
     ];
     if (steps.every(s => s[0])) return '';
     return `<section class="card setup-card"><h2>${I.check}Mise en route du club</h2><ol class="setup-steps">${steps.map(([ok, t, how, href]) =>
@@ -473,8 +473,9 @@ const Views = (() => {
         <div class="lbl">Couleur des adversaires</div>${bibs('away', c.awayBib)}
       </section>
       <section class="card">
-        <h2>${I.share}Partager avec les autres éducateurs</h2>
-        <p>Chaque éducateur a l'appli sur son iPad ou son iPhone. Les listes de joueurs avec leurs numéros de téléphone restent sur l'appareil : envoie-les seulement aux éducateurs du club.</p><p> Pour partager, envoie un fichier (AirDrop, WhatsApp, mail). L'autre éducateur l'ouvre avec « Recevoir un fichier » : les équipes, schémas, entraînements et matchs sont ajoutés ou mis à jour.</p>
+        <h2>${I.share}Fichiers du club</h2>
+        <p>${Cloud.ready() ? 'Les équipes, joueurs, dirigeants, schémas, entraînements et matchs se partagent tout seuls entre les éducateurs par le serveur du club. Les photos et vidéos restent sur l\'appareil qui les a prises.' : 'Chaque éducateur a l\'appli sur son appareil. Pour partager, envoie un fichier (AirDrop, WhatsApp, mail) : l\'autre éducateur l\'ouvre avec « Recevoir un fichier ».'}</p>
+        <p class="muted small">« Recevoir un fichier » sert aussi à charger la liste des licenciés ou une sauvegarde. Les listes de joueurs contiennent des numéros de téléphone : envoie-les seulement aux éducateurs du club.</p>
         <div class="chips"><button class="btn primary" data-act="exportAll">${I.download}<span>Envoyer toutes mes données</span></button>
         <button class="btn" data-act="import">${I.upload}<span>Recevoir un fichier</span></button></div>
       </section>
@@ -489,11 +490,12 @@ const Views = (() => {
       </section>` : ''}
       ${Auth.isAdmin() ? `<section class="card">
         <h2>${I.trash}Effacer</h2>
-        <p class="muted">Les données sont enregistrées sur cet appareil uniquement. Pense à envoyer une copie avant d'effacer.</p>
-        <button class="btn danger" data-act="reset">${I.trash}<span>Effacer toutes les données</span></button>
+        <p class="muted">${Cloud.ready() ? 'Efface les données de cet appareil seulement (elles restent sur le serveur du club et reviennent à la prochaine connexion).' : 'Les données sont enregistrées sur cet appareil uniquement. Pense à envoyer une copie avant d\'effacer.'}</p>
+        <button class="btn danger" data-act="reset">${I.trash}<span>Effacer les données de cet appareil</span></button>
       </section>` : ''}
       <p class="muted small">Raincy Coach · version ${Help.VERSION}</p>`;
     Help.onSettings(root, () => settings(root));
+    Auth.mountSettings(root);
     root.onchange = e => Auth.onSettingsChange(e.target);
     $('#clubName', root).oninput = e => { c.name = e.target.value || 'Mon club'; Store.save(); App.refreshChrome(); };
     root.onclick = async e => {

@@ -194,6 +194,7 @@ const Exporter = (() => {
     for (const d of docs) {
       P.label(d.name || 'Document');
       if (d.video) { P.para('Vidéo : à regarder dans l\'appli Raincy Coach.'); continue; }
+      if (d.link) { P.para('Lien : ' + d.link); continue; }
       for (const url of d.images) {
         const img = await Media.loadImage(url), ratio = img.naturalHeight / img.naturalWidth;
         let w = P.CW, h = w * ratio; if (h > 250) { h = 250; w = h / ratio; }

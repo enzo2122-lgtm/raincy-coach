@@ -1,22 +1,42 @@
-/* Auth: each dirigeant picks his name and creates a password on first use.
-   Passwords are never stored: only a PBKDF2 hash with a random salt, kept on this device (not in shared files). */
+/* Auth: each dirigeant has an account on the club server (nom + prénom + mot de passe) and logs in on any device.
+   The password never leaves the device: only a slow hash of it is sent, and the server hashes it again with its own salt.
+   A copy of the hash also stays on the device so a dirigeant who already logged in there can open the app without internet.
+   Without a club server (another club, no setup yet) accounts stay on the device, as in the first versions. */
 const Auth = (() => {
   const { esc, $, toast, modal, confirmBox } = UI;
-  const KEY = 'raincy-session', ITER = 150000, MIN = 6;
+  const KEY = 'raincy-session', TMP = 'raincy-session-tmp', NAMES = 'raincy-last-names', ITER = 150000, MIN = 6;
   const enc = new TextEncoder();
   const b64 = buf => btoa(String.fromCharCode(...new Uint8Array(buf)));
   const unb64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+  const hex = buf => Array.from(new Uint8Array(buf), b => b.toString(16).padStart(2, '0')).join('');
   const newSalt = () => b64(crypto.getRandomValues(new Uint8Array(16)));
   async function derive(pw, salt, iter = ITER) {
     const key = await crypto.subtle.importKey('raw', enc.encode(pw), 'PBKDF2', false, ['deriveBits']);
     return b64(await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: unb64(salt), iterations: iter }, key, 256));
   }
+  // What is sent to the server instead of the password
+  async function proof(lastKey, pw) {
+    const key = await crypto.subtle.importKey('raw', enc.encode(pw), 'PBKDF2', false, ['deriveBits']);
+    return hex(await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: enc.encode('raincy-coach|' + lastKey), iterations: 100000 }, key, 256));
+  }
+  // Names compared without accents or capitals; « Enzo (Adnane) » answers to Enzo and to Adnane
+  const nkey = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z0-9()' -]/g, ' ').replace(/\s+/g, ' ').trim();
+  const noPar = s => s.replace(/\([^)]*\)?/g, ' ').replace(/\s+/g, ' ').trim();
+  function firstKeys(firstName) {
+    const f = nkey(firstName), out = new Set(), main = noPar(f);
+    if (main) { out.add(main); out.add(main.split(' ')[0]); }
+    (f.match(/\(([^)]*)\)/g) || []).forEach(m => { const w = m.slice(1, -1).trim(); if (w) { out.add(w); out.add(w.split(' ')[0]); } });
+    return [...out];
+  }
+  const lastKeyOf = s => nkey(s.lastName || s.firstName);
+
   const A = () => (Store.state.auth = Store.state.auth || { users: {} });
   const U = id => A().users[id];
+  const sess = () => A().session || null;
   let user = null, resolveGate = null, fails = 0, lockedUntil = 0;
 
   const current = () => user;
-  const isAdmin = () => !!(user && U(user.id) && U(user.id).admin);
+  const isAdmin = () => { if (!user) return false; const s = sess(); if (s && s.staff_id === user.id) return !!s.admin; return !!(U(user.id) && U(user.id).admin); };
   const hasAccounts = () => Object.values(A().users).some(u => u.hash);
   async function setPassword(id, pw, extra = {}) {
     const salt = newSalt(), hash = await derive(pw, salt);
@@ -34,16 +54,45 @@ const Auth = (() => {
     const r = A().recovery; if (!r) return false;
     return (await derive(code.trim().toUpperCase(), r.salt)) === r.hash;
   }
-  function remember(id, keep) { try { sessionStorage.setItem(KEY, id); if (keep) localStorage.setItem(KEY, id); else localStorage.removeItem(KEY); } catch (e) {} }
+  const ss = { get: k => { try { return sessionStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { sessionStorage.setItem(k, v); } catch (e) {} }, del: k => { try { sessionStorage.removeItem(k); } catch (e) {} } };
+  function remember(id, keep) { ss.set(KEY, id); try { if (keep) localStorage.setItem(KEY, id); else localStorage.removeItem(KEY); } catch (e) {} }
   function restore() {
-    let id = null; try { id = sessionStorage.getItem(KEY) || localStorage.getItem(KEY); } catch (e) {}
-    const s = id && Store.get('staff', id);
-    if (s && U(id) && U(id).hash && !needsTeams(id)) { user = s; return true; }
+    const s = sess();
+    if (s && s.token) {
+      if (s.temp && !ss.get(TMP)) return false;
+      const st = Store.get('staff', s.staff_id);
+      if (st && !needsTeams(st.id)) { user = st; return true; }
+      return false;
+    }
+    let id = ss.get(KEY); if (!id) try { id = localStorage.getItem(KEY); } catch (e) {}
+    const st = id && Store.get('staff', id);
+    if (st && U(id) && U(id).hash && !needsTeams(id)) { user = st; return true; }
     return false;
   }
-  function logout() {
-    try { sessionStorage.removeItem(KEY); localStorage.removeItem(KEY); } catch (e) {}
-    user = null; App.refreshChrome(); gate().then(() => App.route());
+  function logout(msg) {
+    const s = sess();
+    if (s) { Cloud.logout(s.token).catch(() => {}); delete A().session; Store.save(); }
+    ss.del(KEY); ss.del(TMP); try { localStorage.removeItem(KEY); } catch (e) {}
+    user = null; App.refreshChrome(); if (msg) toast(msg, 'err');
+    gate().then(() => App.route());
+  }
+  // The server refused our login (password reset by a responsable, session expired…)
+  let checking = false;
+  async function expired() {
+    if (checking || !sess() || !user) return; checking = true;
+    try { const r = await Cloud.me(); if (r && r.error) logout('Ta connexion a expiré : reconnecte-toi.'); } catch (e) {} finally { checking = false; }
+  }
+  // Admin rights or locked categories may have changed on the server
+  async function refreshMe() {
+    if (!sess()) return;
+    try {
+      const r = await Cloud.me(); if (!r) return;
+      if (r.error) return logout('Ta connexion a expiré : reconnecte-toi.');
+      const s = sess(), before = s.admin;
+      s.admin = !!r.admin; s.teams_set = !!r.teams_set; if (r.last_key) s.last_key = r.last_key;
+      if (U(s.staff_id)) Object.assign(U(s.staff_id), { admin: s.admin, teamsSet: s.teams_set });
+      Store.save(); if (before !== s.admin) { App.refreshChrome(); App.route(); }
+    } catch (e) {}
   }
 
   /* ---------- lock screen ---------- */
@@ -53,20 +102,32 @@ const Auth = (() => {
     el.innerHTML = `<div class="lock-card"><img src="icons/crest.png" alt="" class="lock-crest"><p class="eyebrow">Espace éducateurs</p><h1>${esc(Store.state.club.name)}</h1>${inner}
       <button class="btn wide link how-btn" id="howTo">${I.help}<span>Comment utiliser l'appli ?</span></button></div>`;
     el.querySelector('#howTo').onclick = () => Help.tour();
+    el.scrollTop = 0;
     return el;
   }
   const pwFields = (label = 'Mot de passe') => `
     <label class="fld"><span>${label} (au moins ${MIN} caractères)</span><input id="pw1" type="password" autocomplete="new-password" minlength="${MIN}"></label>
     <label class="fld"><span>Retape le mot de passe</span><input id="pw2" type="password" autocomplete="new-password"></label>`;
   const keepBox = `<label class="switch"><input type="checkbox" id="keep" checked><span>Rester connecté sur cet appareil</span></label>`;
+  const nameFields = (ln = '', fn = '') => `<div class="row2"><label class="fld"><span>Nom</span><input id="ln" value="${esc(ln)}" autocapitalize="characters" autocomplete="family-name" autocorrect="off"></label>
+      <label class="fld"><span>Prénom</span><input id="fn" value="${esc(fn)}" autocomplete="given-name" autocorrect="off"></label></div>`;
   function readNewPw(el) {
     const a = $('#pw1', el).value, b = $('#pw2', el).value;
     if (a.length < MIN) { toast(`Le mot de passe doit faire au moins ${MIN} caractères`, 'err'); return null; }
     if (a !== b) { toast('Les deux mots de passe ne sont pas pareils', 'err'); return null; }
     return a;
   }
+  async function withBusy(label, fn) { const b = UI.busy(label); try { return await fn(); } finally { b.done(); } }
+  const lastNames = () => { try { return JSON.parse(localStorage.getItem(NAMES)) || {}; } catch (e) { return {}; } };
+  const saveNames = (ln, fn) => { try { localStorage.setItem(NAMES, JSON.stringify({ ln, fn })); } catch (e) {} };
+
   // A coach links his account to his categories once; afterwards only a responsable can change them
-  const needsTeams = id => { const u = U(id) || {}; return !u.admin && !u.teamsSet && Store.state.teams.length > 0; };
+  function needsTeams(id) {
+    if (!Store.state.teams.length) return false;
+    const s = sess();
+    if (s && s.staff_id === id) return !s.admin && !s.teams_set;
+    const u = U(id) || {}; return !u.admin && !u.teamsSet;
+  }
   const teamChips = ids => `<div class="chips team-pick" id="myTeams">${Store.state.teams.map(t => `<button type="button" class="chip ${(ids || []).includes(t.id) ? 'on' : ''}" data-t="${t.id}">${esc(t.name)}</button>`).join('')}</div>`;
   function teamsScreen(id, keep) {
     const s = Store.get('staff', id);
@@ -78,7 +139,9 @@ const Auth = (() => {
       const ids = [...el.querySelectorAll('#myTeams .chip.on')].map(b => b.dataset.t);
       if (!ids.length) return toast('Choisis au moins une catégorie', 'err');
       s.teamIds = ids; Store.upsert('staff', s);
-      A().users[id] = Object.assign(U(id) || {}, { teamsSet: true, teamsSetAt: Date.now() }); Store.save();
+      A().users[id] = Object.assign(U(id) || {}, { teamsSet: true, teamsSetAt: Date.now() });
+      const se = sess(); if (se && se.staff_id === id) { se.teams_set = true; Cloud.teamsDone().catch(() => {}); }
+      Store.save();
       done(id, keep);
     };
   }
@@ -92,11 +155,202 @@ const Auth = (() => {
     if (resolveGate) { const r = resolveGate; resolveGate = null; r(); }
   }
 
+  /* ---------- club server accounts ---------- */
+  const regPayload = (s, h, admin) => ({ staff_id: s.id, last_key: lastKeyOf(s), first_keys: firstKeys(s.firstName), display: Store.fullName(s), h, admin: !!admin });
+  function findStaff(ln, fn) {
+    const L = nkey(ln), F = noPar(nkey(fn));
+    const match = (a, b) => Store.state.staff.filter(s => lastKeyOf(s) === a && firstKeys(s.firstName).some(k => k === b || k === b.split(' ')[0]));
+    const byPw = list => list.find(s => U(s.id) && U(s.id).hash) || list[0];
+    return byPw(match(L, F)) || byPw(match(F, L)) || null;
+  }
+  async function serverLogin(ln, fn, pw) {
+    let last = null;
+    for (const [a, b] of [[ln, fn], [fn, ln]]) { // also works if nom and prénom were swapped
+      const lk = nkey(a), f = noPar(nkey(b)); if (!lk || !f) continue;
+      last = await Cloud.login(lk, f, await proof(lk, pw));
+      if (!last || last.error !== 'COMPTE_INCONNU') return last;
+    }
+    return last || { error: 'COMPTE_INCONNU' };
+  }
+  async function afterServerLogin(r, pw, keep, ln, fn) {
+    A().session = { token: r.token, staff_id: r.staff_id, admin: !!r.admin, teams_set: !!r.teams_set, last_key: r.last_key, temp: !keep, at: Date.now() };
+    if (!keep) ss.set(TMP, '1');
+    Store.save();
+    if (!Store.get('staff', r.staff_id)) await withBusy('Chargement des données du club…', () => Sync.run());
+    let s = Store.get('staff', r.staff_id);
+    if (!s) s = Store.upsert('staff', { id: r.staff_id, lastName: String(ln || '').toUpperCase(), firstName: fn || '', role: r.admin ? 'Responsable de catégorie' : 'Dirigeant', phone: '', email: '', notes: '', teamIds: [] });
+    await setPassword(s.id, pw, { admin: !!r.admin, teamsSet: !!r.teams_set });
+    saveNames(s.lastName, s.firstName);
+    done(s.id, keep);
+  }
+  const errText = code => ({ MOT_DE_PASSE: 'Mot de passe incorrect', BLOQUE: 'Trop d\'essais : attends 5 minutes avant de réessayer', COMPTE_INCONNU: 'Aucun compte à ce nom' }[code] || 'Connexion impossible');
+
+  function loginScreen() {
+    const n = lastNames();
+    const el = frame(`<p class="lead">Connecte-toi avec ton nom, ton prénom et ton mot de passe.</p>
+      ${nameFields(n.ln, n.fn)}
+      <label class="fld"><span>Mot de passe</span><input id="pw" type="password" autocomplete="current-password"></label>${keepBox}
+      <button class="btn primary wide" id="go">Se connecter</button>
+      <div class="lock-links"><button class="btn wide" id="first">${I.plus}<span>Première connexion</span></button>
+      <button class="btn wide link" id="forgot">Mot de passe oublié ?</button></div>`);
+    const go = async () => {
+      const ln = $('#ln', el).value.trim(), fn = $('#fn', el).value.trim(), pw = $('#pw', el).value, keep = $('#keep', el).checked;
+      if (!ln || !fn) return toast('Écris ton nom et ton prénom', 'err');
+      if (!pw) return toast('Écris ton mot de passe', 'err');
+      if (Date.now() < lockedUntil) return toast(`Trop d'essais : attends ${Math.ceil((lockedUntil - Date.now()) / 1000)} secondes`, 'err');
+      const b = UI.busy('Connexion…');
+      let r;
+      try { r = await serverLogin(ln, fn, pw); }
+      catch (e) {
+        b.done();
+        // No internet (or server not updated yet): accounts already used on this device still open
+        const loc = findStaff(ln, fn);
+        if (loc && U(loc.id) && U(loc.id).hash) {
+          if (await check(loc.id, pw)) { if (e.code === 'MISE_A_JOUR') toast(e.message, 'err'); return done(loc.id, keep); }
+          return failed();
+        }
+        return toast(e.offline ? 'Pas de connexion internet : la première connexion sur un appareil a besoin d\'internet.' : e.message, 'err');
+      }
+      b.done();
+      if (r && r.token) return withBusy('Connexion…', () => afterServerLogin(r, pw, keep, ln, fn));
+      if (r && r.error === 'COMPTE_INCONNU') {
+        // An account created on this device before the club server: put it on the server now
+        const loc = findStaff(ln, fn);
+        if (loc && U(loc.id) && U(loc.id).hash) {
+          if (!(await check(loc.id, pw))) return failed();
+          try { const r2 = await withBusy('Enregistrement de ton compte sur le serveur…', async () => Cloud.register(regPayload(loc, await proof(lastKeyOf(loc), pw), U(loc.id).admin)));
+            return withBusy('Connexion…', () => afterServerLogin(r2, pw, keep, ln, fn)); }
+          catch (e) { return done(loc.id, keep); }
+        }
+        return toast('Aucun compte à ce nom. Si c\'est ta première connexion, touche « Première connexion ».', 'err');
+      }
+      if (r && r.error === 'MOT_DE_PASSE') return failed();
+      toast(errText(r && r.error), 'err');
+    };
+    const failed = () => { fails++; if (fails >= 5) { lockedUntil = Date.now() + 30000; fails = 0; } toast('Mot de passe incorrect', 'err'); const p = $('#pw', el); if (p) p.select(); };
+    $('#go', el).onclick = go; $('#pw', el).onkeydown = e => { if (e.key === 'Enter') go(); };
+    $('#first', el).onclick = () => firstScreen();
+    $('#forgot', el).onclick = () => forgotServer();
+    setTimeout(() => { const f = n.ln ? $('#pw', el) : $('#ln', el); if (f) f.focus(); }, 60);
+  }
+
+  // Invitation code from the link sent by the responsable
+  function setInvite(code) {
+    const c = Store.state.club;
+    c.cloud = Object.assign({}, c.cloud || {}, { clubKey: code });
+    if (!c.cloud.url) { delete c.cloud.url; delete c.cloud.key; }
+    Store.save();
+  }
+  const hasAccess = () => { const c = Cloud.cfg(); return !!(c && (c.clubKey || Cloud.token() || A().cloudAdminKey)); };
+  function firstScreen() {
+    if (hasAccess()) return pickScreen();
+    const el = frame(`<p class="lead"><b>Première connexion</b></p>
+      <p>Ouvre le <b>lien d'invitation</b> envoyé par le responsable du club (WhatsApp, SMS, e-mail) : tu pourras choisir ton nom et créer ton mot de passe.</p>
+      <label class="fld"><span>Ou colle le lien d'invitation ici</span><input id="inv" placeholder="https://…#rejoindre=…" autocapitalize="off" autocorrect="off"></label>
+      <button class="btn primary wide" id="useInv">Continuer</button>
+      <div class="lock-links"><button class="btn wide" id="resp">${I.whistle}<span>Je suis le responsable du club</span></button>
+      <button class="btn wide link" id="back">Retour</button></div>`);
+    $('#useInv', el).onclick = () => {
+      const v = $('#inv', el).value.trim(), m = v.match(/rejoindre=([A-Za-z0-9]+)/) || v.match(/^([A-Za-z0-9]{8,})$/);
+      if (!m) return toast('Colle le lien reçu du responsable', 'err');
+      setInvite(m[1]); pickScreen();
+    };
+    $('#resp', el).onclick = () => respScreen();
+    $('#back', el).onclick = () => loginScreen();
+  }
+  async function pickScreen() {
+    frame('<p class="lead">Chargement de la liste des dirigeants…</p>');
+    let accounts = [];
+    try { accounts = await Cloud.accounts() || []; await Sync.run(); }
+    catch (e) {
+      if (e.code === 'CLE_CLUB') { const c = Store.state.club.cloud; if (c) delete c.clubKey; Store.save(); toast('Ce lien d\'invitation n\'est plus valable : demande le nouveau lien au responsable.', 'err'); return firstScreen(); }
+      toast(e.message, 'err'); if (!Store.state.staff.length) return loginScreen();
+    }
+    const reg = new Set(accounts.filter(a => a.has_pw).map(a => a.staff_id));
+    const staff = Store.state.staff.slice().sort(Store.byName);
+    const el = frame(`<p class="lead"><b>Première connexion</b> : choisis ton nom, puis crée ton mot de passe.</p>
+      ${staff.length ? `<label class="fld"><span>Qui es-tu ?</span><select id="who"><option value="">Choisis ton nom…</option>
+      ${staff.map(s => `<option value="${s.id}" ${reg.has(s.id) ? 'disabled' : ''}>${esc(Store.fullName(s))}${reg.has(s.id) ? ' · déjà inscrit' : s.role ? ' · ' + esc(s.role) : ''}</option>`).join('')}</select></label>
+      <div id="step"></div>` : '<p class="tip">La liste des dirigeants n\'est pas encore sur le serveur du club : le responsable doit d\'abord se connecter avec la nouvelle version de l\'appli.</p>'}
+      <p class="muted small">Tu n'es pas dans la liste ? Demande au responsable de t'ajouter dans Équipes → Dirigeants. Déjà inscrit ? Reviens à la connexion.</p>
+      <button class="btn wide link" id="back">Retour à la connexion</button>`);
+    $('#back', el).onclick = () => loginScreen();
+    const who = $('#who', el); if (!who) return;
+    who.onchange = () => {
+      const s = Store.get('staff', who.value), step = $('#step', el);
+      if (!s) { step.innerHTML = ''; return; }
+      step.innerHTML = `<p class="tip">Choisis ton mot de passe et garde-le pour toi. Ensuite tu te connecteras avec <b>${esc(Store.fullName(s))}</b> et ce mot de passe.</p>${pwFields('Nouveau mot de passe')}${keepBox}
+        <button class="btn primary wide" id="go">Créer mon mot de passe</button>`;
+      $('#go', el).onclick = async () => {
+        const pw = readNewPw(el); if (!pw) return; const keep = $('#keep', el).checked;
+        try {
+          const r = await withBusy('Création de ton compte…', async () => Cloud.register(regPayload(s, await proof(lastKeyOf(s), pw), false)));
+          await withBusy('Connexion…', () => afterServerLogin(r, pw, keep, s.lastName, s.firstName));
+        } catch (e) { toast(e.message, 'err'); }
+      };
+    };
+  }
+  // Responsable: account made or recovered with the responsable code
+  function respScreen(code = '') {
+    const n = lastNames();
+    const el = frame(`<p class="lead"><b>Responsable du club</b> : crée ou retrouve ton compte avec le <b>code responsable</b> (Réglages → Serveur du club → Code responsable).</p>
+      ${nameFields(n.ln, n.fn)}
+      <label class="fld"><span>Code responsable</span><input id="code" value="${esc(code || A().cloudAdminKey || '')}" autocapitalize="off" autocorrect="off" autocomplete="off"></label>
+      ${pwFields('Mot de passe')}${keepBox}
+      <button class="btn primary wide" id="go">Valider</button>
+      <div class="lock-links"><button class="btn wide" id="lost">J'ai perdu le code responsable</button><button class="btn wide link" id="back">Retour</button></div>`);
+    $('#back', el).onclick = () => loginScreen();
+    $('#lost', el).onclick = () => lostScreen();
+    $('#go', el).onclick = async () => {
+      const ln = $('#ln', el).value.trim(), fn = $('#fn', el).value.trim(), code = $('#code', el).value.trim();
+      if (!ln || !fn) return toast('Écris ton nom et ton prénom', 'err');
+      if (!code) return toast('Écris le code responsable', 'err');
+      const pw = readNewPw(el); if (!pw) return; const keep = $('#keep', el).checked;
+      const before = A().cloudAdminKey; A().cloudAdminKey = code;
+      try {
+        const ok = await withBusy('Vérification du code…', () => Cloud.adminPing());
+        if (!ok) throw Object.assign(new Error('Code responsable incorrect'), { code: 'CLE_CLUB' });
+        await withBusy('Chargement des données du club…', () => Sync.run());
+        let s = findStaff(ln, fn);
+        if (!s) s = Store.upsert('staff', { id: Store.uid(), lastName: ln.toUpperCase(), firstName: fn, role: 'Responsable de catégorie', phone: '', email: '', notes: '', teamIds: [] });
+        const r = await withBusy('Création de ton compte…', async () => Cloud.register(regPayload(s, await proof(lastKeyOf(s), pw), true), code));
+        Store.save();
+        await withBusy('Connexion…', () => afterServerLogin(r, pw, keep, s.lastName, s.firstName));
+      } catch (e) {
+        if (before) A().cloudAdminKey = before; else delete A().cloudAdminKey;
+        toast(e.code === 'CLE_CLUB' ? 'Code responsable incorrect' : e.message, 'err');
+      }
+    };
+  }
+  // New codes for the club server: the responsable pastes a script in Supabase
+  function lostScreen() {
+    const clubKey = Cloud.genKey(), adm = Cloud.genKey(), script = Cloud.sql(clubKey, adm);
+    const el = frame(`<p class="lead"><b>Nouveau code responsable</b></p>
+      <ol class="wizard"><li>Touche <b>Copier le script</b>.</li>
+      <li>Ouvre <a href="https://supabase.com/dashboard" target="_blank" rel="noopener">supabase.com/dashboard</a>, ton projet, puis <b>SQL Editor</b> → <b>New query</b>. Colle le script et touche <b>Run</b> : il doit afficher « Success ».</li>
+      <li>Reviens ici et touche <b>C'est fait</b>.</li></ol>
+      <p class="tip">Ton nouveau code responsable (note-le sur papier) :</p><p class="code">${esc(adm)}</p>
+      <textarea id="lostSql" rows="3" readonly>${esc(script)}</textarea>
+      <p class="muted small">Les dirigeants déjà connectés le restent. Les anciens liens d'invitation ne marcheront plus : tu en enverras un nouveau.</p>
+      <button class="btn wide" id="copy">${I.copy}<span>Copier le script</span></button>
+      <button class="btn primary wide" id="ok">C'est fait</button><button class="btn wide link" id="back">Retour</button>`);
+    $('#copy', el).onclick = () => navigator.clipboard.writeText(script).then(() => toast('Script copié : colle-le dans Supabase')).catch(() => { const t = $('#lostSql', el); t.focus(); t.select(); toast('Sélectionne le texte et copie-le'); });
+    $('#back', el).onclick = () => respScreen();
+    $('#ok', el).onclick = () => { setInvite(clubKey); respScreen(adm); };
+  }
+  function forgotServer() {
+    const el = frame(`<p class="lead"><b>Mot de passe oublié</b></p>
+      <p><b>Éducateur</b> : demande au responsable de réinitialiser ton mot de passe (Réglages → Comptes des dirigeants → Réinitialiser). Ensuite, touche « Première connexion » et crée un nouveau mot de passe.</p>
+      <p><b>Responsable</b> : touche « Je suis le responsable » et utilise ton code responsable.</p>
+      <div class="lock-links"><button class="btn wide" id="resp">${I.whistle}<span>Je suis le responsable</span></button><button class="btn wide link" id="back">Retour</button></div>`);
+    $('#resp', el).onclick = () => respScreen();
+    $('#back', el).onclick = () => loginScreen();
+  }
+
+  /* ---------- accounts on this device only (no club server) ---------- */
   function setupScreen() {
     const el = frame(`<p class="lead">Première utilisation : crée le compte du responsable. Tu pourras ajouter les autres dirigeants ensuite.</p>
-      <div class="row2"><label class="fld"><span>Nom</span><input id="ln" autocapitalize="characters" autocomplete="family-name"></label>
-      <label class="fld"><span>Prénom</span><input id="fn" autocomplete="given-name"></label></div>
-      ${pwFields()}${keepBox}
+      ${nameFields()}${pwFields()}${keepBox}
       <button class="btn primary wide" id="go">Créer mon compte</button>`);
     $('#go', el).onclick = async () => {
       const ln = $('#ln', el).value.trim().toUpperCase(), fn = $('#fn', el).value.trim();
@@ -111,8 +365,7 @@ const Auth = (() => {
       $('#ok', el2).onclick = () => done(s.id, keep);
     };
   }
-
-  function loginScreen(preset) {
+  function localLoginScreen(preset) {
     const staff = Store.state.staff.slice().sort(Store.byName);
     const el = frame(`<label class="fld"><span>Qui es-tu ?</span><select id="who"><option value="">Choisis ton nom…</option>
       ${staff.map(s => `<option value="${s.id}" ${s.id === preset ? 'selected' : ''}>${esc(Store.fullName(s))}${s.role ? ' · ' + esc(s.role) : ''}</option>`).join('')}</select></label>
@@ -132,7 +385,7 @@ const Auth = (() => {
           toast('Mot de passe incorrect', 'err'); $('#pw', el).select();
         };
         $('#go', el).onclick = go; $('#pw', el).onkeydown = e => { if (e.key === 'Enter') go(); };
-        $('#forgot', el).onclick = () => forgotScreen(id);
+        $('#forgot', el).onclick = () => forgotLocal(id);
         setTimeout(() => $('#pw', el).focus(), 50);
       } else {
         step.innerHTML = `<p class="tip">Première connexion : choisis ton mot de passe. Garde-le pour toi.</p>${pwFields('Nouveau mot de passe')}${keepBox}
@@ -142,14 +395,13 @@ const Auth = (() => {
     };
     $('#who', el).onchange = render; render();
   }
-
-  function forgotScreen(id) {
+  function forgotLocal(id) {
     const s = Store.get('staff', id);
     const el = frame(`<p class="lead">${esc(Store.fullName(s))} : demande à un responsable de réinitialiser ton mot de passe (Réglages → Comptes des dirigeants). Il pourra aussi utiliser le code de secours ici.</p>
       <label class="fld"><span>Code de secours</span><input id="code" autocapitalize="characters" placeholder="XXXXX-XXXXX"></label>
       ${pwFields('Nouveau mot de passe')}
       <button class="btn primary wide" id="go">Changer le mot de passe</button><button class="btn wide link" id="back">Retour</button>`);
-    $('#back', el).onclick = () => loginScreen(id);
+    $('#back', el).onclick = () => localLoginScreen(id);
     $('#go', el).onclick = async () => {
       if (!(await checkRecovery($('#code', el).value))) return toast('Code de secours incorrect', 'err');
       const pw = readNewPw(el); if (!pw) return;
@@ -157,43 +409,72 @@ const Auth = (() => {
     };
   }
 
-  function gate() {
-    return new Promise(res => {
-      if (restore()) return res();
+  function gate(opts = {}) {
+    return new Promise(async res => {
+      if (restore()) { res(); refreshMe(); if (opts.joined) toast('Tu es déjà connecté sur cet appareil'); return; }
+      // Logged in but this device doesn't have the club's data yet
+      const s = sess();
+      if (s && s.token && !(s.temp && !ss.get(TMP)) && !Store.get('staff', s.staff_id)) {
+        await withBusy('Chargement des données du club…', () => Sync.run());
+        if (restore()) { res(); return; }
+      }
       resolveGate = res;
-      if (!hasAccounts()) setupScreen(); else loginScreen();
-      if (!Help.tourSeen()) Help.tour();
+      if (s && s.token && Store.get('staff', s.staff_id) && needsTeams(s.staff_id)) teamsScreen(s.staff_id, !s.temp);
+      else if (Cloud.canLogin()) { if (opts.joined) pickScreen(); else loginScreen(); }
+      else if (!hasAccounts()) setupScreen(); else localLoginScreen();
+      if (!Help.tourSeen() && !opts.joined) Help.tour();
     });
   }
 
   /* ---------- settings section ---------- */
+  const serverMode = () => !!(sess() && Cloud.ready());
   function settingsSection() {
     if (!user) return '';
     const me = `<section class="card"><h2>${I.whistle}Mon compte</h2>
       <p>Connecté : <b>${esc(Store.fullName(user))}</b>${user.role ? ' · ' + esc(user.role) : ''}${isAdmin() ? ' · <span class="badge">Responsable</span>' : ''}</p>
+      <p class="muted small">${sess() ? 'Ton compte est sur le serveur du club : connecte-toi sur n\'importe quel appareil avec ton nom, ton prénom et ton mot de passe.' : 'Ton compte est seulement sur cet appareil.'}</p>
       <div class="chips"><button class="btn" data-auth="pw">${I.edit}<span>Changer mon mot de passe</span></button>
       <button class="btn" data-auth="logout">${I.back}<span>Se déconnecter</span></button></div></section>`;
     if (!isAdmin()) return me;
-    const rows = Store.state.staff.slice().sort(Store.byName).map(s => {
-      const u = U(s.id) || {};
-      const cats = (s.teamIds || []).map(t => (Store.get('teams', t) || {}).name).filter(Boolean).join(', ');
-      return `<div class="acc-row"><span class="acc-name"><b>${esc(Store.fullName(s))}</b><span class="muted">${u.hash ? 'Mot de passe créé' : 'Pas encore connecté'} · ${cats ? esc(cats) : 'aucune catégorie'}${u.teamsSet ? ' 🔒' : ''}</span></span>
-        <button class="btn" data-auth="cats" data-id="${s.id}">Catégories</button>
-        <label class="switch small"><input type="checkbox" data-admin="${s.id}" ${u.admin ? 'checked' : ''} ${s.id === user.id ? 'disabled' : ''}><span>Responsable</span></label>
-        <button class="btn" data-reset="${s.id}" ${u.hash && s.id !== user.id ? '' : 'disabled'}>Réinitialiser</button></div>`;
-    }).join('');
     return me + `<section class="card"><h2>${I.team}Comptes des dirigeants</h2>
-      <p class="muted">Un responsable peut réinitialiser le mot de passe d'un dirigeant (il en recréera un à sa prochaine connexion) et changer ses catégories. 🔒 : catégories choisies à la première connexion, verrouillées pour l'éducateur.</p>
-      <div class="acc-list">${rows || '<p class="muted">Ajoute les dirigeants dans Équipes → Dirigeants.</p>'}</div>
-      <button class="btn" data-auth="recovery">${I.rotate}<span>Nouveau code de secours</span></button></section>`;
+      <p class="muted">Un responsable peut réinitialiser le mot de passe d'un dirigeant (il en recréera un avec « Première connexion ») et changer ses catégories. 🔒 : catégories choisies à la première connexion, verrouillées pour l'éducateur.</p>
+      <div class="acc-list" id="accList">${serverMode() ? '<p class="muted">Chargement des comptes…</p>' : accRows(null)}</div>
+      ${serverMode() ? `<button class="btn primary" data-cloud="invite">${I.share}<span>Inviter les éducateurs</span></button>` : `<button class="btn" data-auth="recovery">${I.rotate}<span>Nouveau code de secours</span></button>`}</section>`;
   }
+  let serverAcc = null;
+  function accRows(list) {
+    const byId = {}; (list || []).forEach(a => byId[a.staff_id] = a);
+    const rows = Store.state.staff.slice().sort(Store.byName).map(s => {
+      const a = list ? byId[s.id] : null, u = U(s.id) || {};
+      const has = list ? !!(a && a.has_pw) : !!u.hash, adm = list ? !!(a && a.admin) : !!u.admin, locked = list ? !!(a && a.teams_set) : !!u.teamsSet;
+      const cats = (s.teamIds || []).map(t => (Store.get('teams', t) || {}).name).filter(Boolean).join(', ');
+      return `<div class="acc-row"><span class="acc-name"><b>${esc(Store.fullName(s))}</b><span class="muted">${has ? 'Mot de passe créé' : 'Pas encore inscrit'} · ${cats ? esc(cats) : 'aucune catégorie'}${locked ? ' 🔒' : ''}</span></span>
+        <button class="btn" data-auth="cats" data-id="${s.id}">Catégories</button>
+        <label class="switch small"><input type="checkbox" data-admin="${s.id}" ${adm ? 'checked' : ''} ${s.id === user.id || (list && !has) ? 'disabled' : ''}><span>Responsable</span></label>
+        <button class="btn" data-reset="${s.id}" ${has && s.id !== user.id ? '' : 'disabled'}>Réinitialiser</button></div>`;
+    }).join('');
+    return rows || '<p class="muted">Ajoute les dirigeants dans Équipes → Dirigeants.</p>';
+  }
+  async function mountSettings(root) {
+    const box = root.querySelector('#accList'); if (!box || !serverMode()) return;
+    try { serverAcc = await Cloud.accounts() || []; box.innerHTML = accRows(serverAcc); }
+    catch (e) { serverAcc = null; box.innerHTML = `<p class="muted">${esc(e.message)}</p>`; }
+  }
+  const accOf = id => (serverAcc || []).find(a => a.staff_id === id) || {};
   async function onSettingsClick(b, rerender) {
     if (b.dataset.auth === 'logout') return logout();
     if (b.dataset.auth === 'pw') return modal({ title: 'Changer mon mot de passe', body: `<label class="fld"><span>Mot de passe actuel</span><input id="old" type="password" autocomplete="current-password"></label>${pwFields('Nouveau mot de passe')}`,
       actions: [{ label: 'Annuler' }, { label: 'Changer', kind: 'primary', onClick: (c, r) => {
         (async () => {
-          if (!(await check(user.id, $('#old', r).value))) return toast('Mot de passe actuel incorrect', 'err');
-          const pw = readNewPw(r); if (!pw) return;
+          const old = $('#old', r).value, pw = readNewPw(r); if (!pw) return;
+          const s = sess();
+          if (s && s.staff_id === user.id) {
+            const lk = s.last_key || lastKeyOf(user);
+            try {
+              const res = await withBusy('Changement du mot de passe…', async () => Cloud.changePw(await proof(lk, old), await proof(lk, pw)));
+              if (res && res.error) return toast('Mot de passe actuel incorrect', 'err');
+            } catch (e) { return toast(e.message, 'err'); }
+          } else if (!(await check(user.id, old))) return toast('Mot de passe actuel incorrect', 'err');
           await setPassword(user.id, pw); c(); toast('Mot de passe changé');
         })(); return false;
       } }] });
@@ -203,28 +484,36 @@ const Auth = (() => {
       return modal({ title: 'Nouveau code de secours', body: `<p>Note ce code sur papier et range-le bien.</p><p class="code">${code}</p>`, actions: [{ label: "J'ai noté le code", kind: 'primary' }] });
     }
     if (b.dataset.auth === 'cats') {
-      const s = Store.get('staff', b.dataset.id), u = U(s.id) || {};
+      const s = Store.get('staff', b.dataset.id), locked = serverMode() ? !!accOf(s.id).teams_set : !!(U(s.id) || {}).teamsSet;
       return modal({ title: `Catégories de ${Store.fullName(s)}`, body: `${teamChips(s.teamIds)}
-        <label class="switch" style="margin-top:12px"><input type="checkbox" id="relock" ${u.teamsSet ? '' : 'checked'}><span>Lui redemander ses catégories à sa prochaine connexion</span></label>`,
+        <label class="switch" style="margin-top:12px"><input type="checkbox" id="relock" ${locked ? '' : 'checked'}><span>Lui redemander ses catégories à sa prochaine connexion</span></label>`,
         onOpen: r => r.querySelectorAll('#myTeams .chip').forEach(x => x.onclick = () => x.classList.toggle('on')),
         actions: [{ label: 'Annuler' }, { label: 'Enregistrer', kind: 'primary', onClick: (c, r) => {
           s.teamIds = [...r.querySelectorAll('#myTeams .chip.on')].map(x => x.dataset.t); Store.upsert('staff', s);
-          A().users[s.id] = Object.assign(U(s.id) || {}, { teamsSet: !$('#relock', r).checked }); Store.save();
+          const lockIt = !$('#relock', r).checked;
+          A().users[s.id] = Object.assign(U(s.id) || {}, { teamsSet: lockIt }); Store.save();
+          if (serverMode() && accOf(s.id).staff_id) Cloud.accountSet({ staff_id: s.id, teams_set: lockIt }).then(rerender).catch(e => toast(e.message, 'err'));
           toast('Catégories enregistrées'); rerender();
         } }] });
     }
     if (b.dataset.reset) {
       const s = Store.get('staff', b.dataset.reset);
-      if (await confirmBox(`Réinitialiser le mot de passe de ${Store.fullName(s)} ? Il en créera un nouveau à sa prochaine connexion.`, 'Réinitialiser')) {
-        const u = U(s.id); delete u.hash; delete u.salt; Store.save(); toast('Mot de passe réinitialisé'); rerender();
+      if (await confirmBox(`Réinitialiser le mot de passe de ${Store.fullName(s)} ? Il en créera un nouveau avec « Première connexion ».`, 'Réinitialiser')) {
+        const u = U(s.id); if (u) { delete u.hash; delete u.salt; } Store.save();
+        if (serverMode()) { try { await Cloud.accountSet({ staff_id: s.id, reset: true }); } catch (e) { return toast(e.message, 'err'); } }
+        toast('Mot de passe réinitialisé'); rerender();
       }
     }
   }
   function onSettingsChange(t) {
     if (!t.dataset.admin) return;
     const id = t.dataset.admin; A().users[id] = Object.assign(U(id) || {}, { admin: t.checked }); Store.save();
+    if (serverMode()) Cloud.accountSet({ staff_id: id, admin: t.checked }).then(() => toast(t.checked ? 'Droits de responsable donnés' : 'Droits de responsable retirés')).catch(e => { toast(e.message, 'err'); t.checked = !t.checked; });
   }
-  function forget(staffId) { delete A().users[staffId]; Store.save(); }
+  function forget(staffId) {
+    delete A().users[staffId]; Store.save();
+    if (serverMode() && isAdmin()) Cloud.accountSet({ staff_id: staffId, delete: true }).catch(() => {});
+  }
 
-  return { gate, current, isAdmin, logout, settingsSection, onSettingsClick, onSettingsChange, forget };
+  return { gate, current, isAdmin, logout, expired, settingsSection, mountSettings, onSettingsClick, onSettingsChange, forget, setInvite, nkey, firstKeys };
 })();
