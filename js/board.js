@@ -1,0 +1,332 @@
+/* Board: geometry, animation model and canvas rendering of a tactical schema.
+   World units are metres. x runs along the pitch length (our team attacks to the right), y across it. */
+const Board = (() => {
+  const PITCH = {
+    '11': { L: 105, W: 68, box: [16.5, 40.32], six: [5.5, 18.32], spot: 11, circle: 9.15, goal: 7.32, label: 'Foot à 11' },
+    '8':  { L: 64,  W: 48, box: [13, 26],      six: null,         spot: 9,  circle: 6,    goal: 6,    label: 'Foot à 8' },
+    '5':  { L: 35,  W: 25, box: [6, 12],       six: null,         spot: 6,  circle: 4,    goal: 4,    label: 'Foot à 5' },
+  };
+  const ARROWS = {
+    course:   { label: 'Course',   color: '#ffffff', w: .2 },
+    conduite: { label: 'Conduite', color: '#ffffff', w: .17, wave: true },
+    passe:    { label: 'Passe',    color: '#ffb54a', w: .18, dash: [.6, .38] },
+    tir:      { label: 'Tir',      color: '#ffb54a', w: .32 },
+    pressing: { label: 'Pressing', color: '#ff5a4a', w: .24 },
+    bascule:  { label: 'Bascule',  color: '#8fd0ff', w: .15, dash: [.2, .32] },
+  };
+  const BIBS = {
+    bordeaux: ['#8c1024', '#ffffff'], marine: ['#13245a', '#ffffff'], bleu: ['#2563eb', '#ffffff'], rouge: ['#e11d48', '#ffffff'], jaune: ['#facc15', '#2a2200'], vert: ['#a3e635', '#13240b'],
+    noir: ['#121518', '#f5f7f5'], blanc: ['#f8fafc', '#111827'], orange: ['#fb923c', '#2b1400'], violet: ['#8b5cf6', '#ffffff'],
+  };
+  const ZONE_COLORS = { jaune: '#ffe14d', bleu: '#60a5fa', rouge: '#f87171', violet: '#c084fc', blanc: '#ffffff', vert: '#a3e635' };
+  const PHASES = [['Conservation', '#8fd0ff'], ['Progression', '#c6f25e'], ['Déséquilibre', '#ffb54a'], ['Finition', '#ff6b57']];
+  const LANE_NAMES = ['Couloir', 'Demi-espace', 'Axe', 'Demi-espace', 'Couloir'];
+
+  const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+  const ease = t => t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+  const dist = (a, b) => Math.hypot(b[0] - a[0], b[1] - a[1]);
+  function bez(p0, p1, c, k) {
+    const dx = p1[0] - p0[0], dy = p1[1] - p0[1];
+    const cx = (p0[0] + p1[0]) / 2 - dy * c, cy = (p0[1] + p1[1]) / 2 + dx * c, m = 1 - k;
+    return [m * m * p0[0] + 2 * m * k * cx + k * k * p1[0], m * m * p0[1] + 2 * m * k * cy + k * k * p1[1]];
+  }
+
+  /* ---------- geometry ---------- */
+  function dims(f) {
+    if (f.format === 'zone') return { L: f.w || 30, W: f.h || 20 };
+    return { L: PITCH[f.format].L, W: PITCH[f.format].W };
+  }
+  function extents(f) {
+    const { L, W } = dims(f);
+    if (f.format !== 'zone' && f.view === 'half') return { x0: L / 2 - 2, x1: L, y0: 0, y1: W, L, W };
+    return { x0: 0, x1: L, y0: 0, y1: W, L, W };
+  }
+  function tokenR(f) { const e = extents(f); return Math.max(e.x1 - e.x0, e.y1 - e.y0) / 40; }
+  function phases(f) {
+    const { L } = dims(f);
+    const cuts = f.format === '11' ? [0, 35, 70, 88.5, 105] : f.format === '8' ? [0, L / 3, 2 * L / 3, L - 13, L] : [0, L * .35, L * .6, L * .8, L];
+    return PHASES.map((p, i) => [cuts[i], cuts[i + 1], p[0], p[1]]);
+  }
+  function lanes(f) {
+    const { W } = dims(f);
+    let c;
+    if (f.format === '11') { const a = (W - 40.32) / 2, b = (W - 18.32) / 2; c = [0, a, b, W - b, W - a, W]; }
+    else if (f.format === '8') { const a = (W - 26) / 2, b = (W - 12) / 2; c = [0, a, b, W - b, W - a, W]; }
+    else c = [0, W * .2, W * .35, W * .65, W * .8, W];
+    return LANE_NAMES.map((n, i) => [c[i], c[i + 1], n]);
+  }
+  function camera(sc, W, H) {
+    const f = sc.field, e = extents(f), r = tokenR(f), ov = sc.overlays || {};
+    const m = { l: r * 2, r: r * 2 + (ov.lanes ? r * 5.2 : 0), t: r * 2 + (ov.phases ? r * 1.5 : 0), b: r * 2 };
+    const ww = e.x1 - e.x0 + m.l + m.r, wh = e.y1 - e.y0 + m.t + m.b;
+    const s = Math.min(W / ww, H / wh);
+    const ox = (W - ww * s) / 2 - (e.x0 - m.l) * s, oy = (H - wh * s) / 2 - (e.y0 - m.t) * s;
+    return { s, ox, oy, e, r, m, toS: p => [p[0] * s + ox, p[1] * s + oy], toW: (x, y) => [(x - ox) / s, (y - oy) / s] };
+  }
+
+  /* ---------- animation model ---------- */
+  const obj = (sc, id) => sc.objects.find(o => o.id === id);
+  function moveType(sc, k, id) {
+    const nxt = sc.steps[k + 1]; if (!nxt) return 'none';
+    const o = obj(sc, id); if (!o) return 'none';
+    const A = sc.steps[k].pos[id], B = nxt.pos[id];
+    if (!A || !B || dist(A, B) < tokenR(sc.field) * .6) return 'none';
+    const set = (nxt.moves || {})[id];
+    if (set && set.type) return set.type;
+    if (o.type === 'ball') return carrier(sc, k, id) ? 'none' : 'passe';
+    if (o.type === 'player') {
+      const ball = sc.objects.find(b => b.type === 'ball' && carrierIs(sc, k, b.id, id));
+      return ball ? 'conduite' : 'course';
+    }
+    return 'course';
+  }
+  // A ball is "carried" if one player stays next to it from step k to k+1
+  function carrierIs(sc, k, ballId, pid) {
+    const r = tokenR(sc.field) * 2.1, s0 = sc.steps[k], s1 = sc.steps[k + 1];
+    if (!s1) return false;
+    const b0 = s0.pos[ballId], b1 = s1.pos[ballId], p0 = s0.pos[pid], p1 = s1.pos[pid];
+    return b0 && b1 && p0 && p1 && dist(b0, p0) < r && dist(b1, p1) < r && dist(b0, b1) > .1;
+  }
+  function carrier(sc, k, ballId) {
+    return sc.objects.some(o => o.type === 'player' && carrierIs(sc, k, ballId, o.id));
+  }
+  function posAt(sc, k, u, id) {
+    const A = sc.steps[k].pos[id];
+    if (!A) return null;
+    if (u <= 0 || k >= sc.steps.length - 1) return A;
+    const B = sc.steps[k + 1].pos[id] || A;
+    const mv = (sc.steps[k + 1].moves || {})[id] || {};
+    let t = u;
+    const o = obj(sc, id);
+    if (o && o.type === 'ball') { const ty = moveType(sc, k, id); if (ty === 'passe' || ty === 'tir') t = clamp((u - .2) / .65); }
+    return bez(A, B, mv.c || 0, ease(clamp(t)));
+  }
+  function stepDur(sc, k) { return (sc.steps[k] && sc.steps[k].dur) || 2; }
+
+  /* ---------- drawing helpers ---------- */
+  function rr(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y, w, h, r) : ctx.rect(x, y, w, h); }
+  function arrowPath(cam, a, b, c, type, s0, s1) {
+    const st = ARROWS[type]; if (!st) return null;
+    const L = dist(a, b); if (L < s0 + s1 + cam.r * .5) return null;
+    const ta = s0 / L, tb = 1 - s1 / L, N = 40, pts = [];
+    for (let j = 0; j <= N; j++) {
+      const k = ta + (tb - ta) * j / N; let p = bez(a, b, c, k);
+      if (st.wave) {
+        const q = bez(a, b, c, Math.min(1, k + .002)), tl = dist(p, q) || 1, tx = (q[0] - p[0]) / tl, ty = (q[1] - p[1]) / tl, sN = j / N;
+        const env = Math.min(1, sN / .1, (1 - sN) / .18), amp = cam.r * .3 * env * Math.sin(sN * L * (tb - ta) / (cam.r * 1.5) * Math.PI * 2);
+        p = [p[0] - ty * amp, p[1] + tx * amp];
+      }
+      pts.push(cam.toS(p));
+    }
+    return pts;
+  }
+  function drawArrow(ctx, cam, a, b, c, type, s0, s1, alpha = 1) {
+    const pts = arrowPath(cam, a, b, c, type, s0, s1); if (!pts) return;
+    const st = ARROWS[type], lw = Math.max(1.5, st.w * cam.r * cam.s);
+    ctx.save(); ctx.globalAlpha = alpha; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    const line = (col, w) => {
+      ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]));
+      ctx.strokeStyle = col; ctx.lineWidth = w;
+      ctx.setLineDash(st.dash ? st.dash.map(v => v * cam.r * cam.s) : []); ctx.stroke();
+    };
+    line('rgba(0,0,0,.3)', lw * 2); line(st.color, lw);
+    ctx.setLineDash([]);
+    const p = pts[pts.length - 1], q = pts[pts.length - 3] || pts[0], ang = Math.atan2(p[1] - q[1], p[0] - q[0]), hs = Math.max(9, lw * 3.3);
+    ctx.beginPath(); ctx.moveTo(p[0] + Math.cos(ang) * hs * .35, p[1] + Math.sin(ang) * hs * .35);
+    ctx.lineTo(p[0] - Math.cos(ang - .5) * hs, p[1] - Math.sin(ang - .5) * hs);
+    ctx.lineTo(p[0] - Math.cos(ang + .5) * hs, p[1] - Math.sin(ang + .5) * hs); ctx.closePath();
+    ctx.fillStyle = st.color; ctx.fill();
+    ctx.restore();
+  }
+  function label(ctx, x, y, txt, size, color, align = 'center', weight = 800) {
+    ctx.font = `${weight} ${size}px ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Segoe UI", sans-serif`;
+    ctx.textAlign = align; ctx.textBaseline = 'middle'; ctx.fillStyle = color; ctx.fillText(txt, x, y);
+  }
+  function pill(ctx, x, y, txt, size) {
+    ctx.font = `700 ${size}px ui-rounded, system-ui, -apple-system, sans-serif`;
+    const w = ctx.measureText(txt).width + size * 1.1, h = size * 1.7;
+    rr(ctx, x - w / 2, y - h / 2, w, h, h / 2); ctx.fillStyle = 'rgba(8,22,14,.85)'; ctx.fill();
+    label(ctx, x, y + size * .04, txt, size, '#fff', 'center', 700);
+  }
+
+  /* ---------- pitch ---------- */
+  function drawPitch(ctx, cam, sc, W, H) {
+    const f = sc.field, { L, W: FW } = dims(f), s = cam.s, P = PITCH[f.format];
+    ctx.fillStyle = '#1f5137'; ctx.fillRect(0, 0, W, H);
+    const [X0, Y0] = cam.toS([0, 0]);
+    ctx.fillStyle = '#2c6646'; ctx.fillRect(X0, Y0, L * s, FW * s);
+    const sw = L > 50 ? 5.25 : 3.2;
+    ctx.fillStyle = '#306d4b';
+    for (let x = 0; x < L; x += sw * 2) ctx.fillRect(X0 + x * s, Y0, Math.min(sw, L - x) * s, FW * s);
+    const ov = sc.overlays || {};
+    if (ov.phases) drawPhases(ctx, cam, sc);
+    if (ov.lanes) drawLanes(ctx, cam, sc);
+    ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = Math.max(1, .12 * s);
+    ctx.strokeRect(X0, Y0, L * s, FW * s);
+    if (P) {
+      const cy = FW / 2, line = (x1, y1, x2, y2) => { ctx.beginPath(); ctx.moveTo(...cam.toS([x1, y1])); ctx.lineTo(...cam.toS([x2, y2])); ctx.stroke(); };
+      line(L / 2, 0, L / 2, FW);
+      ctx.beginPath(); ctx.arc(...cam.toS([L / 2, cy]), P.circle * s, 0, Math.PI * 2); ctx.stroke();
+      [[0, 1], [L, -1]].forEach(([x0, d]) => {
+        const box = (dep, wid) => { const [a, b] = cam.toS([d > 0 ? x0 : x0 - dep, cy - wid / 2]); ctx.strokeRect(a, b, dep * s, wid * s); };
+        box(P.box[0], P.box[1]); if (P.six) box(P.six[0], P.six[1]);
+        ctx.beginPath(); ctx.arc(...cam.toS([x0 + d * P.spot, cy]), Math.max(1.5, .22 * s), 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill();
+        const gd = 2 * s, [gx, gy] = cam.toS([d > 0 ? x0 - 2 : x0, cy - P.goal / 2]);
+        ctx.fillStyle = 'rgba(255,255,255,.25)'; ctx.fillRect(gx, gy, gd, P.goal * s); ctx.strokeRect(gx, gy, gd, P.goal * s);
+      });
+    }
+  }
+  function drawPhases(ctx, cam, sc) {
+    const { W: FW } = dims(sc.field), s = cam.s, r = cam.r;
+    phases(sc.field).forEach(([a, b, name, col], i) => {
+      const [x, y] = cam.toS([a, 0]);
+      ctx.globalAlpha = .1; ctx.fillStyle = col; ctx.fillRect(x, y, (b - a) * s, FW * s); ctx.globalAlpha = 1;
+      if (i) { ctx.save(); ctx.strokeStyle = col; ctx.lineWidth = Math.max(1, .12 * s); ctx.setLineDash([r * .8 * s, r * .5 * s]);
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + FW * s); ctx.stroke(); ctx.restore(); }
+      const xa = Math.max(a, cam.e.x0), xb = Math.min(b, cam.e.x1);
+      if (xb - xa > r) {
+        const [lx, ly] = cam.toS([(xa + xb) / 2, -r * 1.25]);
+        ctx.fillStyle = col; rr(ctx, cam.toS([xa, 0])[0] + 2, ly - r * .75 * s, (xb - xa) * s - 4, r * .22 * s, r * .11 * s); ctx.fill();
+        label(ctx, lx, ly + r * .1 * s, name.toUpperCase(), Math.max(9, r * .62 * s), col);
+      }
+    });
+  }
+  function drawLanes(ctx, cam, sc) {
+    const { L } = dims(sc.field), s = cam.s, r = cam.r;
+    lanes(sc.field).forEach(([a, b, name], i) => {
+      const [x, y] = cam.toS([0, a]);
+      if (name === 'Demi-espace') {
+        ctx.save(); ctx.beginPath(); ctx.rect(x, y, L * s, (b - a) * s); ctx.clip();
+        ctx.strokeStyle = 'rgba(255,255,255,.13)'; ctx.lineWidth = Math.max(1, .3 * s);
+        for (let d = -((b - a) * s); d < L * s; d += 1.6 * s) { ctx.beginPath(); ctx.moveTo(x + d, y + (b - a) * s); ctx.lineTo(x + d + (b - a) * s, y); ctx.stroke(); }
+        ctx.restore();
+      }
+      if (i) { ctx.save(); ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = Math.max(1, .1 * s); ctx.setLineDash([r * .35 * s, r * .35 * s]);
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + L * s, y); ctx.stroke(); ctx.restore(); }
+      const [lx, ly] = cam.toS([cam.e.x1 + r * 1.5, (a + b) / 2]);
+      label(ctx, lx, ly, name.toUpperCase(), Math.max(9, r * .55 * s), 'rgba(255,255,255,.85)', 'left');
+    });
+  }
+  function drawZones(ctx, cam, sc, sel) {
+    const s = cam.s;
+    (sc.zones || []).forEach(z => {
+      const col = ZONE_COLORS[z.color] || '#ffe14d', [x, y] = cam.toS([z.x, z.y]);
+      ctx.save(); ctx.globalAlpha = .16; ctx.fillStyle = col; rr(ctx, x, y, z.w * s, z.h * s, cam.r * .3 * s); ctx.fill(); ctx.restore();
+      ctx.save(); ctx.strokeStyle = col; ctx.lineWidth = Math.max(1.5, .14 * s); ctx.setLineDash([cam.r * .45 * s, cam.r * .3 * s]);
+      rr(ctx, x, y, z.w * s, z.h * s, cam.r * .3 * s); ctx.stroke(); ctx.restore();
+      if (z.label) label(ctx, x + z.w * s / 2, y + cam.r * .75 * s, z.label.toUpperCase(), Math.max(10, cam.r * .62 * s), col);
+      if (sel && sel.kind === 'zone' && sel.id === z.id) handle(ctx, x + z.w * s, y + z.h * s, cam);
+    });
+  }
+  function handle(ctx, x, y, cam) {
+    ctx.beginPath(); ctx.arc(x, y, Math.max(9, cam.r * .45 * cam.s), 0, Math.PI * 2);
+    ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = '#2563eb'; ctx.stroke();
+  }
+  function drawBloc(ctx, cam, sc, k, u, homeBib) {
+    const pts = sc.objects.filter(o => o.type === 'player' && !o.gk && o.color !== homeBib).map(o => posAt(sc, k, u, o.id)).filter(Boolean);
+    if (pts.length < 3) return;
+    const pad = cam.r * 1.45, xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+    const x0 = Math.min(...xs) - pad, x1 = Math.max(...xs) + pad, y0 = Math.min(...ys) - pad, y1 = Math.max(...ys) + pad, s = cam.s;
+    const [X, Y] = cam.toS([x0, y0]);
+    ctx.save(); ctx.fillStyle = 'rgba(10,12,14,.14)'; rr(ctx, X, Y, (x1 - x0) * s, (y1 - y0) * s, cam.r * s); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = Math.max(1.5, .12 * s); ctx.setLineDash([cam.r * .25 * s, cam.r * .3 * s]); ctx.stroke(); ctx.restore();
+    const [lx, ly] = cam.toS([(x0 + x1) / 2, y1]);
+    pill(ctx, lx, ly, `bloc adverse · ${Math.round(x1 - x0 - 2 * pad)} m`, Math.max(10, cam.r * .55 * s));
+  }
+
+  /* ---------- objects ---------- */
+  function drawObject(ctx, cam, o, p, opts) {
+    const s = cam.s, r = cam.r * s, [x, y] = cam.toS(p);
+    if (o.type === 'player') {
+      const [fill, ink] = BIBS[o.color] || BIBS.bleu;
+      ctx.beginPath(); ctx.arc(x + r * .12, y + r * .2, r, 0, Math.PI * 2); ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.fill();
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = fill; ctx.fill();
+      ctx.lineWidth = Math.max(1.5, r * .12); ctx.strokeStyle = o.color === 'noir' ? '#e9efe9' : 'rgba(0,0,0,.55)'; ctx.stroke();
+      if (o.gk) { ctx.beginPath(); ctx.arc(x, y, r * .78, 0, Math.PI * 2); ctx.strokeStyle = ink; ctx.globalAlpha = .45; ctx.lineWidth = Math.max(1, r * .08); ctx.stroke(); ctx.globalAlpha = 1; }
+      const t = String(o.label || ''); if (t) label(ctx, x, y + r * .06, t, r * (t.length >= 3 ? .72 : t.length === 2 ? .9 : 1.05), ink);
+      if (opts.names && o.name) {
+        ctx.font = `700 ${Math.max(10, r * .62)}px ui-rounded, system-ui, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+        ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.65)'; ctx.strokeText(o.name, x, y + r * 1.15); ctx.fillStyle = '#fff'; ctx.fillText(o.name, x, y + r * 1.15);
+      }
+    } else if (o.type === 'ball') {
+      ctx.beginPath(); ctx.arc(x, y, r * .45, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = Math.max(1.2, r * .1); ctx.strokeStyle = '#111'; ctx.stroke();
+      ctx.beginPath(); ctx.arc(x, y, r * .16, 0, Math.PI * 2); ctx.fillStyle = '#111'; ctx.fill();
+    } else if (o.type === 'cone') {
+      const col = { orange: '#ff8a2a', jaune: '#facc15', bleu: '#3b82f6', rouge: '#ef4444' }[o.color] || '#ff8a2a';
+      ctx.beginPath(); ctx.arc(x, y, r * .42, 0, Math.PI * 2); ctx.fillStyle = col; ctx.fill(); ctx.lineWidth = Math.max(1, r * .08); ctx.strokeStyle = 'rgba(0,0,0,.5)'; ctx.stroke();
+      ctx.beginPath(); ctx.arc(x, y, r * .15, 0, Math.PI * 2); ctx.fillStyle = 'rgba(255,255,255,.7)'; ctx.fill();
+    } else if (o.type === 'goal') {
+      const big = o.size !== 'mini', gw = (big ? (o.w || 6) : 2.4) * s, gd = (big ? 2 : 1) * s;
+      ctx.save(); ctx.translate(x, y); ctx.rotate((o.rot || 0) * Math.PI / 180);
+      ctx.fillStyle = 'rgba(255,255,255,.28)'; ctx.fillRect(-gd / 2, -gw / 2, gd, gw);
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = Math.max(1.5, .14 * s); ctx.strokeRect(-gd / 2, -gw / 2, gd, gw);
+      ctx.beginPath(); ctx.moveTo(-gd / 2, -gw / 2); ctx.lineTo(-gd / 2, gw / 2); ctx.lineWidth = Math.max(2.5, .3 * s); ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  /* ---------- frame ---------- */
+  // opts: {names, homeBib, editor:{sel, ghosts}, outgoing:true}
+  function drawFrame(ctx, W, H, sc, k, u, opts = {}) {
+    const cam = camera(sc, W, H), r = cam.r, st = sc.steps[k], ov = sc.overlays || {};
+    drawPitch(ctx, cam, sc, W, H);
+    drawZones(ctx, cam, sc, opts.editor && opts.editor.sel);
+    if (ov.bloc) drawBloc(ctx, cam, sc, k, u, opts.homeBib || 'bleu');
+    const ed = opts.editor;
+    // incoming trails (editor only): where things came from
+    if (ed && k > 0) {
+      sc.objects.forEach(o => {
+        const A = sc.steps[k - 1].pos[o.id], B = st.pos[o.id]; if (!A || !B || dist(A, B) < r * .6) return;
+        const [x, y] = cam.toS(A); ctx.beginPath(); ctx.arc(x, y, (o.type === 'player' ? r : r * .45) * cam.s, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255,255,255,.14)'; ctx.fill(); ctx.setLineDash([4, 4]); ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 1.5; ctx.stroke(); ctx.setLineDash([]);
+        const ty = moveType(sc, k - 1, o.id), mv = (st.moves || {})[o.id] || {};
+        if (ty !== 'none') drawArrow(ctx, cam, A, B, mv.c || 0, ty, o.type === 'player' ? r * 1.05 : r * .4, o.type === 'player' ? r * 1.1 : r * .5, .45);
+      });
+    }
+    // outgoing movements (what happens next)
+    if (opts.outgoing !== false && k < sc.steps.length - 1) {
+      const nx = sc.steps[k + 1];
+      sc.objects.forEach(o => {
+        const ty = moveType(sc, k, o.id); if (ty === 'none') return;
+        const A = st.pos[o.id], B = nx.pos[o.id], mv = (nx.moves || {})[o.id] || {};
+        const big = o.type === 'player';
+        drawArrow(ctx, cam, A, B, mv.c || 0, ty, big ? r * 1.05 : r * .4, big ? r * 1.1 : r * .5, ed ? .9 : 1);
+      });
+    }
+    (st.arrows || []).forEach(a => {
+      drawArrow(ctx, cam, a.a, a.b, a.c || 0, a.type, 0, 0);
+      if (ed && ed.sel && ed.sel.kind === 'arrow' && ed.sel.id === a.id) { handle(ctx, ...cam.toS(a.a), cam); handle(ctx, ...cam.toS(a.b), cam); }
+    });
+    const order = { goal: 0, cone: 1, player: 2, ball: 3 };
+    sc.objects.slice().sort((a, b) => order[a.type] - order[b.type]).forEach(o => {
+      const p = posAt(sc, k, u, o.id); if (!p) return;
+      drawObject(ctx, cam, o, p, opts);
+      if (ed && ed.sel && ed.sel.kind === 'obj' && ed.sel.id === o.id) {
+        const [x, y] = cam.toS(p); ctx.beginPath(); ctx.arc(x, y, (o.type === 'player' ? r * 1.35 : r * .9) * cam.s, 0, Math.PI * 2);
+        ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 3; ctx.setLineDash([6, 4]); ctx.stroke(); ctx.setLineDash([]);
+      }
+    });
+    return cam;
+  }
+
+  /* ---------- hit testing ---------- */
+  function hit(sc, k, cam, w) {
+    const r = cam.r, st = sc.steps[k];
+    const order = { ball: 0, player: 1, cone: 2, goal: 3 };
+    const objs = sc.objects.slice().sort((a, b) => order[a.type] - order[b.type]);
+    for (const o of objs) {
+      const p = st.pos[o.id]; if (!p) continue;
+      const rad = o.type === 'player' ? r * 1.15 : o.type === 'goal' ? r * 1.5 : r * .8;
+      if (dist(p, w) < rad) return { kind: 'obj', id: o.id };
+    }
+    for (const a of st.arrows || []) {
+      for (let j = 0; j <= 20; j++) if (dist(bez(a.a, a.b, a.c || 0, j / 20), w) < r * .6) return { kind: 'arrow', id: a.id };
+    }
+    for (const z of (sc.zones || []).slice().reverse()) {
+      if (w[0] >= z.x && w[0] <= z.x + z.w && w[1] >= z.y && w[1] <= z.y + z.h) return { kind: 'zone', id: z.id };
+    }
+    return null;
+  }
+
+  return { PITCH, ARROWS, BIBS, ZONE_COLORS, dims, extents, tokenR, camera, drawFrame, drawArrow, hit, posAt, moveType, stepDur, dist, bez, clamp, ease };
+})();

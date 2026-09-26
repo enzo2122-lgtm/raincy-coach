@@ -1,0 +1,199 @@
+/* Store: the whole club lives in one object, saved in IndexedDB on the device.
+   Sharing between coaches goes through export/import of a .json file (AirDrop, WhatsApp, mail). */
+const Store = (() => {
+  const DB = 'raincy-coach', OS = 'kv', KEY = 'state';
+  const COLS = ['teams', 'players', 'staff', 'schemas', 'trainings', 'matches'];
+  let state = null, saveTimer = null;
+  const listeners = new Set();
+  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+  function idb() {
+    return new Promise((res, rej) => {
+      const rq = indexedDB.open(DB, 1);
+      rq.onupgradeneeded = () => rq.result.createObjectStore(OS);
+      rq.onsuccess = () => res(rq.result); rq.onerror = () => rej(rq.error);
+    });
+  }
+  async function idbGet(k) {
+    const db = await idb();
+    return new Promise((res, rej) => { const t = db.transaction(OS).objectStore(OS).get(k); t.onsuccess = () => res(t.result); t.onerror = () => rej(t.error); });
+  }
+  async function idbPut(k, v) {
+    const db = await idb();
+    return new Promise((res, rej) => { const t = db.transaction(OS, 'readwrite'); t.objectStore(OS).put(v, k); t.oncomplete = res; t.onerror = () => rej(t.error); });
+  }
+
+  function blank() {
+    return { version: 2, club: { name: 'FA Le Raincy', homeBib: 'bordeaux', awayBib: 'blanc', brand: 1 }, ui: {}, teams: [], players: [], staff: [], schemas: [], trainings: [], matches: [] };
+  }
+  // v1 kept players inside each team; v2 keeps one club-wide list where a player can belong to several categories.
+  function migrate() {
+    COLS.forEach(c => state[c] = state[c] || []);
+    state.ui = state.ui || {};
+    if (state.club && !state.club.brand) { // club colours: bordeaux and white
+      if (state.club.homeBib === 'bleu') state.club.homeBib = 'bordeaux';
+      if (state.club.awayBib === 'rouge') state.club.awayBib = 'blanc';
+      state.club.brand = 1;
+    }
+    state.teams.forEach(t => {
+      if (!Array.isArray(t.players)) return;
+      t.players.forEach(p => {
+        const ex = state.players.find(x => x.id === p.id);
+        if (ex) { if (!ex.teamIds.includes(t.id)) ex.teamIds.push(t.id); return; }
+        const parts = String(p.name || '').trim().split(/\s+/);
+        state.players.push({ id: p.id, firstName: parts.shift() || '', lastName: parts.join(' '), number: p.number, pos: p.pos || 'MIL', teamIds: [t.id], parents: [], example: t.example, updatedAt: Date.now() });
+      });
+      delete t.players;
+    });
+    state.version = 2;
+  }
+
+  async function load() {
+    try { state = await idbGet(KEY); } catch (e) { state = null; }
+    if (!state) { try { state = JSON.parse(localStorage.getItem(KEY)); } catch (e) { state = null; } }
+    if (!state) { state = blank(); Seed.fill(state); persist(); }
+    migrate();
+    try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) {}
+    return state;
+  }
+  async function persist() {
+    const snap = JSON.parse(JSON.stringify(state));
+    try { await idbPut(KEY, snap); } catch (e) { try { localStorage.setItem(KEY, JSON.stringify(snap)); } catch (e2) {} }
+  }
+  function save() {
+    clearTimeout(saveTimer); saveTimer = setTimeout(persist, 300);
+    listeners.forEach(f => f());
+  }
+  const get = (col, id) => state[col].find(x => x.id === id);
+  function upsert(col, item) {
+    item.updatedAt = Date.now();
+    const i = state[col].findIndex(x => x.id === item.id);
+    if (i < 0) state[col].push(item); else state[col][i] = item;
+    save(); return item;
+  }
+  function remove(col, id) { state[col] = state[col].filter(x => x.id !== id); save(); }
+
+  /* ---------- sharing ---------- */
+  function pack(data) { return JSON.stringify({ app: 'raincy-coach', version: 1, exportedAt: new Date().toISOString(), data }, null, 1); }
+  function exportAll() { const d = {}; COLS.forEach(c => d[c] = state[c]); d.club = state.club; return pack(d); }
+  function exportTraining(t) {
+    const ids = new Set(t.exercises.map(e => e.schemaId).filter(Boolean));
+    return pack({ trainings: [t], schemas: state.schemas.filter(s => ids.has(s.id)) });
+  }
+  function exportSchema(s) { return pack({ schemas: [s] }); }
+  function importText(txt) {
+    let obj; try { obj = JSON.parse(txt); } catch (e) { throw new Error("Ce fichier n'est pas un fichier Raincy Coach."); }
+    if (!obj || obj.app !== 'raincy-coach' || !obj.data) throw new Error("Ce fichier n'est pas un fichier Raincy Coach.");
+    const res = { added: 0, updated: 0, kept: 0 };
+    COLS.forEach(c => (obj.data[c] || []).forEach(it => {
+      if (!it || !it.id) return;
+      const i = state[c].findIndex(x => x.id === it.id);
+      if (i < 0) { state[c].push(it); res.added++; }
+      else if ((it.updatedAt || 0) > (state[c][i].updatedAt || 0)) { state[c][i] = it; res.updated++; }
+      else res.kept++;
+    }));
+    migrate(); save(); return res;
+  }
+  function reset() { state = blank(); save(); }
+  function removeExamples() {
+    const isEx = x => x.example || /\(exemple\)/i.test(x.name || x.title || '');
+    ['teams', 'schemas', 'trainings'].forEach(c => state[c].forEach(x => { if (isEx(x)) x.example = true; }));
+    const ex = new Set(state.teams.filter(t => t.example).map(t => t.id));
+    state.players.forEach(p => { if ((p.teamIds || []).length && p.teamIds.every(id => ex.has(id))) p.example = true; });
+    ['teams', 'schemas', 'trainings', 'matches', 'players', 'staff'].forEach(c => state[c] = state[c].filter(x => !x.example && !(c !== 'teams' && x.teamId && ex.has(x.teamId))));
+    state.players.forEach(p => p.teamIds = (p.teamIds || []).filter(id => !ex.has(id)));
+    if (ex.has(state.ui.teamId)) state.ui.teamId = '';
+    save();
+  }
+
+  /* ---------- people ---------- */
+  const inTeam = (x, teamId) => (x.teamIds || []).includes(teamId);
+  const byName = (a, b) => (a.lastName || '').localeCompare(b.lastName || '', 'fr') || (a.firstName || '').localeCompare(b.firstName || '', 'fr');
+  const playersOf = teamId => state.players.filter(p => inTeam(p, teamId)).sort(byName);
+  const staffOf = teamId => state.staff.filter(p => inTeam(p, teamId)).sort(byName);
+  const fullName = p => p ? [String(p.lastName || '').toUpperCase(), p.firstName].filter(Boolean).join(' ') || 'Sans nom' : '';
+  const shortName = p => p ? (p.firstName ? p.firstName + (p.lastName ? ' ' + p.lastName[0].toUpperCase() + '.' : '') : fullName(p)) : '';
+
+  return {
+    load, save, get, upsert, remove, uid, exportAll, exportTraining, exportSchema, importText, reset, removeExamples,
+    playersOf, staffOf, fullName, shortName, byName,
+    get state() { return state; }, on: f => listeners.add(f), off: f => listeners.delete(f),
+  };
+})();
+
+/* Formations: x = fraction of pitch length (we attack to the right), y = fraction of width (0 = our left). */
+const Formations = {
+  '11': {
+    '4-3-3':   [['G', .02, .5, 1], ['3', .2, .12], ['5', .17, .37], ['4', .17, .63], ['2', .2, .88], ['6', .3, .5], ['8', .38, .3], ['10', .38, .7], ['11', .47, .12], ['9', .49, .5], ['7', .47, .88]],
+    '4-1-2-3 (sans ballon)': [['G', .02, .5, 1], ['3', .18, .12], ['5', .15, .37], ['4', .15, .63], ['2', .18, .88], ['6', .24, .5], ['8', .33, .33], ['10', .33, .67], ['11', .44, .12], ['9', .46, .5], ['7', .44, .88]],
+    '3-4-3 (avec ballon)':   [['G', .02, .5, 1], ['5', .14, .27], ['6', .12, .5], ['4', .14, .73], ['3', .36, .07], ['8', .31, .38], ['10', .31, .62], ['2', .36, .93], ['11', .45, .22], ['9', .48, .5], ['7', .45, .78]],
+    '4-4-2':   [['G', .02, .5, 1], ['3', .2, .12], ['5', .17, .37], ['4', .17, .63], ['2', .2, .88], ['11', .34, .12], ['6', .3, .38], ['8', .3, .62], ['7', .34, .88], ['10', .45, .4], ['9', .45, .6]],
+    '4-2-3-1': [['G', .02, .5, 1], ['3', .2, .12], ['5', .17, .37], ['4', .17, .63], ['2', .2, .88], ['6', .28, .38], ['8', .28, .62], ['11', .39, .15], ['10', .39, .5], ['7', .39, .85], ['9', .48, .5]],
+  },
+  '8': {
+    '3-3-1': [['G', .03, .5, 1], ['3', .18, .2], ['4', .15, .5], ['2', .18, .8], ['6', .32, .2], ['8', .29, .5], ['7', .32, .8], ['9', .45, .5]],
+    '3-2-2': [['G', .03, .5, 1], ['3', .18, .2], ['4', .15, .5], ['2', .18, .8], ['6', .3, .35], ['8', .3, .65], ['9', .45, .35], ['10', .45, .65]],
+    '2-3-2': [['G', .03, .5, 1], ['4', .16, .33], ['5', .16, .67], ['3', .3, .15], ['6', .28, .5], ['2', .3, .85], ['9', .45, .35], ['10', .45, .65]],
+    '3-1-3': [['G', .03, .5, 1], ['3', .18, .2], ['4', .15, .5], ['2', .18, .8], ['6', .28, .5], ['7', .42, .15], ['9', .46, .5], ['11', .42, .85]],
+  },
+  '5': {
+    '2-2': [['G', .04, .5, 1], ['2', .2, .28], ['3', .2, .72], ['4', .4, .28], ['5', .4, .72]],
+    '1-2-1': [['G', .04, .5, 1], ['2', .17, .5], ['3', .3, .2], ['4', .3, .8], ['5', .43, .5]],
+  },
+};
+
+/* Example content so the app opens in a working state. Everything is marked « exemple » and can be deleted. */
+const Seed = {
+  schema(name, format, extra = {}) {
+    return Object.assign({ id: Store.uid(), name, field: { format, view: 'full' }, overlays: {}, objects: [], zones: [], steps: [{ pos: {}, arrows: [], moves: {}, note: '', dur: 2 }] }, extra);
+  },
+  addObj(sc, o, positions) {
+    o.id = o.id || Store.uid(); sc.objects.push(o);
+    sc.steps.forEach((st, i) => st.pos[o.id] = (positions[i] || positions[positions.length - 1]).slice());
+    return o.id;
+  },
+  fill(state) {
+    const uid = Store.uid, now = Date.now();
+    const u11 = { id: uid(), name: 'U11 A (exemple)', category: 'U11', format: '8', example: true, updatedAt: now,
+      players: ['Adam', 'Bilal', 'Chris', 'Dylan', 'Enzo', 'Farès', 'Gabin', 'Hugo', 'Ilyes', 'Jules'].map((n, i) => ({ id: uid(), name: n, number: i + 1, pos: i === 0 ? 'GB' : i < 4 ? 'DEF' : i < 8 ? 'MIL' : 'ATT' })) };
+    const sen = { id: uid(), name: 'Seniors A (exemple)', category: 'Seniors', format: '11', example: true, updatedAt: now,
+      players: Array.from({ length: 14 }, (_, i) => ({ id: uid(), name: 'Joueur ' + (i + 1), number: i + 1, pos: i === 0 ? 'GB' : i < 5 ? 'DEF' : i < 10 ? 'MIL' : 'ATT' })) };
+    state.teams.push(u11, sen);
+
+    // Example 1 · foot à 8 : passe et suit dans un carré
+    const s1 = Seed.schema('Passe et suis (exemple)', 'zone', { field: { format: 'zone', view: 'full', w: 24, h: 16 } });
+    s1.steps[0].note = 'A a le ballon, chaque joueur attend sur son plot';
+    s1.steps.push({ pos: {}, arrows: [], moves: {}, note: 'A passe à B', dur: 1.6 }, { pos: {}, arrows: [], moves: {}, note: 'A suit son ballon, B passe à C', dur: 1.8 });
+    [[4, 3], [20, 3], [20, 13], [4, 13]].forEach(c => Seed.addObj(s1, { type: 'cone', color: 'orange' }, [c]));
+    Seed.addObj(s1, { type: 'player', color: 'bordeaux', label: 'A' }, [[4, 3], [4, 3], [17.5, 3]]);
+    Seed.addObj(s1, { type: 'player', color: 'bordeaux', label: 'B' }, [[20, 3]]);
+    Seed.addObj(s1, { type: 'player', color: 'bordeaux', label: 'C' }, [[20, 13]]);
+    Seed.addObj(s1, { type: 'ball' }, [[5.3, 4], [21.3, 4], [21.3, 14]]);
+
+    // Example 2 · foot à 11 : sortie à 3 (le 6 descend, les latéraux deviennent pistons)
+    const s2 = Seed.schema('Sortie à 3 : 4-1-2-3 → 3-4-3 (exemple)', '11', { overlays: { lanes: true, phases: true } });
+    s2.steps.push({ pos: {}, arrows: [], moves: {}, note: 'Avec ballon : le 6 descend entre les centraux, les latéraux montent en pistons', dur: 2.6 });
+    s2.steps[0].note = 'Sans ballon : 4-1-2-3';
+    const L = 105, W = 68, f1 = Formations['11']['4-1-2-3 (sans ballon)'], f2 = Formations['11']['3-4-3 (avec ballon)'];
+    f1.forEach(([lab, x, y, gk]) => {
+      const t = f2.find(q => q[0] === lab);
+      Seed.addObj(s2, { type: 'player', color: 'bordeaux', label: lab, gk: !!gk }, [[x * L, y * W], [t[1] * L, t[2] * W]]);
+    });
+    const gk = s2.objects.find(o => o.label === 'G').id;
+    const six = s2.objects.find(o => o.label === '6').id, near = p => [p[0] + 2.4, p[1] + 1.6];
+    Seed.addObj(s2, { type: 'ball' }, [near(s2.steps[0].pos[gk]), near(s2.steps[1].pos[six])]);
+    Formations['11']['4-3-3'].forEach(([lab, x, y, g]) => Seed.addObj(s2, { type: 'player', color: g ? 'orange' : 'blanc', label: g ? 'G' : '', gk: !!g }, [[(1 - x * .8) * L, (1 - y) * W]]));
+    s2.overlays.bloc = true;
+    s2.updatedAt = now; s1.updatedAt = now; s1.example = s2.example = true;
+    state.schemas.push(s1, s2);
+
+    const d = new Date(); const iso = x => x.toISOString().slice(0, 10);
+    const next = new Date(d.getTime() + 3 * 864e5), prev = new Date(d.getTime() - 4 * 864e5);
+    state.trainings.push({ id: uid(), teamId: u11.id, date: iso(d), time: '18:00', title: 'Passes et déplacements (exemple)', updatedAt: now, presents: [],
+      exercises: [{ id: uid(), title: 'Passe et suis', duration: 15, org: 'Carré de 24 × 16 m, 4 plots, 3 joueurs par carré, 1 ballon.', consignes: 'Passe au sol\nJe suis mon ballon\nJe parle à mon partenaire', materiel: '4 plots, 1 ballon par carré', schemaId: s1.id }] });
+    state.matches.push(
+      { id: uid(), teamId: u11.id, date: iso(prev), time: '10:00', opponent: 'US Exemple', home: true, competition: 'Plateau', place: 'Stade du Raincy', rdv: '09:15', played: true, gf: 3, ga: 1, convoked: u11.players.map(p => p.id), stats: { [u11.players[8].id]: { g: 2, a: 0 }, [u11.players[9].id]: { g: 1, a: 1 } }, notes: '', updatedAt: now },
+      { id: uid(), teamId: u11.id, date: iso(next), time: '10:30', opponent: 'AS Exemple', home: false, competition: 'Championnat', place: '', rdv: '09:30', played: false, gf: 0, ga: 0, convoked: [], stats: {}, notes: '', updatedAt: now });
+    state.ui.teamId = u11.id;
+  },
+};
