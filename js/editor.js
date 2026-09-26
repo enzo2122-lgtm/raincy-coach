@@ -36,6 +36,7 @@ const Editor = (() => {
         <button class="icon-btn" data-act="back" aria-label="Retour">${I.back}</button>
         <input class="ed-title" id="edTitle" value="${esc(sc.name)}" aria-label="Nom du schéma" maxlength="80">
         <span class="grow"></span>
+        <button class="icon-btn opt-btn" data-act="panel" aria-label="Options du terrain">${I.layers}</button>
         <button class="icon-btn" data-act="undo" aria-label="Annuler">${I.undo}</button>
         <button class="icon-btn" data-act="redo" aria-label="Rétablir">${I.redo}</button>
         <button class="btn primary" data-act="export">${I.share}<span>Exporter</span></button>
@@ -190,7 +191,7 @@ const Editor = (() => {
     if (!E) return;
     const { ctx, canvas } = E, W = canvas.width, H = canvas.height;
     const k = E.playing ? E.pk : E.k, u = E.playing ? E.pu : 0;
-    E.cam = Board.drawFrame(ctx, W, H, E.sc, k, u, { homeBib: club().homeBib, names: E.sc.overlays.names, editor: E.playing ? null : { sel: E.sel } });
+    E.cam = Board.drawFrame(ctx, W, H, E.sc, k, u, { homeBib: club().homeBib, names: E.sc.overlays.names, vertical: H > W * 1.15, editor: E.playing ? null : { sel: E.sel } });
     const d = E.drag;
     if (d && d.kind === 'newArrow') Board.drawArrow(ctx, E.cam, d.a, d.b, 0, E.arrowType, 0, 0, .8);
     if (d && d.kind === 'newZone') {
@@ -319,7 +320,8 @@ const Editor = (() => {
         <h3>Les flèches</h3>
         <ul class="legend">${Object.entries(Board.ARROWS).map(([k, a]) => `<li>${arrowSw(k)}<span>${a.label}</span></li>`).join('')}</ul>`;
     }
-    side.innerHTML = h;
+    side.innerHTML = `<div class="side-grip"><b>${sel ? 'Modifier' : 'Options'}</b><button class="icon-btn" data-act="closePanel" aria-label="Fermer">${I.x}</button></div>` + h;
+    E.root.querySelector('.opt-btn').classList.toggle('dot', !!sel);
   }
 
   // Put a roster player on the field, on the first free spot along our touchline
@@ -431,6 +433,8 @@ const Editor = (() => {
       if (d.view) return setSel(() => sc.field.view = d.view);
       switch (d.act) {
         case 'back': stopPlay(); close(); return history.length > 1 ? history.back() : (location.hash = '#/schemas');
+        case 'panel': return E.root.querySelector('.ed').classList.toggle('panel-open');
+        case 'closePanel': return E.root.querySelector('.ed').classList.remove('panel-open');
         case 'undo': return undo();
         case 'redo': return redo();
         case 'export': stopPlay(); return exportSheet();

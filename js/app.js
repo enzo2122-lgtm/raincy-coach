@@ -2,7 +2,7 @@
 const App = (() => {
   const NAV = [
     ['', 'Accueil', 'home'], ['equipes', 'Équipes', 'team'], ['schemas', 'Schémas', 'board'],
-    ['entrainements', 'Entraînements', 'training'], ['matchs', 'Matchs', 'match'], ['stats', 'Stats', 'stats'], ['reglages', 'Réglages', 'settings'],
+    ['entrainements', 'Entraînements', 'training', 'Séances'], ['matchs', 'Matchs', 'match'], ['stats', 'Stats', 'stats'], ['reglages', 'Réglages', 'settings'],
   ];
   const view = () => document.getElementById('view');
 
@@ -16,8 +16,8 @@ const App = (() => {
     document.title = c.name + ' · Coach';
   }
   function renderNav(active) {
-    document.getElementById('nav').innerHTML = NAV.map(([h, l, ic]) =>
-      `<a href="#/${h}" class="${h === active ? 'on' : ''}" ${h === active ? 'aria-current="page"' : ''}>${I[ic]}<span>${l}</span></a>`).join('');
+    document.getElementById('nav').innerHTML = NAV.map(([h, l, ic, short]) =>
+      `<a href="#/${h}" class="${h === active ? 'on' : ''}" ${h === active ? 'aria-current="page"' : ''} aria-label="${l}">${I[ic]}<span class="lg">${l}</span><span class="sh">${short || l}</span></a>`).join('');
   }
   function route() {
     const [, name = '', id] = (location.hash || '#/').split('/');
