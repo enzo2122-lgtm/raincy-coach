@@ -28,23 +28,27 @@ Le fichier `FA-Le-Raincy-Effectif-2026-2027.raincy.json` est à part, sur le Bur
 
 Pour les prochains licenciés, va dans **Équipes**, puis **Tous les joueurs**, puis **Coller une liste**. Colle les lignes copiées depuis Footclubs : l'appli les range dans leur catégorie selon leur sous-catégorie.
 
-## Partager entre éducateurs
+## Comptes des éducateurs (version 2.1)
 
-Chaque éducateur installe l'appli avec la même adresse. Pour partager, va dans **Réglages**, puis **Envoyer toutes mes données**, ou utilise **Envoyer** sur un entraînement ou un schéma. Le fichier part par AirDrop, WhatsApp ou mail. L'autre éducateur l'ouvre avec **Recevoir un fichier**.
+Le serveur du club (Supabase) est déjà réglé dans l'appli (`js/config.js`). Personne n'a besoin de le configurer.
 
-Les données restent sur chaque appareil. Envoie régulièrement une copie de sauvegarde.
+**Le responsable, une seule fois :**
 
-## Messagerie et planning du terrain (serveur du club)
+1. Ouvre l'appli, puis touche **Première connexion**, puis **Je suis le responsable du club**.
+2. Entre ton nom, ton prénom, le **code responsable** et un mot de passe.
+   - Le code se trouve dans **Réglages → Serveur du club → Code responsable**, sur l'appareil où le serveur a été configuré.
+   - Si tu l'as perdu, touche **J'ai perdu le code responsable**. L'appli te donne un script à coller dans Supabase (SQL Editor → Run), puis affiche le nouveau code. Note-le sur papier.
+3. Recharge le fichier des licenciés (**Réglages → Recevoir un fichier**). Il part sur le serveur pour tous les éducateurs.
+4. Va dans **Réglages → Serveur du club → Inviter les éducateurs** et envoie le lien par WhatsApp.
 
-La messagerie et le planning sont partagés par tous les éducateurs grâce à un serveur gratuit Supabase.
+**Les éducateurs :** ils ouvrent le lien d'invitation, choisissent leur nom et créent leur mot de passe. Ensuite, ils se connectent sur n'importe quel appareil avec leur **nom, prénom et mot de passe**.
 
-1. Crée un compte sur https://supabase.com, puis un projet (région Europe).
-2. Dans l'appli, connecté en responsable, va dans **Réglages → Serveur du club → Configurer le serveur**.
-3. Suis les 3 étapes : copie le script dans Supabase (SQL Editor → Run), puis colle la Project URL et la clé publique (anon ou publishable). N'utilise jamais la clé secrète.
-4. Envoie le fichier du club aux éducateurs (Réglages → Envoyer toutes mes données) : leur appli se connecte toute seule.
+**Mot de passe oublié :** le responsable va dans **Réglages → Comptes des dirigeants → Réinitialiser**. L'éducateur touche ensuite **Première connexion** et crée un nouveau mot de passe.
 
-Le **code responsable** (Réglages → Code responsable) sert à fixer les créneaux disponibles. Il reste sur ton appareil.
+La messagerie, le planning du terrain et les effectifs sont partagés par le serveur. L'appli marche aussi sans internet et envoie les changements au retour du réseau.
+
+Tu peux toujours envoyer un fichier à la main : **Réglages → Envoyer toutes mes données**, ou **Envoyer** sur un entraînement ou un schéma (AirDrop, WhatsApp ou mail).
 
 ## Mettre à jour l'appli
 
-Remplace les fichiers sur GitHub. Augmente ensuite le numéro de version dans `sw.js` (par exemple `raincy-coach-v9` devient `raincy-coach-v10`) et dans `index.html` (`?v=9` devient `?v=10`). Les iPad récupèrent la nouvelle version à la prochaine ouverture avec internet.
+Remplace les fichiers sur GitHub. Augmente ensuite le numéro de version dans `sw.js` (par exemple `raincy-coach-v16` devient `raincy-coach-v17`) et dans `index.html` (`?v=16` devient `?v=17`). Change aussi le numéro affiché dans `js/help.js` (`VERSION = '2.1'`). Les iPad récupèrent la nouvelle version à la prochaine ouverture avec internet.
