@@ -101,9 +101,15 @@ const Library = (() => {
         (async () => {
           const b = busy('Création de la séance…');
           try {
-            const exercises = [];
+            const exercises = [], assist = Importer.isAssistCoach(rec.pages);
             for (let i = 0; i < rec.pages.length; i++) {
               const pg = rec.pages[i], lines = (pg.text || '').split('\n').map(x => x.trim()).filter(Boolean);
+              if (assist) {
+                const ex = Importer.parseAssistPage(pg.text); if (!ex) continue;
+                const sc = await drawOn(pg.blob, pg.w, pg.h, `${ex.title} · fiche`, teamId);
+                exercises.push(Object.assign({ id: Store.uid(), schemaId: sc.id }, ex));
+                continue;
+              }
               const exTitle = (lines[0] || `Page ${i + 1}`).slice(0, 70);
               const sc = await drawOn(pg.blob, pg.w, pg.h, `${title} · page ${i + 1}`, teamId);
               exercises.push({ id: Store.uid(), title: exTitle, duration: dur, org: lines.slice(1).join('\n').slice(0, 900), consignes: '', materiel: '', schemaId: sc.id });

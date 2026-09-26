@@ -14,7 +14,7 @@ const Views = (() => {
   const result = m => !m.played ? null : m.gf > m.ga ? 'V' : m.gf < m.ga ? 'D' : 'N';
   const resPill = m => { const r = result(m); return r ? `<span class="res-smiley" aria-hidden="true">${Ratings.smiley(m)}</span><span class="res res-${r}">${r === 'V' ? 'Gagné' : r === 'D' ? 'Perdu' : 'Nul'}</span>` : ''; };
   const scoreTxt = m => m.home ? `${m.gf} – ${m.ga}` : `${m.ga} – ${m.gf}`;
-  const matchTitle = m => m.home ? `${esc(S().club.name)} <i>contre</i> ${esc(m.opponent || '?')}` : `${esc(m.opponent || '?')} <i>contre</i> ${esc(S().club.name)}`;
+  const matchTitle = m => m.exempt ? `${esc(S().club.name)} <i>exempt · pas de match</i>` : m.home ? `${esc(S().club.name)} <i>contre</i> ${esc(m.opponent || '?')}` : `${esc(m.opponent || '?')} <i>contre</i> ${esc(S().club.name)}`;
   const empty = (txt, btn) => `<div class="empty"><p>${txt}</p>${btn || ''}</div>`;
 
   function teamSwitch() {
@@ -181,13 +181,14 @@ const Views = (() => {
     const item = t => { const tm = teamOf(t.teamId), dur = t.exercises.reduce((a, e) => a + (+e.duration || 0), 0);
       return `<a class="list-item" href="#/entrainement/${t.id}"><div class="date-box"><b>${new Date(t.date + 'T12:00').getDate()}</b><span>${esc(fmtDate(t.date, { month: 'short' }))}</span></div>
         <div class="li-main"><b>${esc(t.title || 'Entraînement')}</b><span class="muted">${tm ? esc(tm.name) + ' · ' : ''}${t.exercises.length} exercice${t.exercises.length > 1 ? 's' : ''} · ${dur} min</span></div>${I.next}</a>`; };
-    root.innerHTML = `${header('Entraînements', 'Séances, exercices et présences', `<button class="btn" data-act="import">${I.upload}<span>Recevoir</span></button><button class="btn primary" data-act="new">${I.plus}<span>Nouvel entraînement</span></button>`)}
+    root.innerHTML = `${header('Entraînements', 'Séances, exercices et présences', `<button class="btn" data-act="import">${I.upload}<span>Recevoir</span></button><button class="btn" data-act="ics">${I.calendar}<span>Agenda (.ics)</span></button><a class="btn" href="#/bibliotheque">${I.pdf}<span>PDF (AssistCoachAI…)</span></a><button class="btn primary" data-act="new">${I.plus}<span>Nouvel entraînement</span></button>`)}
       ${teamSwitch()}
       <h2 class="section">À venir</h2>${up.length ? `<div class="list">${up.map(item).join('')}</div>` : '<p class="muted">Aucun entraînement prévu.</p>'}
       <h2 class="section">Passés</h2>${past.length ? `<div class="list">${past.map(item).join('')}</div>` : '<p class="muted">Rien pour l\'instant.</p>'}`;
     bindTeamSwitch(root, () => trainings(root));
     $('[data-act="new"]', root).onclick = newTraining;
     $('[data-act="import"]', root).onclick = importFile;
+    $('[data-act="ics"]', root).onclick = () => Importer.trainingsFromICS(() => trainings(root));
   }
   function newTraining() {
     const t = activeTeam();
@@ -290,12 +291,13 @@ const Views = (() => {
     const item = m => `<a class="list-item" href="#/match/${m.id}"><div class="date-box"><b>${new Date(m.date + 'T12:00').getDate()}</b><span>${esc(fmtDate(m.date, { month: 'short' }))}</span></div>
       <div class="li-main"><b>${matchTitle(m)}</b><span class="muted">${esc(m.competition || '')} · ${m.home ? 'Domicile' : 'Extérieur'}${m.time ? ' · ' + esc(m.time) : ''}</span></div>
       ${m.played ? `<span class="score">${scoreTxt(m)}</span>${resPill(m)}` : ''}${I.next}</a>`;
-    root.innerHTML = `${header('Matchs', 'Convocations, compositions et résultats', `<button class="btn primary" data-act="new">${I.plus}<span>Nouveau match</span></button>`)}
+    root.innerHTML = `${header('Matchs', 'Convocations, compositions et résultats', `<button class="btn" data-act="imp">${I.upload}<span>Importer (FFF, agenda…)</span></button><button class="btn primary" data-act="new">${I.plus}<span>Nouveau match</span></button>`)}
       ${teamSwitch()}
       <h2 class="section">À venir</h2>${up.length ? `<div class="list">${up.map(item).join('')}</div>` : '<p class="muted">Aucun match prévu.</p>'}
       <h2 class="section">Résultats</h2>${done.length ? `<div class="list">${done.map(item).join('')}</div>` : '<p class="muted">Pas encore de résultat.</p>'}`;
     bindTeamSwitch(root, () => matches(root));
     $('[data-act="new"]', root).onclick = newMatch;
+    $('[data-act="imp"]', root).onclick = () => Importer.matchesDialog(() => matches(root));
   }
   function newMatch() {
     const t = activeTeam() || (S().teams[0] && S().teams[0].id) || '';

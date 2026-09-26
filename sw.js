@@ -1,9 +1,9 @@
 /* Service worker: keeps the app working without internet. Bump VERSION after each update. */
-const VERSION = 'raincy-coach-v9';
+const VERSION = 'raincy-coach-v11';
 const JSPDF = 'https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js';
 const FILES = [
   './', 'index.html', 'app.css', 'manifest.webmanifest',
-  'js/icons.js', 'js/board.js', 'js/store.js', 'js/ui.js', 'js/exporter.js', 'js/auth.js', 'js/media.js', 'js/ratings.js', 'js/library.js', 'js/help.js', 'js/cloud.js', 'js/planning.js', 'js/messages.js', 'js/people.js', 'js/editor.js', 'js/views.js', 'js/app.js',
+  'js/icons.js', 'js/board.js', 'js/store.js', 'js/ui.js', 'js/exporter.js', 'js/auth.js', 'js/media.js', 'js/ratings.js', 'js/library.js', 'js/importer.js', 'js/help.js', 'js/cloud.js', 'js/planning.js', 'js/messages.js', 'js/people.js', 'js/editor.js', 'js/views.js', 'js/app.js',
   'icons/crest.png', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png',
 ];
 self.addEventListener('install', e => {

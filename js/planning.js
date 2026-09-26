@@ -47,6 +47,7 @@ const Planning = (() => {
     if (!days.includes(ui.planDay)) ui.planDay = days[0];
     root.innerHTML = `<header class="page-head"><div><h1>Planning · ${esc(fieldName())}</h1><p class="sub">Grand terrain ou demi-terrain, sans chevauchement</p></div>
       <div class="head-actions">${Auth.isAdmin() ? `<button class="btn" data-p="slots">${I.clock}<span>Créneaux disponibles</span></button>` : ''}
+      <button class="btn" data-p="recur">${I.rotate}<span>Chaque semaine</span></button>
       <button class="btn primary" data-p="new">${I.plus}<span>Réserver</span></button></div></header>
       <div class="plan-nav"><button class="icon-btn" data-p="prev" aria-label="Semaine précédente">${I.back}</button>
         <b>Semaine du ${esc(parse(week).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' }))}</b>
@@ -91,6 +92,7 @@ const Planning = (() => {
         if (p === 'retry') return page(root);
         if (p === 'new') return bookForm({ date: ui.planDay, start: 18 * 60 }, () => page(root));
         if (p === 'slots') return slotsForm(() => page(root));
+        if (p === 'recur') return recurForm(() => page(root));
       }
       if (b && b.dataset.day) { ui.planDay = b.dataset.day; $$('.day-chips .chip', root).forEach(x => x.classList.toggle('on', x === b)); $$('.plan-day', root).forEach(c => c.classList.toggle('sel', c.dataset.col === ui.planDay)); return; }
       if (b && b.dataset.bk) return detail(bookings.find(x => x.id === b.dataset.bk), () => page(root));
@@ -160,6 +162,7 @@ const Planning = (() => {
     if (!b) return;
     const k = KINDS[b.kind] || KINDS.autre;
     const acts = [];
+    if (b.series && canDelete(b)) acts.push({ label: 'Libérer toute la série', kind: 'danger', icon: I.rotate, onClick: () => { setTimeout(async () => { if (!(await confirmBox('Libérer ce créneau et tous les suivants de la série (jusqu\'au 30 juin) ?', 'Libérer la série'))) return; try { const n = await Cloud.unbookSeries(b.series); toast(`${n} créneau${n > 1 ? 'x' : ''} libéré${n > 1 ? 's' : ''}`); done && done(); } catch (e) { toast(e.message, 'err'); } }, 60); } });
     if (canDelete(b)) acts.push({ label: 'Libérer le créneau', kind: 'danger', icon: I.trash, onClick: () => { setTimeout(async () => { if (!(await confirmBox('Libérer ce créneau ?', 'Libérer'))) return; try { await Cloud.unbook(b.id); toast('Créneau libéré'); done && done(); } catch (e) { toast(e.message, 'err'); } }, 60); } });
     if (b.kind === 'entrainement') acts.push({ label: 'Préparer la séance', icon: I.training, onClick: () => { const tr = Store.upsert('trainings', { id: Store.uid(), title: b.note || 'Entraînement', date: b.date, time: hm(b.start_min), teamId: b.team_id || null, goal: '', exercises: [], presents: [] }); location.hash = '#/entrainement/' + tr.id; } });
     if (b.kind === 'match') acts.push({ label: 'Créer la fiche match', icon: I.match, onClick: () => { const m = Store.upsert('matches', { id: Store.uid(), teamId: b.team_id || (S().teams[0] || {}).id, opponent: '', date: b.date, time: hm(b.start_min), home: true, competition: 'Championnat', place: fieldName(), rdv: '', played: false, gf: 0, ga: 0, convoked: [], stats: {}, notes: b.note || '' }); location.hash = '#/match/' + m.id; } });
@@ -167,7 +170,49 @@ const Planning = (() => {
     modal({ title: `${k[0]} · ${b.team_name || 'sans catégorie'}`, noFocus: true, body: `
       <dl class="bk-detail"><div><dt>Quand</dt><dd>${esc(parse(b.date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }))}, ${hm(b.start_min)}–${hm(b.end_min)}</dd></div>
       <div><dt>Où</dt><dd>${esc(fieldName())} · ${PART[b.part]}</dd></div>
-      <div><dt>Réservé par</dt><dd>${esc(b.author_name || '?')}</dd></div>${b.note ? `<div><dt>Note</dt><dd>${esc(b.note)}</dd></div>` : ''}</dl>`, actions: acts });
+      <div><dt>Réservé par</dt><dd>${esc(b.author_name || '?')}${b.series ? ' · créneau répété chaque semaine' : ''}</dd></div>${b.note ? `<div><dt>Note</dt><dd>${esc(b.note)}</dd></div>` : ''}</dl>`, actions: acts });
+  }
+
+  /* ---------- weekly training slot until the end of the season (30 June) ---------- */
+  const seasonEnd = () => { const d = new Date(), y = d.getMonth() >= 6 ? d.getFullYear() + 1 : d.getFullYear(); return `${y}-06-30`; };
+  function recurForm(done) {
+    const mine = myTeams(), teams = S().teams, order = [1, 2, 3, 4, 5, 6, 0];
+    modal({ title: 'Entraînement chaque semaine', body: `
+      <p class="tip">Réserve le même créneau toutes les semaines jusqu'à la fin de la saison. Les semaines où le terrain est déjà pris sont listées à la fin : rien n'est écrasé.</p>
+      <div class="lbl">Jours</div><div class="chips" id="rDays">${order.map(d => `<button class="chip" data-v="${d}">${DAYS[d].slice(0, 3)}</button>`).join('')}</div>
+      <div class="row2" style="margin-top:12px"><label class="fld"><span>Début</span><select id="rStart">${timeOptions(18 * 60)}</select></label>
+      <label class="fld"><span>Fin</span><select id="rEnd">${timeOptions(19 * 60 + 30)}</select></label></div>
+      <div class="lbl">Terrain</div><div class="chips" id="rPart"><button class="chip" data-v="full">Grand terrain</button><button class="chip on" data-v="half">Demi-terrain</button></div>
+      <label class="fld" style="margin-top:12px"><span>Catégorie</span><select id="rTeam">${teams.map(t => `<option value="${t.id}" ${t.id === (mine[0] || S().ui.teamId) ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></label>
+      <div class="row2"><label class="fld"><span>À partir du</span><input type="date" id="rFrom" value="${iso(new Date())}"></label>
+      <label class="fld"><span>Jusqu'au</span><input type="date" id="rTo" value="${seasonEnd()}"></label></div>`,
+      onOpen: r => {
+        $$('#rDays .chip', r).forEach(b => b.onclick = () => b.classList.toggle('on'));
+        $$('#rPart .chip', r).forEach(b => b.onclick = () => { $$('#rPart .chip', r).forEach(x => x.classList.remove('on')); b.classList.add('on'); });
+      },
+      actions: [{ label: 'Annuler' }, { label: 'Réserver toute la saison', kind: 'primary', onClick: (close, r) => {
+        const days = $$('#rDays .chip.on', r).map(b => +b.dataset.v), s0 = +$('#rStart', r).value, e0 = +$('#rEnd', r).value, from = $('#rFrom', r).value, to = $('#rTo', r).value;
+        if (!days.length) { toast('Choisis au moins un jour', 'err'); return false; }
+        if (e0 <= s0) { toast('L\'heure de fin doit être après le début', 'err'); return false; }
+        if (!from || !to || to < from) { toast('Vérifie les dates', 'err'); return false; }
+        const dates = []; for (let d = from; d <= to; d = addDays(d, 1)) if (days.includes(parse(d).getDay())) dates.push(d);
+        if (dates.length > 120) { toast('Trop de dates : réduis la période', 'err'); return false; }
+        const u = Auth.current(), team = Store.get('teams', $('#rTeam', r).value), part = $('#rPart .on', r).dataset.v, series = Store.uid();
+        close();
+        (async () => {
+          const b = UI.busy(`Réservation de ${dates.length} créneaux…`), ok = [], ko = [];
+          for (let i = 0; i < dates.length; i++) {
+            b.progress(i / dates.length);
+            try { await Cloud.book({ date: dates[i], start_min: s0, end_min: e0, field: 'T1', part, kind: 'entrainement', team_id: team ? team.id : null, team_name: team ? team.name : '', author_id: u.id, author_name: Store.fullName(u), note: '', series }); ok.push(dates[i]); }
+            catch (e) { ko.push([dates[i], e.message]); if (/internet|serveur/i.test(e.message)) break; }
+          }
+          b.done();
+          modal({ title: 'Créneaux réservés', noFocus: true, body: `<p class="lead">✓ ${ok.length} créneau${ok.length > 1 ? 'x' : ''} réservé${ok.length > 1 ? 's' : ''} pour ${esc(team ? team.name : '')}, ${hm(s0)}–${hm(e0)}.</p>
+            ${ko.length ? `<p><b>${ko.length} date${ko.length > 1 ? 's' : ''} non réservée${ko.length > 1 ? 's' : ''} :</b></p><ul class="help-list">${ko.map(([d, m]) => `<li>${esc(parse(d).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }))} : ${esc(m.replace(/ Choisis.*$/, ''))}</li>`).join('')}</ul>` : ''}`,
+            actions: [{ label: 'OK', kind: 'primary' }] });
+          done && done();
+        })();
+      } }] });
   }
 
   /* ---------- available slots (responsable) ---------- */

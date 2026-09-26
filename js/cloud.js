@@ -44,7 +44,8 @@ create table if not exists bookings (
   id uuid primary key default gen_random_uuid(), created_at timestamptz not null default now(),
   date date not null, start_min int not null, end_min int not null, field text not null default 'T1',
   part text not null check (part in ('full','A','B')), kind text not null default 'entrainement',
-  team_id text, team_name text, author_id text, author_name text, note text);
+  team_id text, team_name text, author_id text, author_name text, note text, series text);
+alter table bookings add column if not exists series text;
 create table if not exists slots (id uuid primary key default gen_random_uuid(), weekday int not null, start_min int not null, end_min int not null, field text not null default 'T1');
 alter table club_config enable row level security;
 alter table messages enable row level security;
@@ -98,8 +99,8 @@ begin
   foreach chosen in array (case when want = 'half' then array['A','B'] else array[want] end) loop
     if not exists (select 1 from bookings b where b.field = f and b.date = d and b.start_min < e and s < b.end_min
                    and (b.part = 'full' or chosen = 'full' or b.part = chosen)) then
-      insert into bookings (date, start_min, end_min, field, part, kind, team_id, team_name, author_id, author_name, note)
-        values (d, s, e, f, chosen, coalesce(p->>'kind', 'entrainement'), p->>'team_id', p->>'team_name', p->>'author_id', p->>'author_name', p->>'note')
+      insert into bookings (date, start_min, end_min, field, part, kind, team_id, team_name, author_id, author_name, note, series)
+        values (d, s, e, f, chosen, coalesce(p->>'kind', 'entrainement'), p->>'team_id', p->>'team_name', p->>'author_id', p->>'author_name', p->>'note', p->>'series')
         returning * into r;
       return r;
     end if;
@@ -109,6 +110,13 @@ end $$;
 create or replace function club_unbook(k text, p_id uuid, p_author text, admin_k text default null) returns boolean language plpgsql security definer set search_path = public as $$
 begin if not club_ok(k) then raise exception 'CLE_CLUB'; end if;
   delete from bookings where id = p_id and (author_id = p_author or admin_ok(admin_k)); return found; end $$;
+-- Frees every future booking of a weekly series (its author or a responsable)
+create or replace function club_unbook_series(k text, p_series text, p_author text, admin_k text default null) returns int language plpgsql security definer set search_path = public as $$
+declare n int;
+begin if not club_ok(k) then raise exception 'CLE_CLUB'; end if;
+  delete from bookings where series = p_series and date >= current_date and (author_id = p_author or admin_ok(admin_k));
+  get diagnostics n = row_count; return n; end $$;
+grant execute on function club_unbook_series(text, text, text, text) to anon, authenticated;
 grant execute on function club_ping(text), club_admin_ping(text, text), club_messages(text, timestamptz), club_post(text, text, text, text, text),
   club_delete_message(text, uuid, text, text), club_slots(text), club_set_slots(text, text, jsonb), club_bookings(text, date, date),
   club_book(text, jsonb), club_unbook(text, uuid, text, text) to anon, authenticated;
@@ -118,6 +126,9 @@ notify pgrst, 'reload schema';
 
   // Dates always as YYYY-MM-DD, whatever the server sends
   const normDate = b => (b && b.date ? Object.assign(b, { date: String(b.date).slice(0, 10) }) : b);
+
+  // Same script without the codes: safe to run again after an app update (tables and functions are only added or replaced)
+  const sqlUpdate = () => sql('x', 'x').replace(/insert into club_config[\s\S]*?excluded\.admin_key_hash;\n/, '-- (codes du club inchangés)\n');
 
   /* ---------- API ---------- */
   const api = {
@@ -131,6 +142,7 @@ notify pgrst, 'reload schema';
     bookings: async (from, to) => ((await rpc('club_bookings', { d_from: from, d_to: to })) || []).map(normDate),
     book: async b => normDate(await rpc('club_book', { p: b })),
     unbook: id => rpc('club_unbook', { p_id: id, p_author: Auth.current().id, admin_k: adminKey() || null }),
+    unbookSeries: series => rpc('club_unbook_series', { p_series: series, p_author: Auth.current().id, admin_k: adminKey() || null }),
   };
 
   /* ---------- setup (Réglages, responsable) ---------- */
@@ -140,7 +152,7 @@ notify pgrst, 'reload schema';
     return `<section class="card"><h2>${I.share}Serveur du club (messagerie et planning)</h2>
       <p>${ready() ? `<span class="res res-V">Connecté</span> ${esc(c.url.replace(/^https?:\/\//, ''))}` : '<span class="res res-D">Non connecté</span> La messagerie et le planning des terrains ont besoin du serveur du club.'}</p>
       ${admin ? `<div class="chips"><button class="btn primary" data-cloud="setup">${I.edit}<span>${ready() ? 'Reconfigurer' : 'Configurer le serveur'}</span></button>
-        ${ready() ? `<button class="btn" data-cloud="test">${I.check}<span>Tester</span></button><button class="btn" data-cloud="adminkey">${I.whistle}<span>Code responsable</span></button>` : ''}</div>
+        ${ready() ? `<button class="btn" data-cloud="test">${I.check}<span>Tester</span></button><button class="btn" data-cloud="update">${I.rotate}<span>Mettre à jour le serveur</span></button><button class="btn" data-cloud="adminkey">${I.whistle}<span>Code responsable</span></button>` : ''}</div>
         <p class="muted small">Les autres éducateurs reçoivent la connexion avec « Envoyer toutes mes données » (le fichier du club).</p>`
       : `<p class="muted small">${ready() ? 'La connexion vient du fichier du club.' : 'Demande au responsable de t\'envoyer le fichier du club (Réglages → Envoyer toutes mes données), puis fais Recevoir un fichier.'}</p>`}
     </section>`;
@@ -180,6 +192,20 @@ notify pgrst, 'reload schema';
     if (b.dataset.cloud === 'setup') return wizard(rerender);
     if (b.dataset.cloud === 'test') {
       try { await api.ping(); const adm = adminKey() ? await api.adminPing() : false; toast(`Connexion OK${adm ? ' · code responsable valide' : ''}`); } catch (e) { toast(e.message, 'err'); }
+    }
+    if (b.dataset.cloud === 'update') {
+      const script = sqlUpdate();
+      return modal({ title: 'Mettre à jour le serveur', body: `
+        <p>Après une mise à jour de l'appli, le serveur a parfois besoin de nouvelles fonctions. Ce script les ajoute <b>sans changer les codes du club</b> ni effacer les messages et réservations.</p>
+        <ol class="wizard"><li>Touche <b>Copier le script</b>.</li>
+        <li>Ouvre <a href="https://supabase.com/dashboard" target="_blank" rel="noopener">supabase.com/dashboard</a>, puis ton projet <b>raincy-coach</b>.</li>
+        <li>Dans le menu de gauche : <b>SQL Editor</b> → <b>New query</b>. Colle le script, puis touche <b>Run</b>. Il doit afficher « Success ».</li>
+        <li>Reviens ici et touche <b>Tester</b>.</li></ol>
+        <textarea id="updSql" rows="4" readonly>${esc(script)}</textarea>`,
+        onOpen: r => {},
+        actions: [{ label: 'Fermer' }, { label: 'Copier le script', kind: 'primary', icon: I.copy, onClick: (c, r) => {
+          navigator.clipboard.writeText(script).then(() => toast('Script copié : colle-le dans Supabase')).catch(() => { const t = $('#updSql', r); t.focus(); t.select(); toast('Sélectionne le texte et copie-le'); });
+          return false; } }] });
     }
     if (b.dataset.cloud === 'adminkey') {
       modal({ title: 'Code responsable', body: `<p>Ce code permet de gérer les créneaux disponibles du terrain. Pour l'utiliser sur un autre appareil de responsable, recopie-le là-bas.</p>
