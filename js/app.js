@@ -10,6 +10,9 @@ const App = (() => {
     const c = Store.state.club;
     document.documentElement.style.setProperty('--accent', UI.accentFor(c.homeBib));
     document.getElementById('clubName').textContent = c.name;
+    const u = Auth.current(), ru = document.getElementById('railUser');
+    ru.innerHTML = u ? `<span class="avatar" aria-hidden="true">${UI.esc(((u.firstName || '')[0] || '') + ((u.lastName || '')[0] || ''))}</span><span class="ru-name">${UI.esc(u.firstName || u.lastName)}</span><button class="ru-out" id="logoutBtn">Sortir</button>` : '';
+    const lo = document.getElementById('logoutBtn'); if (lo) lo.onclick = () => Auth.logout();
     document.title = c.name + ' · Coach';
   }
   function renderNav(active) {
@@ -39,6 +42,7 @@ const App = (() => {
   async function start() {
     await Store.load();
     refreshChrome();
+    await Auth.gate();
     window.addEventListener('hashchange', route);
     route();
     if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});

@@ -12,7 +12,7 @@ const Views = (() => {
   const activeTeam = () => S().ui.teamId && teamOf(S().ui.teamId) ? S().ui.teamId : '';
   const byTeam = list => { const t = activeTeam(); return t ? list.filter(x => x.teamId === t) : list; };
   const result = m => !m.played ? null : m.gf > m.ga ? 'V' : m.gf < m.ga ? 'D' : 'N';
-  const resPill = m => { const r = result(m); return r ? `<span class="res res-${r}">${r === 'V' ? 'Gagné' : r === 'D' ? 'Perdu' : 'Nul'}</span>` : ''; };
+  const resPill = m => { const r = result(m); return r ? `<span class="res-smiley" aria-hidden="true">${Ratings.smiley(m)}</span><span class="res res-${r}">${r === 'V' ? 'Gagné' : r === 'D' ? 'Perdu' : 'Nul'}</span>` : ''; };
   const scoreTxt = m => m.home ? `${m.gf} – ${m.ga}` : `${m.ga} – ${m.gf}`;
   const matchTitle = m => m.home ? `${esc(S().club.name)} <i>contre</i> ${esc(m.opponent || '?')}` : `${esc(m.opponent || '?')} <i>contre</i> ${esc(S().club.name)}`;
   const empty = (txt, btn) => `<div class="empty"><p>${txt}</p>${btn || ''}</div>`;
@@ -214,8 +214,13 @@ const Views = (() => {
         <h2 class="section">Encadrants</h2><div class="staff-pick">${People.staffPicker(tr.teamId, tr.staffIds)}</div>
         ${tm ? `<h2 class="section" id="presH">Présents (${(tr.presents || []).length}/${Store.playersOf(tm.id).length})</h2>
           <div class="chips roster">${Store.playersOf(tm.id).map(p => `<button class="chip ${(tr.presents || []).includes(p.id) ? 'on' : ''}" data-present="${p.id}">${esc(pLabel(p))}</button>`).join('')}</div>` : ''}
+        <div id="rateBox"></div>
+        ${Media.placeholder('training:' + tr.id, 'Photos et vidéos de la séance')}
         <div class="danger-zone"><button class="btn" data-act="dup">${I.copy}<span>Dupliquer la séance</span></button><button class="btn danger" data-act="delete">${I.trash}<span>Supprimer</span></button></div>`;
+      const box = $('#rateBox', root); if (box) Ratings.bind(box, tr, save);
+      rateTr(); Media.mount(root);
     };
+    const rateTr = () => { const box = $('#rateBox', root); if (box) box.innerHTML = Ratings.section(tr, Store.playersOf(tr.teamId || '').filter(p => (tr.presents || []).includes(p.id)), 'training'); };
     const exerciseCard = (e, i, n) => {
       const sc = e.schemaId && Store.get('schemas', e.schemaId);
       return `<article class="card ex" data-ex="${e.id}">
@@ -247,7 +252,7 @@ const Views = (() => {
     root.onclick = async e => {
       const b = e.target.closest('button'); if (!b) return;
       const card = b.closest('[data-ex]'), ex = card && tr.exercises.find(x => x.id === card.dataset.ex);
-      if (b.dataset.present) { const p = tr.presents = tr.presents || [], i = p.indexOf(b.dataset.present); i < 0 ? p.push(b.dataset.present) : p.splice(i, 1); save(); b.classList.toggle('on'); $('#presH', root).textContent = `Présents (${p.length}/${Store.playersOf(tr.teamId).length})`; return; }
+      if (b.dataset.present) { const p = tr.presents = tr.presents || [], i = p.indexOf(b.dataset.present); i < 0 ? p.push(b.dataset.present) : p.splice(i, 1); save(); b.classList.toggle('on'); $('#presH', root).textContent = `Présents (${p.length}/${Store.playersOf(tr.teamId).length})`; rateTr(); return; }
       if (b.dataset.unstaff) { tr.staffIds = (tr.staffIds || []).filter(x => x !== b.dataset.unstaff); save(); return render(); }
       if (b.dataset.mv) { const i = tr.exercises.indexOf(ex), j = i + +b.dataset.mv; [tr.exercises[i], tr.exercises[j]] = [tr.exercises[j], tr.exercises[i]]; save(); return render(); }
       if (b.hasAttribute('data-delex')) { if (await confirmBox(`Retirer l'exercice « ${ex.title || 'sans nom'} » ?`, 'Retirer')) { tr.exercises = tr.exercises.filter(x => x !== ex); save(); render(); } return; }
@@ -258,7 +263,7 @@ const Views = (() => {
         case 'pdf': return runExport('Création du PDF…', () => Exporter.pdfTraining(tr, teamOf(tr.teamId), S().club, { homeBib: S().club.homeBib }));
         case 'share': return runExport('Préparation du fichier…', () => Exporter.json(Store.exportTraining(tr), tr.title || 'entrainement'));
         case 'dup': { const c = JSON.parse(JSON.stringify(tr)); c.id = Store.uid(); c.title += ' (copie)'; c.date = today(); c.presents = []; c.exercises.forEach(x => x.id = Store.uid()); Store.upsert('trainings', c); location.hash = '#/entrainement/' + c.id; return; }
-        case 'delete': if (await confirmBox(`Supprimer l'entraînement « ${tr.title} » ? Les schémas restent dans la liste des schémas.`)) { Store.remove('trainings', tr.id); location.hash = '#/entrainements'; } return;
+        case 'delete': if (await confirmBox(`Supprimer l'entraînement « ${tr.title} » ? Les schémas restent dans la liste des schémas.`)) { Store.remove('trainings', tr.id); Media.removeRef('training:' + tr.id); location.hash = '#/entrainements'; } return;
       }
     };
   }
@@ -328,6 +333,7 @@ const Views = (() => {
         <h2 class="section">Score</h2>
         <section class="card">
           <label class="switch"><input type="checkbox" id="mPlayed" ${m.played ? 'checked' : ''}><span>Le match est joué</span></label>
+          ${Ratings.smileyPicker(m)}
           ${m.played ? `<div class="score-board">${stepper('gf', m.gf, esc(S().club.name))}${stepper('ga', m.ga, esc(m.opponent))}</div>
             ${conv.length ? `<div class="lbl">Buteurs et passeurs</div><div class="scorers">${conv.map(p => { const st = (m.stats || {})[p.id] || {};
               return `<div class="scorer"><span class="nm">${esc(pLabel(p))}</span>
@@ -335,12 +341,17 @@ const Views = (() => {
                 <span class="mini-step" title="Passes décisives"><em>P</em><button data-pl="${p.id}" data-k="a" data-d="-1" aria-label="Moins de passes">−</button><b>${st.a || 0}</b><button data-pl="${p.id}" data-k="a" data-d="1" aria-label="Plus de passes">+</button></span></div>`; }).join('')}</div>` : '<p class="tip">Coche les convoqués pour noter les buteurs.</p>'}` : ''}
           <label class="fld"><span>Notes</span><textarea data-f="notes" rows="3" placeholder="Ce qui a marché, ce qu'on travaille la semaine prochaine">${esc(m.notes || '')}</textarea></label>
         </section>
+        <div id="rateBox"></div>
+        ${Media.placeholder('match:' + m.id, 'Photos et vidéos du match')}
         <div class="danger-zone"><button class="btn danger" data-act="delete">${I.trash}<span>Supprimer le match</span></button></div>`;
+      const box = $('#rateBox', root); box.innerHTML = Ratings.section(m, conv, 'match'); Ratings.bind(box, m, save);
+      Media.mount(root);
     };
+    const cheer = before => { if (Ratings.result(m) === 'V' && before !== 'V') Ratings.celebrate(); };
     render();
     root.oninput = e => { const f = e.target.dataset.f; if (f) { m[f] = e.target.value; save(); } };
     root.onchange = e => {
-      if (e.target.id === 'mPlayed') { m.played = e.target.checked; save(); return render(); }
+      if (e.target.id === 'mPlayed') { const before = Ratings.result(m); m.played = e.target.checked; save(); render(); return cheer(before); }
       if (e.target.hasAttribute('data-staffpick') && e.target.value) { m.staffIds = [...new Set([...(m.staffIds || []), e.target.value])]; save(); return render(); }
       root.oninput(e);
     };
@@ -349,12 +360,13 @@ const Views = (() => {
       if (b.dataset.home) { m.home = b.dataset.home === '1'; save(); return render(); }
       if (b.dataset.unstaff) { m.staffIds = (m.staffIds || []).filter(x => x !== b.dataset.unstaff); save(); return render(); }
       if (b.dataset.conv) { const c = m.convoked = m.convoked || [], i = c.indexOf(b.dataset.conv); i < 0 ? c.push(b.dataset.conv) : c.splice(i, 1); save(); return render(); }
-      if (b.dataset.sc) { m[b.dataset.sc] = Math.max(0, (+m[b.dataset.sc] || 0) + +b.dataset.d); save(); return render(); }
+      if (b.dataset.sc) { const before = Ratings.result(m); m[b.dataset.sc] = Math.max(0, (+m[b.dataset.sc] || 0) + +b.dataset.d); if (Ratings.result(m) !== before) delete m.smiley; save(); render(); return cheer(before); }
+      if (b.dataset.smiley) { m.smiley = b.dataset.smiley; save(); return render(); }
       if (b.dataset.pl) { const st = (m.stats = m.stats || {})[b.dataset.pl] = m.stats[b.dataset.pl] || {}; st[b.dataset.k] = Math.max(0, (st[b.dataset.k] || 0) + +b.dataset.d); save(); return render(); }
       switch (b.dataset.act) {
         case 'pdf': return runExport('Création de la feuille de match…', () => Exporter.pdfMatch(m, teamOf(m.teamId), S().club, { homeBib: S().club.homeBib }));
         case 'lineup': return makeLineup(m);
-        case 'delete': if (await confirmBox('Supprimer ce match ?')) { Store.remove('matches', m.id); location.hash = '#/matchs'; } return;
+        case 'delete': if (await confirmBox('Supprimer ce match ?')) { Store.remove('matches', m.id); Media.removeRef('match:' + m.id); location.hash = '#/matchs'; } return;
       }
     };
   }
@@ -394,7 +406,7 @@ const Views = (() => {
       const played = ms.filter(m => (m.convoked || []).includes(p.id)).length;
       const g = ms.reduce((a, m) => a + (((m.stats || {})[p.id] || {}).g || 0), 0), as = ms.reduce((a, m) => a + (((m.stats || {})[p.id] || {}).a || 0), 0);
       const pr = trs.filter(x => x.presents.includes(p.id)).length;
-      return { p, played, g, a: as, pr, rate: trs.length ? Math.round(pr / trs.length * 100) : null };
+      return { p, played, g, a: as, pr, rate: trs.length ? Math.round(pr / trs.length * 100) : null, nm: Ratings.average(p.id, 'match') || 0, nt: Ratings.average(p.id, 'training') || 0 };
     }).sort((a, b) => sortKey === 'name' ? Store.byName(a.p, b.p) : sortKey === 'num' ? (+a.p.number || 99) - (+b.p.number || 99) : (b[sortKey] || 0) - (a[sortKey] || 0));
     const th = (k, l) => `<th><button class="th ${sortKey === k ? 'on' : ''}" data-sort="${k}">${l}</button></th>`;
     root.innerHTML = `${header('Statistiques', esc(t.name))}
@@ -410,8 +422,8 @@ const Views = (() => {
       </div>
       <h2 class="section">Joueurs</h2>
       <div class="table-wrap"><table class="tbl">
-        <thead><tr>${th('num', 'N°')}${th('name', 'Joueur')}${th('played', 'Matchs')}${th('g', 'Buts')}${th('a', 'Passes déc.')}${th('pr', 'Entraînements')}</tr></thead>
-        <tbody>${rows.map(r => `<tr><td class="num">${esc(r.p.number)}</td><td>${esc(pName(r.p))}</td><td>${r.played}</td><td><b>${r.g}</b></td><td>${r.a}</td><td>${r.rate === null ? '–' : `${r.pr} <span class="muted">(${r.rate} %)</span>`}</td></tr>`).join('')}</tbody>
+        <thead><tr>${th('num', 'N°')}${th('name', 'Joueur')}${th('played', 'Matchs')}${th('g', 'Buts')}${th('a', 'Passes déc.')}${th('pr', 'Entraînements')}${th('nm', 'Note matchs')}${th('nt', 'Note entr.')}</tr></thead>
+        <tbody>${rows.map(r => `<tr><td class="num">${esc(r.p.number)}</td><td>${esc(pName(r.p))}</td><td>${r.played}</td><td><b>${r.g}</b></td><td>${r.a}</td><td>${r.rate === null ? '–' : `${r.pr} <span class="muted">(${r.rate} %)</span>`}</td><td>${r.nm ? '⭐ ' + Ratings.fr(r.nm) : '–'}</td><td>${r.nt ? '⭐ ' + Ratings.fr(r.nt) : '–'}</td></tr>`).join('')}</tbody>
       </table></div>
       <h2 class="section">Résultats</h2>
       ${ms.length ? `<div class="table-wrap"><table class="tbl"><thead><tr><th>Date</th><th>Match</th><th>Score</th><th>Résultat</th></tr></thead>
@@ -425,6 +437,7 @@ const Views = (() => {
     const c = S().club;
     const bibs = (key, cur) => `<div class="chips">${Object.entries(Board.BIBS).map(([k, v]) => `<button class="chip bib ${k === cur ? 'on' : ''}" data-${key}="${k}" aria-label="${k}"><i class="sw" style="background:${v[0]}"></i>${k}</button>`).join('')}</div>`;
     root.innerHTML = `${header('Réglages', '')}
+      ${Auth.settingsSection()}
       <section class="card">
         <h2>${I.team}Club</h2>
         <label class="fld"><span>Nom du club</span><input id="clubName" value="${esc(c.name)}" maxlength="40"></label>
@@ -446,21 +459,23 @@ const Views = (() => {
         <p class="muted">L'appli contient des équipes, schémas, entraînements et matchs d'exemple.</p>
         <button class="btn" data-act="noExamples">${I.trash}<span>Supprimer les exemples</span></button>
       </section>` : ''}
-      <section class="card">
+      ${Auth.isAdmin() ? `<section class="card">
         <h2>${I.trash}Effacer</h2>
         <p class="muted">Les données sont enregistrées sur cet appareil uniquement. Pense à envoyer une copie avant d'effacer.</p>
         <button class="btn danger" data-act="reset">${I.trash}<span>Effacer toutes les données</span></button>
-      </section>
-      <p class="muted small">Raincy Coach · version 1.0</p>`;
+      </section>` : ''}
+      <p class="muted small">Raincy Coach · version 1.1</p>`;
+    root.onchange = e => Auth.onSettingsChange(e.target);
     $('#clubName', root).oninput = e => { c.name = e.target.value || 'Mon club'; Store.save(); App.refreshChrome(); };
     root.onclick = async e => {
       const b = e.target.closest('button'); if (!b) return;
       if (b.dataset.home) { c.homeBib = b.dataset.home; Store.save(); App.refreshChrome(); return settings(root); }
       if (b.dataset.away) { c.awayBib = b.dataset.away; Store.save(); return settings(root); }
       if (b.dataset.act === 'exportAll') return runExport('Préparation du fichier…', () => Exporter.json(Store.exportAll(), `${c.name}-${today()}`));
+      if (b.dataset.auth || b.dataset.reset) return Auth.onSettingsClick(b, () => settings(root));
       if (b.dataset.act === 'import') return importFile();
       if (b.dataset.act === 'noExamples' && await confirmBox('Supprimer toutes les données d\'exemple ?')) { Store.removeExamples(); toast('Exemples supprimés'); return settings(root); }
-      if (b.dataset.act === 'reset' && await confirmBox('Effacer toutes les équipes, schémas, entraînements et matchs de cet appareil ?', 'Tout effacer')) { Store.reset(); toast('Données effacées'); settings(root); }
+      if (b.dataset.act === 'reset' && await confirmBox('Effacer toutes les équipes, schémas, entraînements et matchs de cet appareil ?', 'Tout effacer')) { Store.reset(); toast('Données effacées'); Auth.logout(); }
     };
   }
 

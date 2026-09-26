@@ -69,7 +69,8 @@ const People = (() => {
         <label class="fld"><span>E-mail</span><input id="pMail" type="email" inputmode="email" value="${esc(p.email || '')}"></label></div>
         ${p.phone ? tel(p.phone, 'Appeler') : ''}
         ${parentBlock(0)}${parentBlock(1)}
-        <label class="fld"><span>Infos utiles (santé, allergies, transport…)</span><textarea id="pNotes" rows="3">${esc(p.notes || '')}</textarea></label>`,
+        <label class="fld"><span>Infos utiles (santé, allergies, transport…)</span><textarea id="pNotes" rows="3">${esc(p.notes || '')}</textarea></label>
+        ${isNew ? '' : notesHistory(p)}`,
       onOpen: bindChips,
       actions: [
         ...(isNew ? [] : [{ label: 'Supprimer', kind: 'danger', icon: I.trash, onClick: () => { setTimeout(() => confirmBox(`Supprimer ${name(p)} de tout le club ?`).then(ok => { if (ok) { Store.remove('players', p.id); toast('Joueur supprimé'); opts.onSave && opts.onSave(); } }), 60); } }]),
@@ -83,6 +84,15 @@ const People = (() => {
         } },
       ],
     });
+  }
+
+  function notesHistory(p) {
+    const h = Ratings.history(p.id); if (!h.length) return '';
+    const am = Ratings.average(p.id, 'match'), at = Ratings.average(p.id, 'training');
+    return `<h3 class="sub-h">⭐ Notes des dirigeants</h3>
+      <p class="muted">${am ? 'Matchs : ' + Ratings.fr(am) + '/5' : ''}${am && at ? ' · ' : ''}${at ? 'Entraînements : ' + Ratings.fr(at) + '/5' : ''}</p>
+      <ul class="notes-list">${h.slice(0, 12).map(x => `<li><span class="stars-ro" aria-label="${x.v} sur 5">${'★'.repeat(x.v)}<i>${'★'.repeat(5 - x.v)}</i></span>
+        <span><b>${x.kind === 'match' ? 'Match contre ' + esc(x.ev.opponent || '') : esc(x.ev.title || 'Entraînement')}</b> · ${esc(UI.fmtDate(x.date))}${x.by ? ' · ' + esc(Store.fullName(x.by)) : ''}${x.c ? `<br><span class="muted">« ${esc(x.c)} »</span>` : ''}</span></li>`).join('')}</ul>`;
   }
 
   /* ---------- staff sheet ---------- */
@@ -101,7 +111,7 @@ const People = (() => {
         <label class="fld"><span>Infos (diplôme, licence, disponibilités…)</span><textarea id="sNotes" rows="3">${esc(p.notes || '')}</textarea></label>`,
       onOpen: bindChips,
       actions: [
-        ...(isNew ? [] : [{ label: 'Supprimer', kind: 'danger', icon: I.trash, onClick: () => { setTimeout(() => confirmBox(`Supprimer ${name(p)} ?`).then(ok => { if (ok) { Store.remove('staff', p.id); toast('Dirigeant supprimé'); opts.onSave && opts.onSave(); } }), 60); } }]),
+        ...(isNew ? [] : [{ label: 'Supprimer', kind: 'danger', icon: I.trash, onClick: () => { setTimeout(() => confirmBox(`Supprimer ${name(p)} ?`).then(ok => { if (ok) { Store.remove('staff', p.id); Auth.forget(p.id); toast('Dirigeant supprimé'); opts.onSave && opts.onSave(); } }), 60); } }]),
         { label: 'Annuler' },
         { label: 'Enregistrer', kind: 'primary', onClick: (c, r) => {
           const v = id => $('#' + id, r).value.trim();
