@@ -493,7 +493,7 @@ const Views = (() => {
         <p class="muted">${Cloud.ready() ? 'Efface les données de cet appareil seulement (elles restent sur le serveur du club et reviennent à la prochaine connexion).' : 'Les données sont enregistrées sur cet appareil uniquement. Pense à envoyer une copie avant d\'effacer.'}</p>
         <button class="btn danger" data-act="reset">${I.trash}<span>Effacer les données de cet appareil</span></button>
       </section>` : ''}
-      <p class="muted small">Raincy Coach · version ${Help.VERSION}</p>`;
+      <p class="muted small">Raincy Coach · version ${Help.VERSION} · <button class="linkish" onclick="App.checkUpdate(true)">Mettre à jour l'appli</button></p>`;
     Help.onSettings(root, () => settings(root));
     Auth.mountSettings(root);
     root.onchange = e => Auth.onSettingsChange(e.target);

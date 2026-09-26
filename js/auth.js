@@ -100,8 +100,10 @@ const Auth = (() => {
   function frame(inner) {
     const el = lock(); el.hidden = false;
     el.innerHTML = `<div class="lock-card"><img src="icons/crest.png" alt="" class="lock-crest"><p class="eyebrow">Espace éducateurs</p><h1>${esc(Store.state.club.name)}</h1>${inner}
-      <button class="btn wide link how-btn" id="howTo">${I.help}<span>Comment utiliser l'appli ?</span></button></div>`;
+      <button class="btn wide link how-btn" id="howTo">${I.help}<span>Comment utiliser l'appli ?</span></button>
+      <p class="lock-version">Version ${Help.VERSION} · <button class="linkish" id="updApp">Mettre à jour l'appli</button></p></div>`;
     el.querySelector('#howTo').onclick = () => Help.tour();
+    el.querySelector('#updApp').onclick = () => App.checkUpdate(true);
     el.scrollTop = 0;
     return el;
   }
@@ -270,7 +272,7 @@ const Auth = (() => {
     const staff = Store.state.staff.slice().sort(Store.byName);
     const el = frame(`<p class="lead"><b>Première connexion</b> : choisis ton nom, puis crée ton mot de passe.</p>
       ${staff.length ? `<label class="fld"><span>Qui es-tu ?</span><select id="who"><option value="">Choisis ton nom…</option>
-      ${staff.map(s => `<option value="${s.id}" ${reg.has(s.id) ? 'disabled' : ''}>${esc(Store.fullName(s))}${reg.has(s.id) ? ' · déjà inscrit' : s.role ? ' · ' + esc(s.role) : ''}</option>`).join('')}</select></label>
+      ${staff.map(s => `<option value="${s.id}" ${reg.has(s.id) ? 'disabled' : ''}>${esc(Store.fullName(s))}${reg.has(s.id) ? ' · déjà inscrit' : [s.role, (s.teamIds || []).map(id => (Store.get('teams', id) || {}).name).filter(Boolean).join(', ')].filter(Boolean).map(esc).map(x => ' · ' + x).join('')}</option>`).join('')}</select></label>
       <div id="step"></div>` : '<p class="tip">La liste des dirigeants n\'est pas encore sur le serveur du club : le responsable doit d\'abord se connecter avec la nouvelle version de l\'appli.</p>'}
       <p class="muted small">Tu n'es pas dans la liste ? Demande au responsable de t'ajouter dans Équipes → Dirigeants. Déjà inscrit ? Reviens à la connexion.</p>
       <button class="btn wide link" id="back">Retour à la connexion</button>`);

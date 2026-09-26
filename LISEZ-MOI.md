@@ -51,4 +51,13 @@ Tu peux toujours envoyer un fichier à la main : **Réglages → Envoyer toutes 
 
 ## Mettre à jour l'appli
 
-Remplace les fichiers sur GitHub. Augmente ensuite le numéro de version dans `sw.js` (par exemple `raincy-coach-v16` devient `raincy-coach-v17`) et dans `index.html` (`?v=16` devient `?v=17`). Change aussi le numéro affiché dans `js/help.js` (`VERSION = '2.1'`). Les iPad récupèrent la nouvelle version à la prochaine ouverture avec internet.
+Remplace les fichiers sur GitHub. Augmente ensuite le même numéro partout :
+
+- `sw.js` : `raincy-coach-v17` devient `raincy-coach-v18` ;
+- `index.html` : `?v=17` devient `?v=18` ;
+- `js/app.js` : `BUILD = 17` devient `BUILD = 18` ;
+- `version.json` : `"build": 17` devient `"build": 18`.
+
+Change aussi le numéro affiché dans `js/help.js` (`VERSION = '2.1.1'`).
+
+Au retour sur l'appli, elle compare son numéro à `version.json`. Si le site est plus récent, elle se met à jour toute seule. Sinon, touche **Mettre à jour l'appli** en bas de l'écran de connexion ou des Réglages.

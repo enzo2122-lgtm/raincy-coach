@@ -17,6 +17,11 @@ const People = (() => {
   const tel = (n, label) => n ? `<a class="tel" href="${telHref(n)}">${I.phone}<span>${label ? esc(label) + ' : ' : ''}${esc(n)}</span></a>` : '';
   const teamNames = ids => (ids || []).map(id => (Store.get('teams', id) || {}).name).filter(Boolean).join(', ');
   const phonesOf = p => [p.phone, ...(p.parents || []).map(x => x.phone)].filter(Boolean);
+  // A dirigeant who is also a licensed player: same nom and same first prénom (without accents or capitals)
+  const nk = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z ]/g, ' ').replace(/\s+/g, ' ').trim();
+  const firstOf = s => nk(String(s || '').replace(/\(.*\)/, '')).split(' ')[0];
+  const playerLike = p => S().players.find(x => nk(x.lastName) === nk(p.lastName) && firstOf(x.firstName) === firstOf(p.firstName));
+  const linkPlayer = p => { if (!p.playerId || !Store.get('players', p.playerId)) { const x = playerLike(p); if (x) p.playerId = x.id; } };
 
   /* ---------- rows ---------- */
   function playerRow(p, teamId) {
@@ -108,6 +113,8 @@ const People = (() => {
         <div class="row2"><label class="fld"><span>Téléphone</span><input id="sTel" type="tel" inputmode="tel" value="${esc(p.phone || '')}"></label>
         <label class="fld"><span>E-mail</span><input id="sMail" type="email" inputmode="email" value="${esc(p.email || '')}"></label></div>
         ${p.phone ? tel(p.phone, 'Appeler') : ''}
+        ${S().players.length ? (() => { const sel = p.playerId || (playerLike(p) || {}).id || ''; return `<label class="fld"><span>Aussi joueur licencié ?</span><select id="sPlayer"><option value="">Non</option>
+          ${S().players.slice().sort(Store.byName).map(x => `<option value="${x.id}" ${x.id === sel ? 'selected' : ''}>${esc(name(x))}${x.teamIds && x.teamIds.length ? ' · ' + esc(teamNames(x.teamIds)) : ''}</option>`).join('')}</select></label>`; })() : ''}
         <label class="fld"><span>Infos (diplôme, licence, disponibilités…)</span><textarea id="sNotes" rows="3">${esc(p.notes || '')}</textarea></label>`,
       onOpen: bindChips,
       actions: [
@@ -118,6 +125,7 @@ const People = (() => {
           if (!v('sLast') && !v('sFirst')) { toast('Écris au moins le nom ou le prénom', 'err'); return false; }
           Object.assign(p, { lastName: v('sLast').toUpperCase(), firstName: v('sFirst'), role: v('sRole'), phone: v('sTel'), email: v('sMail'), notes: $('#sNotes', r).value });
           if (Auth.isAdmin() || isNew) p.teamIds = pickedTeams(r);
+          const sp = $('#sPlayer', r); if (sp) { if (sp.value) p.playerId = sp.value; else delete p.playerId; }
           Store.upsert('staff', p); toast('Enregistré'); opts.onSave && opts.onSave(p);
         } },
       ],
@@ -278,10 +286,10 @@ const People = (() => {
         rows.forEach(x => {
           const teamIds = x.cats.map(cat => (S().teams.find(t => normCat(t.category) === cat || normCat(t.name) === cat) || {}).id).filter(Boolean);
           const ex = S().staff.find(p => (p.lastName || '').toUpperCase() === x.lastName && (p.firstName || '').toLowerCase() === x.firstName.toLowerCase());
-          if (ex) { Object.assign(ex, { role: x.role || ex.role, phone: x.phone || ex.phone, email: x.email || ex.email, teamIds: [...new Set([...(ex.teamIds || []), ...teamIds])] }); Store.upsert('staff', ex); updated++; }
-          else { Store.upsert('staff', { id: Store.uid(), lastName: x.lastName, firstName: x.firstName, role: x.role, phone: x.phone, email: x.email, notes: '', teamIds }); added++; }
+          if (ex) { Object.assign(ex, { role: x.role || ex.role, phone: x.phone || ex.phone, email: x.email || ex.email, teamIds: [...new Set([...(ex.teamIds || []), ...teamIds])] }); linkPlayer(ex); Store.upsert('staff', ex); updated++; }
+          else { const n = { id: Store.uid(), lastName: x.lastName, firstName: x.firstName, role: x.role, phone: x.phone, email: x.email, notes: '', teamIds }; linkPlayer(n); Store.upsert('staff', n); added++; }
         });
-        toast(`${added} ajouté${added > 1 ? 's' : ''}, ${updated} mis à jour`); done && done();
+        toast(`${added} ajouté${added > 1 ? 's' : ''}, ${updated} mis à jour. Ils apparaissent maintenant dans « Première connexion ».`); done && done();
       } }] });
   }
 
