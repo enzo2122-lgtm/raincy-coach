@@ -46,12 +46,32 @@ const Store = (() => {
       delete t.players;
     });
     state.version = 2;
+    mergeStaffDuplicates();
+  }
+  // Same dirigeant twice (an account made by hand + the card from the club file, e.g. « Enzo » and « Enzo (Adnane) »):
+  // keep the card that has a password, take over the other card's details, and remember it so a new import doesn't bring it back.
+  function mergeStaffDuplicates() {
+    const users = (state.auth && state.auth.users) || {}, hasPw = id => !!(users[id] && users[id].hash);
+    const key = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().trim();
+    const firstWords = p => { const f = String(p.firstName || ''), inPar = (f.match(/\(([^)]+)\)/) || [])[1]; return [key(f.replace(/\(.*\)/, '').split(/\s+/)[0]), inPar && key(inPar.split(/\s+/)[0])].filter(Boolean); };
+    state.ui.mergedStaff = state.ui.mergedStaff || {};
+    for (const keep of state.staff.filter(s => hasPw(s.id))) {
+      for (const dup of state.staff.filter(s => s !== keep && !hasPw(s.id) && key(s.lastName) === key(keep.lastName) && firstWords(s).some(w => firstWords(keep).includes(w)))) {
+        keep.playerId = keep.playerId || dup.playerId;
+        keep.phone = keep.phone || dup.phone; keep.email = keep.email || dup.email;
+        keep.teamIds = [...new Set([...(keep.teamIds || []), ...(dup.teamIds || [])])];
+        if (!keep.role || keep.role === 'Dirigeant') keep.role = dup.role && dup.role !== 'Dirigeant' ? dup.role : (keep.role || dup.role);
+        keep.updatedAt = Date.now();
+        state.ui.mergedStaff[dup.id] = keep.id;
+        state.staff = state.staff.filter(s => s !== dup);
+      }
+    }
   }
 
   async function load() {
     try { state = await idbGet(KEY); } catch (e) { state = null; }
     if (!state) { try { state = JSON.parse(localStorage.getItem(KEY)); } catch (e) { state = null; } }
-    if (!state) { state = blank(); Seed.fill(state); persist(); }
+    if (!state) { state = blank(); persist(); }
     migrate();
     try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) {}
     return state;
@@ -88,11 +108,14 @@ const Store = (() => {
     const count = c => res.byCol[c] = (res.byCol[c] || 0) + 1;
     COLS.forEach(c => (obj.data[c] || []).forEach(it => {
       if (!it || !it.id) return;
+      if (c === 'staff' && state.ui.mergedStaff && state.ui.mergedStaff[it.id]) return; // already merged into an account
       const i = state[c].findIndex(x => x.id === it.id);
       if (i < 0) { state[c].push(it); res.added++; count(c); }
       else if ((it.updatedAt || 0) > (state[c][i].updatedAt || 0)) { state[c][i] = it; res.updated++; count(c); }
       else res.kept++;
     }));
+    // Entries the club file says to remove (e.g. people wrongly listed in a previous file)
+    Object.entries(obj.removed || {}).forEach(([c, ids]) => { if (COLS.includes(c) && Array.isArray(ids)) { const before = state[c].length; state[c] = state[c].filter(x => !ids.includes(x.id)); res.removed = (res.removed || 0) + before - state[c].length; } });
     // The club's report e-mail travels with the club file so every coach can send reports
     if (obj.data.club && obj.data.club.reportEmail && !state.club.reportEmail) state.club.reportEmail = obj.data.club.reportEmail;
     // The club server connection (URL, public key, club code) comes with the club file

@@ -20,7 +20,7 @@ const People = (() => {
 
   /* ---------- rows ---------- */
   function playerRow(p, teamId) {
-    const sub = [p.subcat, p.birth ? `${age(p.birth)} ans` : '', teamId ? '' : teamNames(p.teamIds)].filter(Boolean).join(' · ');
+    const sub = [p.subcat, p.birth ? `${age(p.birth)} ans` : '', teamId ? '' : teamNames(p.teamIds), S().staff.some(x => x.playerId === p.id) ? 'aussi dirigeant' : ''].filter(Boolean).join(' · ');
     return `<div class="person">
       <button class="person-main" data-person="${p.id}" data-kind="player">
         <span class="pnum">${esc(p.number || '')}</span>
@@ -34,7 +34,7 @@ const People = (() => {
     return `<div class="person">
       <button class="person-main" data-person="${p.id}" data-kind="staff">
         <span class="pnum role">${I.whistle}</span>
-        <span class="pmain"><b>${esc(name(p))}</b><span class="muted">${esc(p.role || '')}${teamId ? '' : ' · ' + esc(teamNames(p.teamIds) || 'aucune catégorie')}</span></span>
+        <span class="pmain"><b>${esc(name(p))}</b><span class="muted">${esc(p.role || '')}${teamId ? '' : ' · ' + esc(teamNames(p.teamIds) || 'aucune catégorie')}${p.playerId && Store.get('players', p.playerId) ? ' · aussi joueur (' + esc(teamNames(Store.get('players', p.playerId).teamIds)) + ')' : ''}</span></span>
       </button>
       ${p.phone ? `<a class="icon-btn" href="${telHref(p.phone)}" aria-label="Appeler ${esc(name(p))}">${I.phone}</a>` : ''}
       ${teamId ? `<button class="icon-btn" data-unlink="${p.id}" data-kind="staff" aria-label="Retirer ${esc(name(p))} de la catégorie">${I.x}</button>` : ''}
@@ -187,7 +187,7 @@ const People = (() => {
     const list = all.filter(p => (!filt || (filt === '-' ? !(p.teamIds || []).length : (p.teamIds || []).includes(filt))) && (!q || name(p).toLowerCase().includes(q)));
     root.innerHTML = `<header class="page-head"><div><h1>${isP ? 'Joueurs' : 'Dirigeants'}</h1><p class="sub">${list.length} sur ${all.length} · tout le club</p></div>
       <div class="head-actions"><a class="btn" href="#/equipes">${I.back}<span>Équipes</span></a>
-      ${isP ? `<button class="btn" data-act="paste">${I.paste}<span>Coller une liste</span></button>` : ''}
+      <button class="btn" data-act="paste">${I.paste}<span>Coller une liste</span></button>
       <button class="btn primary" data-act="new">${I.plus}<span>${isP ? 'Nouveau joueur' : 'Nouveau dirigeant'}</span></button></div></header>
       <div class="filters">
         <label class="search">${I.search}<input id="q" type="search" placeholder="Chercher un nom" value="${esc(ui[key + 'Q'] || '')}"></label>
@@ -200,7 +200,7 @@ const People = (() => {
     root.onclick = e => {
       const b = e.target.closest('button'); if (!b) return;
       if (b.dataset.act === 'new') return (isP ? editPlayer : editStaff)(null, { teamId: filt && filt !== '-' ? filt : null, onSave: again });
-      if (b.dataset.act === 'paste') return pasteList(again);
+      if (b.dataset.act === 'paste') return isP ? pasteList(again) : pasteStaff(again);
       if (b.dataset.person) (isP ? editPlayer : editStaff)(Store.get(isP ? 'players' : 'staff', b.dataset.person), { onSave: again });
     };
   }
@@ -241,6 +241,45 @@ const People = (() => {
           const tid = teamForSub(x.subcat);
           if (ex) { Object.assign(ex, { birth: x.birth, subcat: x.subcat || ex.subcat }); if (tid && !ex.teamIds.includes(tid)) ex.teamIds.push(tid); Store.upsert('players', ex); updated++; }
           else { Store.upsert('players', Object.assign({ id: Store.uid(), number: '', pos: '', phone: '', email: '', parents: [], notes: '', teamIds: tid ? [tid] : [] }, x)); added++; }
+        });
+        toast(`${added} ajouté${added > 1 ? 's' : ''}, ${updated} mis à jour`); done && done();
+      } }] });
+  }
+
+  /* ---------- paste a list of dirigeants: « NOM Prénom · rôle · téléphone · catégories » on each line ---------- */
+  const ROLE_RE = /(responsable de cat[ée]gorie|[ée]ducateur adjoint|entra[iî]neur des gardiens|[ée]ducat(?:eur|rice)|entra[iî]neu(?:r|se)|coach|dirigeant(?:e)?|accompagnat(?:eur|rice)|pr[ée]sident(?:e)?|vice-pr[ée]sident(?:e)?|secr[ée]taire|tr[ée]sori(?:er|[èe]re)|arbitre)/i;
+  function parseStaff(txt) {
+    return txt.split(/\r?\n/).map(line => {
+      const l = line.replace(/[\t|;]+/g, ' ').replace(/\s+/g, ' ').trim(); if (!l) return null;
+      const phone = (l.match(/(?:\+33\s?|0)[1-9](?:[\s.-]?\d{2}){4}/) || [''])[0];
+      const email = (l.match(/[\w.+-]+@[\w-]+\.[\w.]+/) || [''])[0];
+      const roleM = l.match(ROLE_RE);
+      const cats = (l.match(/\bU\s?\d{1,2}\b|\bS[ée]niors?\b|\bV[ée]t[ée]rans?\b/gi) || []).map(c => c.replace(/\s/g, '').toUpperCase().replace(/^S[ÉE]NIORS?$/, 'SENIORS').replace(/^V[ÉE]T[ÉE]RANS?$/, 'VETERANS'));
+      let rest = l.replace(phone, ' ').replace(email, ' ').replace(roleM ? roleM[0] : '', ' ').replace(/\bU\s?\d{1,2}\b|\bS[ée]niors?\b|\bV[ée]t[ée]rans?\b/gi, ' ').replace(/\d{2}\/\d{2}\/\d{4}/g, ' ');
+      const words = rest.split(/[\s,·/-]+/).filter(w => /^[A-Za-zÀ-ÿ'’]{2,}$/.test(w) && !/^(Libre|Dirigeant|Licence|Valid[ée]e)$/i.test(w));
+      if (!words.length) return null;
+      const upper = words.filter(w => w === w.toUpperCase()), other = words.filter(w => w !== w.toUpperCase());
+      const lastName = (upper.length ? upper : words.slice(0, 1)).join(' ').toUpperCase(), firstName = (upper.length ? other : words.slice(1)).join(' ');
+      const role = roleM ? roleM[0].replace(/^./, c => c.toUpperCase()).replace(/^Entra[iî]neur$/i, 'Éducateur').replace(/^Coach$/i, 'Éducateur').replace(/^Educateur/i, 'Éducateur') : 'Éducateur';
+      return { lastName, firstName, role, phone, email, cats };
+    }).filter(Boolean);
+  }
+  const normCat = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+  function pasteStaff(done) {
+    modal({ title: 'Coller une liste de dirigeants',
+      body: `<p class="tip">Une personne par ligne : nom, prénom, et si tu les as le rôle, le téléphone et la ou les catégories. Par exemple : « DUPONT Karim Éducateur U13 06 12 34 56 78 ». Une liste copiée depuis Footclubs ou un tableur marche aussi.</p>
+        <textarea id="stTxt" rows="8" placeholder="DUPONT Karim Éducateur U13 06 12 34 56 78&#10;MARTIN Sophie Dirigeante U11 U9"></textarea><div id="stPrev" class="imp-preview"></div>`,
+      onOpen: r => { $('#stTxt', r).oninput = e => { const rows = parseStaff(e.target.value);
+        $('#stPrev', r).innerHTML = rows.length ? `<ul class="imp-list">${rows.map(x => `<li><b>${esc(x.lastName)} ${esc(x.firstName)}</b> · ${esc(x.role)}${x.cats.length ? ' · ' + esc(x.cats.join(', ')) : ''}${x.phone ? ' · ' + esc(x.phone) : ''}</li>`).join('')}</ul>` : ''; }; },
+      actions: [{ label: 'Annuler' }, { label: 'Ajouter', kind: 'primary', onClick: (c, r) => {
+        const rows = parseStaff($('#stTxt', r).value);
+        if (!rows.length) { toast('Aucune ligne reconnue', 'err'); return false; }
+        let added = 0, updated = 0;
+        rows.forEach(x => {
+          const teamIds = x.cats.map(cat => (S().teams.find(t => normCat(t.category) === cat || normCat(t.name) === cat) || {}).id).filter(Boolean);
+          const ex = S().staff.find(p => (p.lastName || '').toUpperCase() === x.lastName && (p.firstName || '').toLowerCase() === x.firstName.toLowerCase());
+          if (ex) { Object.assign(ex, { role: x.role || ex.role, phone: x.phone || ex.phone, email: x.email || ex.email, teamIds: [...new Set([...(ex.teamIds || []), ...teamIds])] }); Store.upsert('staff', ex); updated++; }
+          else { Store.upsert('staff', { id: Store.uid(), lastName: x.lastName, firstName: x.firstName, role: x.role, phone: x.phone, email: x.email, notes: '', teamIds }); added++; }
         });
         toast(`${added} ajouté${added > 1 ? 's' : ''}, ${updated} mis à jour`); done && done();
       } }] });

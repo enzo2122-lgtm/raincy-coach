@@ -30,6 +30,20 @@ const Views = (() => {
   const header = (title, sub, actions = '') => `<header class="page-head"><div><h1>${title}</h1>${sub ? `<p class="sub">${sub}</p>` : ''}</div><div class="head-actions">${actions}</div></header>`;
 
   /* ================= Accueil ================= */
+  // Getting the club ready: shown to responsables until every step is done
+  function setupCard() {
+    if (!Auth.isAdmin()) return '';
+    const st = S(), steps = [
+      [st.players.length > 0, 'Charger les licenciés', 'Réglages → Recevoir un fichier (fichier des licenciés)', '#/reglages'],
+      [st.staff.length > 1, 'Ajouter les éducateurs et dirigeants', 'Équipes → Dirigeants → Coller une liste ou Nouveau dirigeant', '#/dirigeants'],
+      [Cloud.ready(), 'Connecter le serveur du club', 'Réglages → Serveur du club', '#/reglages'],
+      [!!st.club.reportEmail, 'Indiquer ton e-mail pour les signalements', 'Réglages → Aide et signalements', '#/reglages'],
+      [!!st.ui.clubFileSent, 'Envoyer le fichier du club aux éducateurs', 'Réglages → Envoyer toutes mes données', '#/reglages'],
+    ];
+    if (steps.every(s => s[0])) return '';
+    return `<section class="card setup-card"><h2>${I.check}Mise en route du club</h2><ol class="setup-steps">${steps.map(([ok, t, how, href]) =>
+      `<li class="${ok ? 'ok' : ''}"><a href="${href}"><span class="tick">${ok ? '✓' : ''}</span><span><b>${esc(t)}</b><span class="muted small">${esc(how)}</span></span></a></li>`).join('')}</ol></section>`;
+  }
   function home(root) {
     const now = today();
     const matches = byTeam(S().matches), trainings = byTeam(S().trainings);
@@ -39,6 +53,7 @@ const Views = (() => {
     const schemas = S().schemas.slice().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).slice(0, 4);
     root.innerHTML = `<header class="hero"><img src="icons/crest.png" alt="" class="hero-crest"><div><p class="eyebrow">Espace éducateurs</p><h1>${esc(S().club.name)}</h1><p class="sub">Tableau tactique, effectifs, entraînements et matchs</p></div></header>
       ${teamSwitch()}
+      ${setupCard()}
       <div class="quick">
         <button class="quick-btn" data-go="new-schema">${I.board}<b>Dessiner un exercice</b><span>Joueurs, flèches, zones</span></button>
         <button class="quick-btn" data-go="new-training">${I.training}<b>Préparer un entraînement</b><span>Exercices et PDF</span></button>
@@ -485,7 +500,7 @@ const Views = (() => {
       const b = e.target.closest('button'); if (!b) return;
       if (b.dataset.home) { c.homeBib = b.dataset.home; Store.save(); App.refreshChrome(); return settings(root); }
       if (b.dataset.away) { c.awayBib = b.dataset.away; Store.save(); return settings(root); }
-      if (b.dataset.act === 'exportAll') return runExport('Préparation du fichier…', async () => Exporter.json(await Library.withBackgrounds(Store.exportAll()), `${c.name}-${today()}`));
+      if (b.dataset.act === 'exportAll') return runExport('Préparation du fichier…', async () => { S().ui.clubFileSent = true; Store.save(); return Exporter.json(await Library.withBackgrounds(Store.exportAll()), `${c.name}-${today()}`); });
       if (b.dataset.auth || b.dataset.reset) return Auth.onSettingsClick(b, () => settings(root));
       if (b.dataset.cloud) return Cloud.onSettingsClick(b, () => settings(root));
       if (b.dataset.act === 'import') return importFile();
