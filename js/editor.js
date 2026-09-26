@@ -36,6 +36,7 @@ const Editor = (() => {
         <button class="icon-btn" data-act="back" aria-label="Retour">${I.back}</button>
         <input class="ed-title" id="edTitle" value="${esc(sc.name)}" aria-label="Nom du schéma" maxlength="80">
         <span class="grow"></span>
+        <button class="icon-btn" data-act="help" aria-label="Aide">${I.help}</button>
         <button class="icon-btn opt-btn" data-act="panel" aria-label="Options du terrain">${I.layers}</button>
         <button class="icon-btn" data-act="undo" aria-label="Annuler">${I.undo}</button>
         <button class="icon-btn" data-act="redo" aria-label="Rétablir">${I.redo}</button>
@@ -50,6 +51,7 @@ const Editor = (() => {
     bind(); renderTools(); renderSteps(); renderPanel();
     E.ro = new ResizeObserver(resize); E.ro.observe(root.querySelector('.ed-stage'));
     resize();
+    Board.ensureBg(sc).then(() => { if (E && E.sc === sc) draw(); });
   }
   function close() {
     if (!E) return;
@@ -309,14 +311,14 @@ const Editor = (() => {
       h += `<h3>Afficher</h3>
         ${tg('lanes', 'Couloirs et demi-espaces')}${tg('phases', 'Zones de jeu : conservation, progression, déséquilibre, finition')}${tg('bloc', 'Bloc adverse')}${tg('names', 'Prénoms des joueurs')}
         <h3>Terrain</h3>
-        ${chipRow([['11', 'Foot à 11'], ['8', 'Foot à 8'], ['5', 'Foot à 5'], ['zone', 'Zone libre']], 'fmt', f.format)}
-        ${f.format === 'zone' ? `<div class="row2"><label class="fld"><span>Longueur (m)</span><input type="number" id="fW" min="5" max="110" value="${f.w || 30}"></label><label class="fld"><span>Largeur (m)</span><input type="number" id="fH" min="5" max="75" value="${f.h || 20}"></label></div>`
+        ${f.format === 'bg' ? '<p class="tip">Le fond est une image importée (photo, page de PDF ou image de vidéo). Dessine dessus avec les outils : joueurs, flèches, zones et étapes.</p>' : chipRow([['11', 'Foot à 11'], ['8', 'Foot à 8'], ['5', 'Foot à 5'], ['zone', 'Zone libre']], 'fmt', f.format)}
+        ${f.format === 'bg' ? '' : f.format === 'zone' ? `<div class="row2"><label class="fld"><span>Longueur (m)</span><input type="number" id="fW" min="5" max="110" value="${f.w || 30}"></label><label class="fld"><span>Largeur (m)</span><input type="number" id="fH" min="5" max="75" value="${f.h || 20}"></label></div>`
           : chipRow([['full', 'Terrain entier'], ['half', 'Demi-terrain']], 'view', f.view || 'full')}
         <h3>Équipe</h3>
         <label class="fld"><span>Catégorie</span><select id="scTeam"><option value="">Aucune</option>${Store.state.teams.map(t => `<option value="${t.id}" ${t.id === sc.teamId ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></label>
         ${sc.teamId ? (() => { const onField = new Set(sc.objects.map(o => o.playerId).filter(Boolean)), free = Store.playersOf(sc.teamId).filter(p => !onField.has(p.id));
           return `<label class="fld"><span>Mettre un joueur sur le terrain</span><select id="addWho"><option value="">${free.length ? 'Choisir un joueur…' : 'Tout l\'effectif est sur le terrain'}</option>${free.map(p => `<option value="${p.id}">${esc(Store.fullName(p))}${p.number ? ' (' + esc(p.number) + ')' : ''}${p.pos ? ' · ' + esc(p.pos) : ''}</option>`).join('')}</select></label>`; })() : '<p class="tip">Choisis une catégorie pour placer tes joueurs avec un menu.</p>'}
-        <button class="btn soft wide" data-act="formation" ${f.format === 'zone' ? 'disabled' : ''}>${I.formation}<span>Placer une formation</span></button>
+        <button class="btn soft wide" data-act="formation" ${f.format === 'zone' || f.format === 'bg' ? 'disabled' : ''}>${I.formation}<span>Placer une formation</span></button>
         <h3>Les flèches</h3>
         <ul class="legend">${Object.entries(Board.ARROWS).map(([k, a]) => `<li>${arrowSw(k)}<span>${a.label}</span></li>`).join('')}</ul>`;
     }
@@ -395,7 +397,7 @@ const Editor = (() => {
         if (x === 'png') run('Création de l\'image…', () => Exporter.png(sc, E.k, o));
         if (x === 'video') run('Enregistrement de la vidéo… garde l\'appli ouverte', p => Exporter.video(sc, o, p));
         if (x === 'pdf') run('Création du PDF…', () => Exporter.pdfSchema(sc, club(), o));
-        if (x === 'json') run('Préparation du fichier…', () => Exporter.json(Store.exportSchema(sc), sc.name));
+        if (x === 'json') run('Préparation du fichier…', async () => Exporter.json(await Library.withBackgrounds(Store.exportSchema(sc)), sc.name));
       }),
     });
   }
@@ -433,6 +435,7 @@ const Editor = (() => {
       if (d.view) return setSel(() => sc.field.view = d.view);
       switch (d.act) {
         case 'back': stopPlay(); close(); return history.length > 1 ? history.back() : (location.hash = '#/schemas');
+        case 'help': return Help.open('schema');
         case 'panel': return E.root.querySelector('.ed').classList.toggle('panel-open');
         case 'closePanel': return E.root.querySelector('.ed').classList.remove('panel-open');
         case 'undo': return undo();

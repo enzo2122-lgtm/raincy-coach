@@ -2,7 +2,7 @@
    Sharing between coaches goes through export/import of a .json file (AirDrop, WhatsApp, mail). */
 const Store = (() => {
   const DB = 'raincy-coach', OS = 'kv', KEY = 'state';
-  const COLS = ['teams', 'players', 'staff', 'schemas', 'trainings', 'matches'];
+  const COLS = ['teams', 'players', 'staff', 'schemas', 'trainings', 'matches', 'reports'];
   let state = null, saveTimer = null;
   const listeners = new Set();
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -84,14 +84,17 @@ const Store = (() => {
   function importText(txt) {
     let obj; try { obj = JSON.parse(txt); } catch (e) { throw new Error("Ce fichier n'est pas un fichier Raincy Coach."); }
     if (!obj || obj.app !== 'raincy-coach' || !obj.data) throw new Error("Ce fichier n'est pas un fichier Raincy Coach.");
-    const res = { added: 0, updated: 0, kept: 0 };
+    const res = { added: 0, updated: 0, kept: 0, byCol: {} };
+    const count = c => res.byCol[c] = (res.byCol[c] || 0) + 1;
     COLS.forEach(c => (obj.data[c] || []).forEach(it => {
       if (!it || !it.id) return;
       const i = state[c].findIndex(x => x.id === it.id);
-      if (i < 0) { state[c].push(it); res.added++; }
-      else if ((it.updatedAt || 0) > (state[c][i].updatedAt || 0)) { state[c][i] = it; res.updated++; }
+      if (i < 0) { state[c].push(it); res.added++; count(c); }
+      else if ((it.updatedAt || 0) > (state[c][i].updatedAt || 0)) { state[c][i] = it; res.updated++; count(c); }
       else res.kept++;
     }));
+    // The club's report e-mail travels with the club file so every coach can send reports
+    if (obj.data.club && obj.data.club.reportEmail && !state.club.reportEmail) state.club.reportEmail = obj.data.club.reportEmail;
     migrate(); save(); return res;
   }
   function reset() { state = blank(); save(); }

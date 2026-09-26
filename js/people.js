@@ -104,7 +104,7 @@ const People = (() => {
       body: `<div class="row2"><label class="fld"><span>Nom</span><input id="sLast" value="${esc(p.lastName)}" autocapitalize="characters"></label>
         <label class="fld"><span>Prénom</span><input id="sFirst" value="${esc(p.firstName)}"></label></div>
         <label class="fld"><span>Rôle</span><select id="sRole">${opt(ROLES, p.role)}</select></label>
-        <div class="lbl">Catégories (plusieurs possibles)</div>${teamChips(p.teamIds)}
+        <div class="lbl">Catégories (plusieurs possibles)</div>${Auth.isAdmin() || isNew ? teamChips(p.teamIds) : `<p class="tip">🔒 ${esc(teamNames(p.teamIds) || 'Aucune catégorie')} · seul un responsable peut changer les catégories d'un dirigeant.</p>`}
         <div class="row2"><label class="fld"><span>Téléphone</span><input id="sTel" type="tel" inputmode="tel" value="${esc(p.phone || '')}"></label>
         <label class="fld"><span>E-mail</span><input id="sMail" type="email" inputmode="email" value="${esc(p.email || '')}"></label></div>
         ${p.phone ? tel(p.phone, 'Appeler') : ''}
@@ -116,7 +116,8 @@ const People = (() => {
         { label: 'Enregistrer', kind: 'primary', onClick: (c, r) => {
           const v = id => $('#' + id, r).value.trim();
           if (!v('sLast') && !v('sFirst')) { toast('Écris au moins le nom ou le prénom', 'err'); return false; }
-          Object.assign(p, { lastName: v('sLast').toUpperCase(), firstName: v('sFirst'), role: v('sRole'), phone: v('sTel'), email: v('sMail'), notes: $('#sNotes', r).value, teamIds: pickedTeams(r) });
+          Object.assign(p, { lastName: v('sLast').toUpperCase(), firstName: v('sFirst'), role: v('sRole'), phone: v('sTel'), email: v('sMail'), notes: $('#sNotes', r).value });
+          if (Auth.isAdmin() || isNew) p.teamIds = pickedTeams(r);
           Store.upsert('staff', p); toast('Enregistré'); opts.onSave && opts.onSave(p);
         } },
       ],
@@ -156,8 +157,8 @@ const People = (() => {
       <section class="card">
         <div class="row-head"><h2>${I.whistle}Encadrement (${st.length})</h2>
           <button class="btn" data-newstaff>${I.plus}<span>Nouveau dirigeant</span></button></div>
-        ${addSelect('staff', t.id, 'Ajouter un dirigeant existant…')}
-        <div class="people">${st.map(p => staffRow(p, t.id)).join('') || '<p class="muted">Aucun dirigeant pour cette catégorie.</p>'}</div>
+        ${Auth.isAdmin() ? addSelect('staff', t.id, 'Ajouter un dirigeant existant…') : ''}
+        <div class="people">${st.map(p => staffRow(p, Auth.isAdmin() ? t.id : null)).join('') || '<p class="muted">Aucun dirigeant pour cette catégorie.</p>'}</div>
       </section>`;
   }
   function bindTeamSections(root, t, rerender) {

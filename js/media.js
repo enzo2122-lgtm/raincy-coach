@@ -49,7 +49,7 @@ const Media = (() => {
       const isVid = f.type.startsWith('video/');
       if (!isVid && !f.type.startsWith('image/')) continue;
       if (isVid && f.size > MAX_VIDEO) { toast(`${f.name} est trop lourde (plus de 300 Mo)`, 'err'); continue; }
-      const rec = { id: Store.uid(), ref, kind: isVid ? 'video' : 'image', createdAt: Date.now(), by: me ? me.id : null, caption: '' };
+      const rec = { id: Store.uid(), ref, kind: isVid ? 'video' : 'image', name: f.name || '', createdAt: Date.now(), by: me ? me.id : null, caption: '' };
       if (isVid) Object.assign(rec, { blob: f, mime: f.type || 'video/mp4', thumb: await videoThumb(f) });
       else Object.assign(rec, await photo(f));
       await put(rec); n++;
@@ -97,5 +97,5 @@ const Media = (() => {
   }
   const canDelete = m => Auth.isAdmin() || (Auth.current() && m.by === Auth.current().id);
 
-  return { placeholder, mount, removeRef, list };
+  return { placeholder, mount, removeRef, list, get, put, del, photo, videoThumb, drawScaled, loadImage, MAX_VIDEO };
 })();

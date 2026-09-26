@@ -34,11 +34,12 @@ const Board = (() => {
   /* ---------- geometry ---------- */
   function dims(f) {
     if (f.format === 'zone') return { L: f.w || 30, W: f.h || 20 };
+    if (f.format === 'bg') return { L: f.w || 100, W: f.h || 60 };
     return { L: PITCH[f.format].L, W: PITCH[f.format].W };
   }
   function extents(f) {
     const { L, W } = dims(f);
-    if (f.format !== 'zone' && f.view === 'half') return { x0: L / 2 - 2, x1: L, y0: 0, y1: W, L, W };
+    if (f.format !== 'zone' && f.format !== 'bg' && f.view === 'half') return { x0: L / 2 - 2, x1: L, y0: 0, y1: W, L, W };
     return { x0: 0, x1: L, y0: 0, y1: W, L, W };
   }
   function tokenR(f) { const e = extents(f); return Math.max(e.x1 - e.x0, e.y1 - e.y0) / 40; }
@@ -58,7 +59,7 @@ const Board = (() => {
   // The camera maps world metres to screen pixels. In "vertical" mode (phone held upright) the pitch is turned
   // a quarter turn: we attack towards the top of the screen and our left touchline is on the left.
   function camera(sc, W, H, opts = {}) {
-    const f = sc.field, e = extents(f), r = tokenR(f), ov = sc.overlays || {}, v = !!opts.vertical;
+    const f = sc.field, e = extents(f), r = tokenR(f), ov = sc.overlays || {}, v = !!opts.vertical && f.format !== 'bg';
     // Margins in world units: lo/hi along the length (x) and across the width (y)
     const m = { xLo: r * 2, xHi: r * 2 + (ov.lanes ? (v ? r * 2 : r * 5.2) : 0), yLo: r * 2 + (ov.phases ? r * 1.5 : 0), yHi: r * 2 };
     const lenX = e.x1 - e.x0 + m.xLo + m.xHi, lenY = e.y1 - e.y0 + m.yLo + m.yHi;
@@ -161,8 +162,29 @@ const Board = (() => {
   }
 
   /* ---------- pitch ---------- */
+  // Backgrounds (a photo, a PDF page or a video frame) are kept decoded in memory, keyed by media id
+  const BG = new Map();
+  async function ensureBg(sc) {
+    const f = sc && sc.field; if (!f || f.format !== 'bg' || !f.bgId || BG.has(f.bgId)) return;
+    try {
+      const m = await Media.get(f.bgId); if (!m || !m.blob) return;
+      const img = await Media.loadImage(URL.createObjectURL(m.blob)); BG.set(f.bgId, img);
+    } catch (e) {}
+  }
+  const preloadBackgrounds = list => Promise.all((list || []).map(ensureBg));
   function drawPitch(ctx, cam, sc, W, H) {
     const f = sc.field, { L, W: FW } = dims(f), s = cam.s, P = PITCH[f.format];
+    if (f.format === 'bg') {
+      ctx.fillStyle = '#10182e'; ctx.fillRect(0, 0, W, H);
+      const img = BG.get(f.bgId), rc = cam.rect(0, 0, L, FW);
+      if (img) ctx.drawImage(img, ...rc);
+      else { ctx.fillStyle = '#1c2748'; ctx.fillRect(...rc); label(ctx, rc[0] + rc[2] / 2, rc[1] + rc[3] / 2, 'Image absente sur cet appareil', Math.max(12, cam.r * .7 * s), '#e2c27d'); }
+      const ov = sc.overlays || {};
+      if (ov.phases) drawPhases(ctx, cam, sc);
+      if (ov.lanes) drawLanes(ctx, cam, sc);
+      ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 1; ctx.strokeRect(...rc);
+      return;
+    }
     ctx.fillStyle = '#1f5137'; ctx.fillRect(0, 0, W, H);
     ctx.fillStyle = '#2c6646'; ctx.fillRect(...cam.rect(0, 0, L, FW));
     const sw = L > 50 ? 5.25 : 3.2;
@@ -342,5 +364,5 @@ const Board = (() => {
     return null;
   }
 
-  return { PITCH, ARROWS, BIBS, ZONE_COLORS, dims, extents, tokenR, camera, drawFrame, drawArrow, hit, posAt, moveType, stepDur, dist, bez, clamp, ease };
+  return { ensureBg, preloadBackgrounds, BG, PITCH, ARROWS, BIBS, ZONE_COLORS, dims, extents, tokenR, camera, drawFrame, drawArrow, hit, posAt, moveType, stepDur, dist, bez, clamp, ease };
 })();

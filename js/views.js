@@ -43,6 +43,7 @@ const Views = (() => {
         <button class="quick-btn" data-go="new-schema">${I.board}<b>Dessiner un exercice</b><span>Joueurs, flèches, zones</span></button>
         <button class="quick-btn" data-go="new-training">${I.training}<b>Préparer un entraînement</b><span>Exercices et PDF</span></button>
         <button class="quick-btn" data-go="new-match">${I.match}<b>Ajouter un match</b><span>Convocation et score</span></button>
+        <a class="quick-btn" href="#/bibliotheque">${I.upload}<b>Importer vidéo ou PDF</b><span>Dessiner dessus, créer une séance</span></a>
       </div>
       <div class="cards2">
         <section class="card">
@@ -126,7 +127,7 @@ const Views = (() => {
   function schemas(root) {
     const filt = S().ui.schemaFilter || '';
     const list = S().schemas.filter(s => !filt || s.field.format === filt).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-    root.innerHTML = `${header('Schémas', 'Exercices et tactiques animés', `<button class="btn" data-act="import">${I.upload}<span>Recevoir</span></button><button class="btn primary" data-act="new">${I.plus}<span>Nouveau schéma</span></button>`)}
+    root.innerHTML = `${header('Schémas', 'Exercices et tactiques animés', `<a class="btn" href="#/bibliotheque">${I.video}<span>Bibliothèque</span></a><button class="btn" data-act="import">${I.upload}<span>Recevoir</span></button><button class="btn primary" data-act="new">${I.plus}<span>Nouveau schéma</span></button>`)}
       <div class="chips filter">${[['', 'Tous'], ['11', 'Foot à 11'], ['8', 'Foot à 8'], ['5', 'Foot à 5'], ['zone', 'Zones libres']].map(([v, l]) => `<button class="chip ${v === filt ? 'on' : ''}" data-f="${v}">${l}</button>`).join('')}</div>
       ${list.length ? `<div class="grid">${list.map(s => `<article class="card schema-card">
           <a href="#/schema/${s.id}" class="thumb"><img alt="" src="${UI.thumb(s)}"></a>
@@ -215,10 +216,11 @@ const Views = (() => {
         ${tm ? `<h2 class="section" id="presH">Présents (${(tr.presents || []).length}/${Store.playersOf(tm.id).length})</h2>
           <div class="chips roster">${Store.playersOf(tm.id).map(p => `<button class="chip ${(tr.presents || []).includes(p.id) ? 'on' : ''}" data-present="${p.id}">${esc(pLabel(p))}</button>`).join('')}</div>` : ''}
         <div id="rateBox"></div>
+        <div id="docsBox">${Library.docsPlaceholder()}</div>
         ${Media.placeholder('training:' + tr.id, 'Photos et vidéos de la séance')}
         <div class="danger-zone"><button class="btn" data-act="dup">${I.copy}<span>Dupliquer la séance</span></button><button class="btn danger" data-act="delete">${I.trash}<span>Supprimer</span></button></div>`;
       const box = $('#rateBox', root); if (box) Ratings.bind(box, tr, save);
-      rateTr(); Media.mount(root);
+      rateTr(); Media.mount(root); Library.mountDocs($('#docsBox', root), tr, save);
     };
     const rateTr = () => { const box = $('#rateBox', root); if (box) box.innerHTML = Ratings.section(tr, Store.playersOf(tr.teamId || '').filter(p => (tr.presents || []).includes(p.id)), 'training'); };
     const exerciseCard = (e, i, n) => {
@@ -261,7 +263,7 @@ const Views = (() => {
       switch (b.dataset.act) {
         case 'addEx': tr.exercises.push({ id: Store.uid(), title: '', duration: 15, org: '', consignes: '', materiel: '', schemaId: null }); save(); render(); { const l = $$('.ex-title', root).pop(); if (l) l.focus(); } return;
         case 'pdf': return runExport('Création du PDF…', () => Exporter.pdfTraining(tr, teamOf(tr.teamId), S().club, { homeBib: S().club.homeBib }));
-        case 'share': return runExport('Préparation du fichier…', () => Exporter.json(Store.exportTraining(tr), tr.title || 'entrainement'));
+        case 'share': return runExport('Préparation du fichier…', async () => Exporter.json(await Library.withBackgrounds(Store.exportTraining(tr)), tr.title || 'entrainement'));
         case 'dup': { const c = JSON.parse(JSON.stringify(tr)); c.id = Store.uid(); c.title += ' (copie)'; c.date = today(); c.presents = []; c.exercises.forEach(x => x.id = Store.uid()); Store.upsert('trainings', c); location.hash = '#/entrainement/' + c.id; return; }
         case 'delete': if (await confirmBox(`Supprimer l'entraînement « ${tr.title} » ? Les schémas restent dans la liste des schémas.`)) { Store.remove('trainings', tr.id); Media.removeRef('training:' + tr.id); location.hash = '#/entrainements'; } return;
       }
@@ -342,10 +344,11 @@ const Views = (() => {
           <label class="fld"><span>Notes</span><textarea data-f="notes" rows="3" placeholder="Ce qui a marché, ce qu'on travaille la semaine prochaine">${esc(m.notes || '')}</textarea></label>
         </section>
         <div id="rateBox"></div>
+        <div id="docsBox">${Library.docsPlaceholder()}</div>
         ${Media.placeholder('match:' + m.id, 'Photos et vidéos du match')}
         <div class="danger-zone"><button class="btn danger" data-act="delete">${I.trash}<span>Supprimer le match</span></button></div>`;
       const box = $('#rateBox', root); box.innerHTML = Ratings.section(m, conv, 'match'); Ratings.bind(box, m, save);
-      Media.mount(root);
+      Media.mount(root); Library.mountDocs($('#docsBox', root), m, save);
     };
     const cheer = before => { if (Ratings.result(m) === 'V' && before !== 'V') Ratings.celebrate(); };
     render();
@@ -438,6 +441,7 @@ const Views = (() => {
     const bibs = (key, cur) => `<div class="chips">${Object.entries(Board.BIBS).map(([k, v]) => `<button class="chip bib ${k === cur ? 'on' : ''}" data-${key}="${k}" aria-label="${k}"><i class="sw" style="background:${v[0]}"></i>${k}</button>`).join('')}</div>`;
     root.innerHTML = `${header('Réglages', '')}
       ${Auth.settingsSection()}
+      ${Help.settingsSection()}
       <section class="card">
         <h2>${I.team}Club</h2>
         <label class="fld"><span>Nom du club</span><input id="clubName" value="${esc(c.name)}" maxlength="40"></label>
@@ -464,14 +468,15 @@ const Views = (() => {
         <p class="muted">Les données sont enregistrées sur cet appareil uniquement. Pense à envoyer une copie avant d'effacer.</p>
         <button class="btn danger" data-act="reset">${I.trash}<span>Effacer toutes les données</span></button>
       </section>` : ''}
-      <p class="muted small">Raincy Coach · version 1.1</p>`;
+      <p class="muted small">Raincy Coach · version ${Help.VERSION}</p>`;
+    Help.onSettings(root, () => settings(root));
     root.onchange = e => Auth.onSettingsChange(e.target);
     $('#clubName', root).oninput = e => { c.name = e.target.value || 'Mon club'; Store.save(); App.refreshChrome(); };
     root.onclick = async e => {
       const b = e.target.closest('button'); if (!b) return;
       if (b.dataset.home) { c.homeBib = b.dataset.home; Store.save(); App.refreshChrome(); return settings(root); }
       if (b.dataset.away) { c.awayBib = b.dataset.away; Store.save(); return settings(root); }
-      if (b.dataset.act === 'exportAll') return runExport('Préparation du fichier…', () => Exporter.json(Store.exportAll(), `${c.name}-${today()}`));
+      if (b.dataset.act === 'exportAll') return runExport('Préparation du fichier…', async () => Exporter.json(await Library.withBackgrounds(Store.exportAll()), `${c.name}-${today()}`));
       if (b.dataset.auth || b.dataset.reset) return Auth.onSettingsClick(b, () => settings(root));
       if (b.dataset.act === 'import') return importFile();
       if (b.dataset.act === 'noExamples' && await confirmBox('Supprimer toutes les données d\'exemple ?')) { Store.removeExamples(); toast('Exemples supprimés'); return settings(root); }
@@ -486,14 +491,39 @@ const Views = (() => {
     catch (err) { console.error(err); toast(err.message || 'Export impossible', 'err'); }
     finally { b.done(); }
   }
+  // Receive a .raincy.json file (players, staff, sessions, matches…) from another coach or from the club
+  async function receiveText(txt) {
+    try {
+      const r = Store.importText(String(txt).replace(/^﻿/, '').trim());
+      await Library.restoreBackgrounds();
+      const d = r.byCol || {}, names = [['players', 'joueur'], ['staff', 'dirigeant'], ['teams', 'catégorie'], ['trainings', 'séance'], ['matches', 'match'], ['schemas', 'schéma']];
+      const parts = names.filter(([c]) => d[c]).map(([c, w]) => `${d[c]} ${w}${d[c] > 1 ? 's' : ''}`);
+      App.route();
+      modal({ title: 'Fichier reçu', noFocus: true, body: `<p class="lead">${parts.length ? 'Ajouté ou mis à jour : ' + esc(parts.join(', ')) + '.' : 'Tout était déjà à jour sur cet appareil.'}</p>
+        <p class="muted">${r.added} nouveauté${r.added > 1 ? 's' : ''} · ${r.updated} mise${r.updated > 1 ? 's' : ''} à jour. Retrouve les joueurs dans Équipes.</p>`, actions: [{ label: 'OK', kind: 'primary' }] });
+      return true;
+    } catch (err) { toast(err.message || 'Fichier illisible', 'err'); return false; }
+  }
   function importFile() {
-    const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.json,application/json,.raincy';
-    inp.onchange = async () => {
-      const f = inp.files[0]; if (!f) return;
-      try { const r = Store.importText(await f.text()); toast(`Reçu : ${r.added} ajouté${r.added > 1 ? 's' : ''}, ${r.updated} mis à jour`); App.route(); }
-      catch (err) { toast(err.message, 'err'); }
-    };
-    inp.click();
+    modal({ title: 'Recevoir un fichier', noFocus: true,
+      body: `<p>Choisis le fichier <b>.raincy.json</b> (liste des licenciés, données d'un autre éducateur…). Sur iPhone ou iPad, il doit d'abord être enregistré dans l'app <b>Fichiers</b> ; sur PC ou Android, dans Téléchargements.</p>
+        <button class="btn primary wide" id="rcvPick">${I.upload}<span>Choisir le fichier</span></button>
+        <details class="paste-box"><summary>Le fichier ne se sélectionne pas ?</summary>
+          <p class="muted small">Ouvre le fichier dans une autre appli (Fichiers, Mail, Notes…), copie tout son texte, puis colle-le ici.</p>
+          <textarea id="rcvText" rows="5" placeholder='{"app":"raincy-coach", …}'></textarea>
+          <button class="btn wide" id="rcvPaste">${I.paste}<span>Importer le texte collé</span></button></details>`,
+      onOpen: (r, close) => {
+        $('#rcvPick', r).onclick = async () => {
+          const [f] = await UI.pickFiles(); if (!f) return;
+          const txt = await f.text(); close();
+          const b = UI.busy('Lecture du fichier…');
+          try { await receiveText(txt); } finally { b.done(); }
+        };
+        $('#rcvPaste', r).onclick = async () => {
+          const t = $('#rcvText', r).value; if (!t.trim()) return toast('Colle d\'abord le texte du fichier', 'err');
+          close(); await receiveText(t);
+        };
+      } });
   }
 
   return { home, teams, team, schemas, trainings, training, matches, match, stats, settings, newSchema };

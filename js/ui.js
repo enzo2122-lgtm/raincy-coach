@@ -55,5 +55,20 @@ const UI = (() => {
   const today = () => new Date().toISOString().slice(0, 10);
   const accentFor = bib => ({ jaune: '#a16207', blanc: '#13245a', vert: '#3f7d0a', orange: '#c2410c' }[bib] || (Board.BIBS[bib] || Board.BIBS.bleu)[0]);
 
-  return { esc, $, $$, toast, modal, confirmBox, busy, thumb, fmtDate, today, accentFor };
+  // File picker that works on iPhone/iPad: the input must be in the page, and no unknown extensions in "accept"
+  function pickFiles({ accept = '', multiple = false } = {}) {
+    return new Promise(res => {
+      const inp = document.createElement('input');
+      inp.type = 'file'; if (accept) inp.accept = accept; inp.multiple = multiple;
+      inp.style.cssText = 'position:fixed;left:-1000px;top:0;opacity:0';
+      document.body.appendChild(inp);
+      let done = false;
+      const finish = files => { if (done) return; done = true; res(files); setTimeout(() => inp.remove(), 1000); };
+      inp.addEventListener('change', () => finish([...inp.files]));
+      inp.addEventListener('cancel', () => finish([]));
+      inp.click();
+    });
+  }
+
+  return { esc, $, $$, toast, modal, confirmBox, busy, thumb, fmtDate, today, accentFor, pickFiles };
 })();

@@ -42,7 +42,10 @@ const Exporter = (() => {
     ctx.fillText(t, x0, h - ch / 2);
   }
   function frameCanvas(sc, k, u, o = {}) {
-    const w = o.w || 1600, h = o.h || 1040, ch = o.caption === false ? 0 : Math.round(h * .085);
+    const w = o.w || 1600, ch0 = Math.round((o.h || 1040) * .085);
+    let h = o.h || 1040;
+    if (sc.field.format === 'bg') { const d = Board.dims(sc.field); h = Math.round(w * Math.min(1.35, Math.max(.45, d.W / d.L)) * 1.04) + ch0; }
+    const ch = o.caption === false ? 0 : ch0;
     const c = document.createElement('canvas'); c.width = w; c.height = h;
     const ctx = c.getContext('2d');
     Board.drawFrame(ctx, w, h - ch, sc, k, u, { homeBib: o.homeBib, names: o.names });
@@ -52,6 +55,7 @@ const Exporter = (() => {
   const toBlob = (c, type = 'image/png', q) => new Promise(r => c.toBlob(r, type, q));
 
   async function png(sc, k, o) {
+    await Board.ensureBg(sc);
     const blob = await toBlob(frameCanvas(sc, k, 0, o));
     return deliver(blob, `${safeName(sc.name)}-etape-${k + 1}.png`);
   }
@@ -73,6 +77,7 @@ const Exporter = (() => {
   }
   function canVideo() { return !!(window.MediaRecorder && HTMLCanvasElement.prototype.captureStream); }
   async function video(sc, o = {}, onProgress = () => {}) {
+    await Board.ensureBg(sc);
     if (!canVideo()) throw new Error("Cet appareil ne sait pas enregistrer de vidéo depuis l'appli. Utilise l'enregistrement d'écran de l'iPad pendant la lecture.");
     const w = 1280, h = 832, ch = Math.round(h * .085);
     const c = document.createElement('canvas'); c.width = w; c.height = h;
@@ -181,9 +186,24 @@ const Exporter = (() => {
     sc.steps.forEach((st, k) => P.image(frameCanvas(sc, k, 0, Object.assign({ w: 1500, h: 980 }, o)), P.CW));
   }
   const fmtDate = d => d ? new Date(d + 'T12:00').toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) : '';
-  const fieldLabel = f => f.format === 'zone' ? `Zone ${f.w} x ${f.h} m` : (Board.PITCH[f.format].label + (f.view === 'half' ? ' · demi-terrain' : ''));
+  const fieldLabel = f => f.format === 'bg' ? 'Dessin sur image' : f.format === 'zone' ? `Zone ${f.w} x ${f.h} m` : (Board.PITCH[f.format].label + (f.view === 'half' ? ' · demi-terrain' : ''));
+  // Attached documents (images, PDF pages, videos) at the end of a printable PDF
+  async function addDocs(P, ids) {
+    const docs = await Library.docImages(ids); if (!docs.length) return;
+    P.doc.addPage(); P.y = P.M; P.h2('Documents joints');
+    for (const d of docs) {
+      P.label(d.name || 'Document');
+      if (d.video) { P.para('Vidéo : à regarder dans l\'appli Raincy Coach.'); continue; }
+      for (const url of d.images) {
+        const img = await Media.loadImage(url), ratio = img.naturalHeight / img.naturalWidth;
+        let w = P.CW, h = w * ratio; if (h > 250) { h = 250; w = h / ratio; }
+        P.ensure(h + 3); P.doc.addImage(url, 'JPEG', P.M + (P.CW - w) / 2, P.y, w, h, undefined, 'FAST'); P.y += h + 5;
+      }
+    }
+  }
 
   async function pdfSchema(sc, club, o) {
+    await Board.ensureBg(sc);
     const P = Doc(club);
     P.header(sc.name, fieldLabel(sc.field));
     P.facts([['Terrain', fieldLabel(sc.field)], ['Étapes', String(sc.steps.length)]]);
@@ -192,6 +212,7 @@ const Exporter = (() => {
   }
   async function pdfTraining(tr, team, club, o) {
     const P = Doc(club), S = Store.state;
+    await Board.preloadBackgrounds(tr.exercises.map(e => Store.get('schemas', e.schemaId)).filter(Boolean));
     const total = tr.exercises.reduce((a, e) => a + (+e.duration || 0), 0);
     P.header(tr.title || 'Entraînement', team ? team.name : '');
     P.facts([['Date', fmtDate(tr.date)], ['Heure', tr.time || '-'], ['Durée', total + ' min'], ['Présents', tr.presents && tr.presents.length ? String(tr.presents.length) : '-']]);
@@ -210,6 +231,7 @@ const Exporter = (() => {
       const sc = e.schemaId && S.schemas.find(s => s.id === e.schemaId);
       if (sc) { P.label('Schéma'); schemaImages(P, sc, o); }
     });
+    await addDocs(P, tr.docIds);
     return deliver(P.blob(), safeName((tr.title || 'entrainement') + '-' + (tr.date || '')) + '.pdf');
   }
   async function pdfMatch(m, team, club, o) {
@@ -235,6 +257,7 @@ const Exporter = (() => {
     const sc = m.lineupId && S.schemas.find(s => s.id === m.lineupId);
     if (sc) { P.label('Composition'); P.image(frameCanvas(sc, 0, 0, Object.assign({ w: 1500, h: 980, names: true }, o))); }
     if (m.notes) { P.label('Notes'); P.para(m.notes); }
+    await addDocs(P, m.docIds);
     return deliver(P.blob(), safeName(`match-${m.opponent || ''}-${m.date || ''}`) + '.pdf');
   }
   async function json(text, name) { return deliver(new Blob([text], { type: 'application/json' }), safeName(name) + '.raincy.json'); }

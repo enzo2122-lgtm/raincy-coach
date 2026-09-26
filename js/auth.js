@@ -38,7 +38,7 @@ const Auth = (() => {
   function restore() {
     let id = null; try { id = sessionStorage.getItem(KEY) || localStorage.getItem(KEY); } catch (e) {}
     const s = id && Store.get('staff', id);
-    if (s && U(id) && U(id).hash) { user = s; return true; }
+    if (s && U(id) && U(id).hash && !needsTeams(id)) { user = s; return true; }
     return false;
   }
   function logout() {
@@ -50,7 +50,9 @@ const Auth = (() => {
   const lock = () => document.getElementById('lock');
   function frame(inner) {
     const el = lock(); el.hidden = false;
-    el.innerHTML = `<div class="lock-card"><img src="icons/crest.png" alt="" class="lock-crest"><p class="eyebrow">Espace éducateurs</p><h1>${esc(Store.state.club.name)}</h1>${inner}</div>`;
+    el.innerHTML = `<div class="lock-card"><img src="icons/crest.png" alt="" class="lock-crest"><p class="eyebrow">Espace éducateurs</p><h1>${esc(Store.state.club.name)}</h1>${inner}
+      <button class="btn wide link how-btn" id="howTo">${I.help}<span>Comment utiliser l'appli ?</span></button></div>`;
+    el.querySelector('#howTo').onclick = () => Help.tour();
     return el;
   }
   const pwFields = (label = 'Mot de passe') => `
@@ -63,8 +65,28 @@ const Auth = (() => {
     if (a !== b) { toast('Les deux mots de passe ne sont pas pareils', 'err'); return null; }
     return a;
   }
+  // A coach links his account to his categories once; afterwards only a responsable can change them
+  const needsTeams = id => { const u = U(id) || {}; return !u.admin && !u.teamsSet && Store.state.teams.length > 0; };
+  const teamChips = ids => `<div class="chips team-pick" id="myTeams">${Store.state.teams.map(t => `<button type="button" class="chip ${(ids || []).includes(t.id) ? 'on' : ''}" data-t="${t.id}">${esc(t.name)}</button>`).join('')}</div>`;
+  function teamsScreen(id, keep) {
+    const s = Store.get('staff', id);
+    const el = frame(`<p class="lead">${esc(s.firstName || Store.fullName(s))}, choisis ta ou tes catégories. <b>Attention : après validation, seul un responsable pourra les changer.</b></p>
+      ${teamChips(s.teamIds)}
+      <button class="btn primary wide" id="go" style="margin-top:14px">Valider mes catégories</button>`);
+    el.querySelectorAll('#myTeams .chip').forEach(b => b.onclick = () => b.classList.toggle('on'));
+    $('#go', el).onclick = () => {
+      const ids = [...el.querySelectorAll('#myTeams .chip.on')].map(b => b.dataset.t);
+      if (!ids.length) return toast('Choisis au moins une catégorie', 'err');
+      s.teamIds = ids; Store.upsert('staff', s);
+      A().users[id] = Object.assign(U(id) || {}, { teamsSet: true, teamsSetAt: Date.now() }); Store.save();
+      done(id, keep);
+    };
+  }
   function done(id, keep) {
+    if (needsTeams(id)) return teamsScreen(id, keep);
     user = Store.get('staff', id); remember(id, keep); fails = 0;
+    const mine = (user.teamIds || []).filter(t => Store.get('teams', t));
+    if (mine.length && !mine.includes(Store.state.ui.teamId)) { Store.state.ui.teamId = mine[0]; Store.save(); }
     lock().hidden = true; lock().innerHTML = '';
     App.refreshChrome(); toast(`Bonjour ${user.firstName || user.lastName} !`);
     if (resolveGate) { const r = resolveGate; resolveGate = null; r(); }
@@ -140,6 +162,7 @@ const Auth = (() => {
       if (restore()) return res();
       resolveGate = res;
       if (!hasAccounts()) setupScreen(); else loginScreen();
+      if (!Help.tourSeen()) Help.tour();
     });
   }
 
@@ -153,12 +176,14 @@ const Auth = (() => {
     if (!isAdmin()) return me;
     const rows = Store.state.staff.slice().sort(Store.byName).map(s => {
       const u = U(s.id) || {};
-      return `<div class="acc-row"><span class="acc-name"><b>${esc(Store.fullName(s))}</b><span class="muted">${u.hash ? 'Mot de passe créé' : 'Pas encore connecté'}</span></span>
+      const cats = (s.teamIds || []).map(t => (Store.get('teams', t) || {}).name).filter(Boolean).join(', ');
+      return `<div class="acc-row"><span class="acc-name"><b>${esc(Store.fullName(s))}</b><span class="muted">${u.hash ? 'Mot de passe créé' : 'Pas encore connecté'} · ${cats ? esc(cats) : 'aucune catégorie'}${u.teamsSet ? ' 🔒' : ''}</span></span>
+        <button class="btn" data-auth="cats" data-id="${s.id}">Catégories</button>
         <label class="switch small"><input type="checkbox" data-admin="${s.id}" ${u.admin ? 'checked' : ''} ${s.id === user.id ? 'disabled' : ''}><span>Responsable</span></label>
         <button class="btn" data-reset="${s.id}" ${u.hash && s.id !== user.id ? '' : 'disabled'}>Réinitialiser</button></div>`;
     }).join('');
     return me + `<section class="card"><h2>${I.team}Comptes des dirigeants</h2>
-      <p class="muted">Un responsable peut réinitialiser le mot de passe d'un dirigeant : il en recréera un à sa prochaine connexion.</p>
+      <p class="muted">Un responsable peut réinitialiser le mot de passe d'un dirigeant (il en recréera un à sa prochaine connexion) et changer ses catégories. 🔒 : catégories choisies à la première connexion, verrouillées pour l'éducateur.</p>
       <div class="acc-list">${rows || '<p class="muted">Ajoute les dirigeants dans Équipes → Dirigeants.</p>'}</div>
       <button class="btn" data-auth="recovery">${I.rotate}<span>Nouveau code de secours</span></button></section>`;
   }
@@ -176,6 +201,17 @@ const Auth = (() => {
       if (!(await confirmBox("L'ancien code de secours ne marchera plus. Continuer ?", 'Créer un nouveau code'))) return;
       const code = await newRecovery();
       return modal({ title: 'Nouveau code de secours', body: `<p>Note ce code sur papier et range-le bien.</p><p class="code">${code}</p>`, actions: [{ label: "J'ai noté le code", kind: 'primary' }] });
+    }
+    if (b.dataset.auth === 'cats') {
+      const s = Store.get('staff', b.dataset.id), u = U(s.id) || {};
+      return modal({ title: `Catégories de ${Store.fullName(s)}`, body: `${teamChips(s.teamIds)}
+        <label class="switch" style="margin-top:12px"><input type="checkbox" id="relock" ${u.teamsSet ? '' : 'checked'}><span>Lui redemander ses catégories à sa prochaine connexion</span></label>`,
+        onOpen: r => r.querySelectorAll('#myTeams .chip').forEach(x => x.onclick = () => x.classList.toggle('on')),
+        actions: [{ label: 'Annuler' }, { label: 'Enregistrer', kind: 'primary', onClick: (c, r) => {
+          s.teamIds = [...r.querySelectorAll('#myTeams .chip.on')].map(x => x.dataset.t); Store.upsert('staff', s);
+          A().users[s.id] = Object.assign(U(s.id) || {}, { teamsSet: !$('#relock', r).checked }); Store.save();
+          toast('Catégories enregistrées'); rerender();
+        } }] });
     }
     if (b.dataset.reset) {
       const s = Store.get('staff', b.dataset.reset);
