@@ -1,5 +1,5 @@
 /* Service worker: keeps the app working without internet. Bump VERSION after each update. */
-const VERSION = 'raincy-coach-v16';
+const VERSION = 'raincy-coach-v17';
 const JSPDF = 'https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js';
 const FILES = [
   './', 'index.html', 'app.css', 'manifest.webmanifest',
@@ -19,7 +19,8 @@ self.addEventListener('fetch', e => {
     e.respondWith(caches.match(e.request.url).then(r => r || fetch(e.request).then(res => { const copy = res.clone(); caches.open(VERSION).then(c => c.put(e.request.url, copy)); return res; })));
     return;
   }
-  if (new URL(e.request.url).origin !== location.origin) return;
+  const url = new URL(e.request.url);
+  if (url.origin !== location.origin || url.pathname.endsWith('/version.json')) return;
   // App files: network first so updates arrive when online; cache when offline
   e.respondWith(
     fetch(e.request, { cache: 'no-cache' }).then(res => {

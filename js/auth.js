@@ -100,8 +100,10 @@ const Auth = (() => {
   function frame(inner) {
     const el = lock(); el.hidden = false;
     el.innerHTML = `<div class="lock-card"><img src="icons/crest.png" alt="" class="lock-crest"><p class="eyebrow">Espace éducateurs</p><h1>${esc(Store.state.club.name)}</h1>${inner}
-      <button class="btn wide link how-btn" id="howTo">${I.help}<span>Comment utiliser l'appli ?</span></button></div>`;
+      <button class="btn wide link how-btn" id="howTo">${I.help}<span>Comment utiliser l'appli ?</span></button>
+      <p class="lock-version">Version ${Help.VERSION} · <button class="linkish" id="updApp">Mettre à jour l'appli</button></p></div>`;
     el.querySelector('#howTo').onclick = () => Help.tour();
+    el.querySelector('#updApp').onclick = () => App.checkUpdate(true);
     el.scrollTop = 0;
     return el;
   }

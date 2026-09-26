@@ -52,7 +52,32 @@ const App = (() => {
     root.scrollTop = 0; window.scrollTo(0, 0);
     Help.button();
   }
+  /* Updates: version.json on the site says which build is online. When it is newer than this one,
+     the app empties its offline copy and reloads (an iPhone can keep an old copy open for days). */
+  const BUILD = 17, UPD = 'raincy-update-tried';
+  async function onlineBuild() {
+    const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
+    return (await r.json()).build || 0;
+  }
+  async function forceUpdate() {
+    try { const regs = await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map(r => r.unregister())); } catch (e) {}
+    try { const keys = await caches.keys(); await Promise.all(keys.map(k => caches.delete(k))); } catch (e) {}
+    location.reload();
+  }
+  async function checkUpdate(manual) {
+    let online;
+    try { online = await onlineBuild(); } catch (e) { if (manual) UI.toast('Pas de connexion internet : impossible de vérifier la version.', 'err'); return; }
+    if (online > BUILD) {
+      let tried = null; try { tried = sessionStorage.getItem(UPD); } catch (e) {}
+      if (!manual && tried === String(online)) return; // already tried once: don't loop
+      try { sessionStorage.setItem(UPD, String(online)); } catch (e) {}
+      UI.busy('Mise à jour de l\'appli…'); return forceUpdate();
+    }
+    if (manual) { UI.busy('Rechargement de l\'appli…'); forceUpdate(); }
+  }
   async function start() {
+    if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
+    if (location.protocol !== 'file:') { checkUpdate(); document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkUpdate(); }); }
     await Store.load();
     // Invitation link sent by the responsable: …#rejoindre=CODE
     const join = (location.hash.match(/^#rejoindre=([A-Za-z0-9]+)/) || [])[1];
@@ -64,8 +89,7 @@ const App = (() => {
     route();
     Sync.start();
     Messages.start();
-    if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
   }
-  return { start, route, refreshChrome };
+  return { start, route, refreshChrome, checkUpdate };
 })();
 App.start();

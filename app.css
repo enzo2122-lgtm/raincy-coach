@@ -533,6 +533,8 @@ fieldset.parent legend { font-weight: 800; padding: 0 6px; font-family: var(--ro
 
 /* ---------- help, tour, reports ---------- */
 .how-btn { margin-top: 10px !important; }
+.lock-version { text-align: center; font-size: 12px; color: var(--muted); margin: 10px 0 0; }
+.linkish { background: none; border: 0; padding: 4px 2px; font: inherit; color: var(--bordeaux); text-decoration: underline; cursor: pointer; }
 .tour { position: fixed; inset: 0; z-index: 95; display: grid; place-items: center; padding: 20px 16px; background: rgba(8, 14, 34, .72); backdrop-filter: blur(3px); }
 .tour-card { width: min(480px, 100%); background: var(--surface); border-radius: 22px; padding: 26px 22px 18px; border-top: 5px solid var(--gold); text-align: center; box-shadow: 0 30px 80px -30px rgba(0,0,0,.7); }
 .tour-ic { width: 88px; height: 88px; margin: 0 auto 10px; border-radius: 50%; display: grid; place-items: center; background: var(--navy); color: var(--gold-soft); }
