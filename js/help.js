@@ -2,7 +2,7 @@
    Errors are caught and kept so a coach can attach them to a report. */
 const Help = (() => {
   const { esc, $, $$, toast, modal } = UI;
-  const VERSION = '1.4';
+  const VERSION = '1.5';
   const TOUR_KEY = 'raincy-tour-seen', ERR_KEY = 'raincy-errors';
 
   /* ---------- error log ---------- */
@@ -33,6 +33,7 @@ const Help = (() => {
     ['team', 'Équipes et joueurs', "Dans Équipes, retrouve chaque catégorie avec ses joueurs et dirigeants. Pour charger les licenciés : Réglages → Recevoir un fichier. Touche un joueur pour ajouter son numéro et le téléphone des parents."],
     ['board', 'Le tableau tactique', "Dans Schémas : choisis un outil (joueur, ballon, flèche, zone) puis touche le terrain. Touche « + Étape », déplace les joueurs : la flèche se dessine toute seule. « Jouer » lance l'animation."],
     ['training', 'Séances et matchs', "Prépare tes exercices, coche les présents, note les joueurs avec les étoiles, ajoute photos et vidéos. Pour un match : convocation, composition, score, buteurs… et les smileys !"],
+    ['calendar', 'Planning et messages', "Réserve le terrain (grand ou demi-terrain) sans chevauchement, et discute avec les autres éducateurs dans Messages : tout le club, ta catégorie ou en privé."],
     ['video', 'Vidéos et PDF', "Dans la Bibliothèque, importe une vidéo, un montage ou un PDF venant d'une autre appli : dessine dessus ou transforme un PDF en séance."],
     ['share', 'Imprimer et partager', "Chaque schéma, séance ou match se partage en image, vidéo ou PDF à imprimer. « Envoyer toutes mes données » transmet tout à un autre éducateur."],
     ['help', "Besoin d'aide ?", "Le bouton « ? » est présent sur chaque page : il explique la page et permet de signaler un problème ou de proposer une idée au responsable."],
@@ -80,6 +81,8 @@ const Help = (() => {
     matchs: ['Matchs', ['« Nouveau match » : adversaire, date, domicile ou extérieur.', 'Les résultats s\'affichent avec leur smiley.']],
     match: ['Un match', ['Coche les convoqués et choisis les encadrants.', '« Faire la composition » place les joueurs sur le terrain.', 'Coche « Le match est joué », règle le score, les buteurs et les passeurs, puis note les joueurs.', '« Feuille de match » fait le PDF à imprimer.']],
     stats: ['Statistiques', ['Bilan de l\'équipe : victoires, nuls, défaites, buts et points.', 'Tableau des joueurs : touche un titre de colonne pour trier (buts, passes, présences, notes).']],
+    planning: ['Planning du terrain', ['Touche une case vide du planning (ou « Réserver ») pour prendre un créneau : date, heure de début et de fin, grand terrain ou demi-terrain, entraînement ou match.', 'Pas besoin de connaître l\'adversaire : il suffit de l\'horaire.', 'Un grand terrain bloque tout le terrain. Deux demi-terrains peuvent être utilisés en même temps (A et B).', 'L\'appli refuse tout chevauchement, même si deux coachs réservent en même temps.', 'Touche une réservation pour la libérer ou préparer la séance ou la fiche match.', 'Le responsable fixe les créneaux disponibles de la semaine.']],
+    messages: ['Messages', ['« Tout le club » : pour tous les éducateurs.', 'Chaque catégorie a sa conversation.', '« Écrire à un éducateur » ouvre une conversation privée.', 'Les nouveaux messages arrivent tout seuls ; le chiffre rouge dans le menu indique ceux que tu n\'as pas lus.']],
     reglages: ['Réglages', ['Recevoir un fichier : licenciés ou données d\'un autre éducateur.', 'Envoyer toutes mes données : pour partager avec un autre éducateur ou faire une sauvegarde.', 'Le responsable gère les comptes des dirigeants et l\'e-mail qui reçoit les signalements.']],
     bibliotheque: ['Bibliothèque', ['« Importer » : choisis une vidéo, un montage, un PDF ou une image (Fichiers, Photos…).', 'Vidéo : mets sur pause puis « Dessiner sur cette image ».', 'PDF : « Créer une séance » ou « Dessiner sur cette page ».', '« Joindre… » ajoute le fichier à une séance ou à un match.']],
   };
@@ -98,7 +101,7 @@ const Help = (() => {
   function button() {
     let b = document.getElementById('helpFab');
     if (!b) { b = document.createElement('button'); b.id = 'helpFab'; b.className = 'help-fab'; b.setAttribute('aria-label', 'Aide'); b.innerHTML = `${I.help}<span>Aide</span>`; b.onclick = () => open(); document.body.appendChild(b); }
-    b.hidden = document.body.classList.contains('editing') || !Auth.current();
+    b.hidden = document.body.classList.contains('editing') || !Auth.current() || location.hash.startsWith('#/messages/');
   }
 
   /* ---------- reports ---------- */

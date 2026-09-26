@@ -1,9 +1,11 @@
 /* App shell: navigation, routing, service worker. */
 const App = (() => {
+  // [hash, label, icon, short label for phones]; on phones the first five stay in the tab bar, the others go in « Plus »
   const NAV = [
-    ['', 'Accueil', 'home'], ['equipes', 'Équipes', 'team'], ['schemas', 'Schémas', 'board'],
-    ['entrainements', 'Entraînements', 'training', 'Séances'], ['matchs', 'Matchs', 'match'], ['stats', 'Stats', 'stats'], ['reglages', 'Réglages', 'settings'],
+    ['', 'Accueil', 'home'], ['planning', 'Planning', 'calendar'], ['entrainements', 'Entraînements', 'training', 'Séances'], ['matchs', 'Matchs', 'match'], ['messages', 'Messages', 'chat'],
+    ['equipes', 'Équipes', 'team'], ['schemas', 'Schémas', 'board'], ['bibliotheque', 'Bibliothèque', 'video'], ['stats', 'Stats', 'stats'], ['reglages', 'Réglages', 'settings'],
   ];
+  const PHONE_MAIN = 5;
   const view = () => document.getElementById('view');
 
   function refreshChrome() {
@@ -16,17 +18,26 @@ const App = (() => {
     document.title = c.name + ' · Coach';
   }
   function renderNav(active) {
-    document.getElementById('nav').innerHTML = NAV.map(([h, l, ic, short]) =>
-      `<a href="#/${h}" class="${h === active ? 'on' : ''}" ${h === active ? 'aria-current="page"' : ''} aria-label="${l}">${I[ic]}<span class="lg">${l}</span><span class="sh">${short || l}</span></a>`).join('');
+    const idx = NAV.findIndex(n => n[0] === active);
+    document.getElementById('nav').innerHTML = NAV.map(([h, l, ic, short], i) =>
+      `<a href="#/${h}" class="${h === active ? 'on' : ''} ${i >= PHONE_MAIN ? 'more' : ''}" ${h === active ? 'aria-current="page"' : ''} aria-label="${l}">${I[ic]}<span class="lg">${l}</span><span class="sh">${short || l}</span></a>`).join('')
+      + `<button class="nav-more ${idx >= PHONE_MAIN ? 'on' : ''}" id="navMore" aria-label="Plus de pages">${I.layers}<span class="sh">Plus</span></button>`;
+    document.getElementById('navMore').onclick = () => {
+      const close = UI.modal({ title: 'Plus', noFocus: true,
+        body: `<div class="more-grid">${NAV.slice(PHONE_MAIN).map(([h, l, ic]) => `<a class="more-item" href="#/${h}">${I[ic]}<span>${l}</span></a>`).join('')}</div>`,
+        onOpen: r => r.querySelectorAll('a').forEach(a => a.addEventListener('click', () => close())) });
+    };
+    Messages.badge();
   }
   function route() {
     const [, name = '', id] = (location.hash || '#/').split('/');
     const root = view();
     root.onclick = root.oninput = root.onchange = null;
     Editor.close();
+    if (name !== 'messages') Messages.leave();
     const full = name === 'schema';
     document.body.classList.toggle('editing', full);
-    const navKey = { equipe: 'equipes', joueurs: 'equipes', dirigeants: 'equipes', schema: 'schemas', bibliotheque: 'schemas', entrainement: 'entrainements', match: 'matchs' }[name] || name;
+    const navKey = { equipe: 'equipes', joueurs: 'equipes', dirigeants: 'equipes', schema: 'schemas', entrainement: 'entrainements', match: 'matchs' }[name] || name;
     renderNav(navKey);
     if (full) {
       const sc = Store.get('schemas', id);
@@ -35,6 +46,7 @@ const App = (() => {
     }
     const fn = { '': Views.home, equipes: Views.teams, equipe: Views.team, schemas: Views.schemas, entrainements: Views.trainings, entrainement: Views.training,
       matchs: Views.matches, match: Views.match, stats: Views.stats, reglages: Views.settings,
+      planning: r => Planning.page(r), messages: (r, x) => Messages.page(r, x),
       bibliotheque: r => Library.page(r), joueurs: r => People.listPage(r, 'player'), dirigeants: r => People.listPage(r, 'staff') }[name] || Views.home;
     fn(root, id);
     root.scrollTop = 0; window.scrollTo(0, 0);
@@ -47,6 +59,7 @@ const App = (() => {
     try { await Board.preloadBackgrounds(Store.state.schemas); } catch (e) {}
     window.addEventListener('hashchange', route);
     route();
+    Messages.start();
     if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
   }
   return { start, route, refreshChrome };

@@ -95,6 +95,8 @@ const Store = (() => {
     }));
     // The club's report e-mail travels with the club file so every coach can send reports
     if (obj.data.club && obj.data.club.reportEmail && !state.club.reportEmail) state.club.reportEmail = obj.data.club.reportEmail;
+    // The club server connection (URL, public key, club code) comes with the club file
+    if (obj.data.club && obj.data.club.cloud && obj.data.club.cloud.url) { state.club.cloud = obj.data.club.cloud; if (obj.data.club.fieldName) state.club.fieldName = obj.data.club.fieldName; }
     migrate(); save(); return res;
   }
   function reset() { state = blank(); save(); }

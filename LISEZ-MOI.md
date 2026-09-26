@@ -34,6 +34,17 @@ Chaque éducateur installe l'appli avec la même adresse. Pour partager, va dans
 
 Les données restent sur chaque appareil. Envoie régulièrement une copie de sauvegarde.
 
+## Messagerie et planning du terrain (serveur du club)
+
+La messagerie et le planning sont partagés par tous les éducateurs grâce à un serveur gratuit Supabase.
+
+1. Crée un compte sur https://supabase.com, puis un projet (région Europe).
+2. Dans l'appli, connecté en responsable, va dans **Réglages → Serveur du club → Configurer le serveur**.
+3. Suis les 3 étapes : copie le script dans Supabase (SQL Editor → Run), puis colle la Project URL et la clé publique (anon ou publishable). N'utilise jamais la clé secrète.
+4. Envoie le fichier du club aux éducateurs (Réglages → Envoyer toutes mes données) : leur appli se connecte toute seule.
+
+Le **code responsable** (Réglages → Code responsable) sert à fixer les créneaux disponibles. Il reste sur ton appareil.
+
 ## Mettre à jour l'appli
 
-Remplace les fichiers sur GitHub. Augmente ensuite le numéro de version dans `sw.js` (`raincy-coach-v3` devient `raincy-coach-v4`) et dans `index.html` (`?v=3` devient `?v=4`). Les iPad récupèrent la nouvelle version à la prochaine ouverture avec internet.
+Remplace les fichiers sur GitHub. Augmente ensuite le numéro de version dans `sw.js` (par exemple `raincy-coach-v9` devient `raincy-coach-v10`) et dans `index.html` (`?v=9` devient `?v=10`). Les iPad récupèrent la nouvelle version à la prochaine ouverture avec internet.

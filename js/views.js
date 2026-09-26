@@ -55,6 +55,11 @@ const Views = (() => {
           ${nextTr ? `<a class="rowlink" href="#/entrainement/${nextTr.id}"><div><b>${esc(nextTr.title || 'Entraînement')}</b><span>${esc(fmtDate(nextTr.date, { weekday: 'long', day: 'numeric', month: 'long' }))} · ${nextTr.exercises.length} exercice${nextTr.exercises.length > 1 ? 's' : ''}</span></div>${I.next}</a>` : `<p class="muted">Aucun entraînement prévu.</p>`}
         </section>
         <section class="card">
+          <h2>${I.calendar}Mes créneaux (7 jours)</h2>
+          <div id="planMini"><p class="muted">Chargement…</p></div>
+          <a class="btn soft" href="#/planning" style="margin-top:8px">${I.calendar}<span>Ouvrir le planning</span></a>
+        </section>
+        <section class="card">
           <h2>${I.stats}Derniers résultats</h2>
           ${last.length ? `<ul class="res-list">${last.map(m => `<li><a href="#/match/${m.id}"><span class="d">${esc(fmtDate(m.date))}</span><span class="o">${esc(m.opponent)}</span><span class="s">${scoreTxt(m)}</span>${resPill(m)}</a></li>`).join('')}</ul>` : `<p class="muted">Pas encore de résultat.</p>`}
         </section>
@@ -64,6 +69,7 @@ const Views = (() => {
         </section>
       </div>`;
     bindTeamSwitch(root, () => home(root));
+    Planning.upcoming($('#planMini', root));
     $$('[data-go]', root).forEach(b => b.onclick = () => ({ 'new-schema': newSchema, 'new-training': newTraining, 'new-match': newMatch })[b.dataset.go]());
   }
 
@@ -441,6 +447,7 @@ const Views = (() => {
     const bibs = (key, cur) => `<div class="chips">${Object.entries(Board.BIBS).map(([k, v]) => `<button class="chip bib ${k === cur ? 'on' : ''}" data-${key}="${k}" aria-label="${k}"><i class="sw" style="background:${v[0]}"></i>${k}</button>`).join('')}</div>`;
     root.innerHTML = `${header('Réglages', '')}
       ${Auth.settingsSection()}
+      ${Cloud.settingsSection()}
       ${Help.settingsSection()}
       <section class="card">
         <h2>${I.team}Club</h2>
@@ -478,6 +485,7 @@ const Views = (() => {
       if (b.dataset.away) { c.awayBib = b.dataset.away; Store.save(); return settings(root); }
       if (b.dataset.act === 'exportAll') return runExport('Préparation du fichier…', async () => Exporter.json(await Library.withBackgrounds(Store.exportAll()), `${c.name}-${today()}`));
       if (b.dataset.auth || b.dataset.reset) return Auth.onSettingsClick(b, () => settings(root));
+      if (b.dataset.cloud) return Cloud.onSettingsClick(b, () => settings(root));
       if (b.dataset.act === 'import') return importFile();
       if (b.dataset.act === 'noExamples' && await confirmBox('Supprimer toutes les données d\'exemple ?')) { Store.removeExamples(); toast('Exemples supprimés'); return settings(root); }
       if (b.dataset.act === 'reset' && await confirmBox('Effacer toutes les équipes, schémas, entraînements et matchs de cet appareil ?', 'Tout effacer')) { Store.reset(); toast('Données effacées'); Auth.logout(); }
