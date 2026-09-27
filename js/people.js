@@ -35,6 +35,7 @@ const People = (() => {
       <button class="person-main" data-person="${p.id}" data-kind="player">
         <span class="pnum">${esc(p.number || '')}</span>
         <span class="pmain"><b>${esc(name(p))}</b><span class="muted">${esc(sub) || '&nbsp;'}</span></span>
+        ${teamId ? pctBadge(attendance(p, teamId)) : ''}
         ${phonesOf(p).length ? `<span class="has-tel" title="Téléphone renseigné">${I.phone}</span>` : ''}
       </button>${ab}
       ${teamId ? `<button class="icon-btn" data-unlink="${p.id}" data-kind="player" aria-label="Retirer ${esc(name(p))} de la catégorie">${I.x}</button>` : ''}
@@ -207,7 +208,8 @@ const People = (() => {
       if (b.dataset.ab) { const g = groupsOf(t), p = Store.get('players', b.dataset.p); if (g && p) { moveGroup(p, b.dataset.ab, g); rerender(); } return; }
       if (b.hasAttribute('data-newplayer')) return editPlayer(null, { teamId: t.id, onSave: rerender });
       if (b.hasAttribute('data-newstaff')) return editStaff(null, { teamId: t.id, onSave: rerender });
-      if (b.dataset.person) return (b.dataset.kind === 'player' ? editPlayer : editStaff)(Store.get(b.dataset.kind === 'player' ? 'players' : 'staff', b.dataset.person), { onSave: rerender });
+      if (b.dataset.person && b.dataset.kind === 'player') { location.hash = '#/joueur/' + b.dataset.person; return; }
+      if (b.dataset.person) return editStaff(Store.get('staff', b.dataset.person), { onSave: rerender });
       if (b.dataset.unlink) {
         const col = b.dataset.kind === 'player' ? 'players' : 'staff', p = Store.get(col, b.dataset.unlink);
         if (await confirmBox(`Retirer ${name(p)} de ${t.name} ? ${b.dataset.kind === 'player' ? 'Le joueur' : 'Le dirigeant'} reste dans le club.`, 'Retirer')) { p.teamIds = p.teamIds.filter(id => id !== t.id); Store.upsert(col, p); rerender(); }
@@ -248,7 +250,8 @@ const People = (() => {
       const b = e.target.closest('button'); if (!b) return;
       if (b.dataset.act === 'new') return (isP ? editPlayer : editStaff)(null, { teamId: filt && filt !== '-' ? filt : null, onSave: again });
       if (b.dataset.act === 'paste') return isP ? pasteList(again) : pasteStaff(again);
-      if (b.dataset.person) (isP ? editPlayer : editStaff)(Store.get(isP ? 'players' : 'staff', b.dataset.person), { onSave: again });
+      if (b.dataset.person && isP) { location.hash = '#/joueur/' + b.dataset.person; return; }
+      if (b.dataset.person) editStaff(Store.get('staff', b.dataset.person), { onSave: again });
     };
   }
 
@@ -444,5 +447,79 @@ const People = (() => {
     return { players: p, staff: s };
   }
 
-  return { isClubList, importClubList, autoCategories, sortByBirth, sortByBirthDialog, catOf, seasonLabel, editPlayer, editStaff, teamSections, bindTeamSections, staffPicker, listPage, age, fmtBirth, tel, name };
+  /* ---------- season figures of a player: attendance, playing time, goals ---------- */
+  const seasonFrom = () => `${seasonStart()}-07-01`;
+  // Sessions of the season where the attendance was taken (at least one player ticked), up to today
+  function attendance(p, teamId) {
+    const from = seasonFrom(), now = UI.today(), ids = teamId ? [teamId] : (p.teamIds || []);
+    const trs = S().trainings.filter(t => t.date >= from && t.date <= now && ids.includes(t.teamId) && (t.presents || []).length);
+    const n = trs.filter(t => t.presents.includes(p.id)).length;
+    return { n, total: trs.length, pct: trs.length ? Math.round(n / trs.length * 100) : null, list: trs };
+  }
+  // Length of a match (minutes) by category: the coach can change it on the match
+  function matchLength(m) {
+    if (m && +m.duration) return +m.duration;
+    const t = m && Store.get('teams', m.teamId), c = catKey((t && (t.category || t.name)) || '');
+    const n = +((/^U(\d+)/.exec(c) || [])[1] || 0);
+    if (!n) return 90;
+    return n >= 17 ? 90 : n >= 14 ? 80 : n >= 12 ? 60 : n >= 10 ? 50 : 40;
+  }
+  function seasonMatches(p) {
+    const from = seasonFrom();
+    return S().matches.filter(m => m.date >= from && !m.exempt && (m.convoked || []).includes(p.id)).sort((a, b) => b.date.localeCompare(a.date));
+  }
+  function playerSeason(p) {
+    const ms = seasonMatches(p), played = ms.filter(m => m.played);
+    const minutes = played.reduce((a, m) => a + (+((m.minutes || {})[p.id]) || 0), 0);
+    const withMin = played.filter(m => (m.minutes || {})[p.id] != null && (m.minutes || {})[p.id] !== '');
+    const g = played.reduce((a, m) => a + (((m.stats || {})[p.id] || {}).g || 0), 0), as = played.reduce((a, m) => a + (((m.stats || {})[p.id] || {}).a || 0), 0);
+    return { ms, played, minutes, avg: withMin.length ? Math.round(minutes / withMin.length) : null, g, a: as, att: attendance(p) };
+  }
+  const pctClass = v => v == null ? '' : v >= 75 ? 'pct-good' : v >= 50 ? 'pct-mid' : 'pct-low';
+  const pctBadge = a => a.pct == null ? '' : `<i class="pct ${pctClass(a.pct)}" title="${a.n} séance${a.n > 1 ? 's' : ''} sur ${a.total} cette saison">${a.pct} %</i>`;
+
+  /* ---------- the full player page (#/joueur/id) ---------- */
+  function playerPage(root, id) {
+    const p = Store.get('players', id);
+    if (!p || !Auth.seesPerson(p)) { location.hash = '#/joueurs'; return; }
+    const s = playerSeason(p), hh = x => String(x || '').replace(':', 'h');
+    const res = m => !m.played ? '' : m.gf > m.ga ? 'V' : m.gf < m.ga ? 'D' : 'N';
+    const am = Ratings.average(p.id, 'match'), at = Ratings.average(p.id, 'training');
+    const tile = (v, l, cls = '') => `<div class="tile ${cls}"><b>${v}</b><span>${l}</span></div>`;
+    const recentTr = s.att.list.slice().sort((a, b) => b.date.localeCompare(a.date)).slice(0, 12);
+    root.innerHTML = `<header class="page-head"><div><h1>${p.number ? `<span class="pnum big">${esc(p.number)}</span> ` : ''}${esc(name(p))}</h1>
+        <p class="sub">${[POS.find(x => x[0] === p.pos) && p.pos ? POS.find(x => x[0] === p.pos)[1] : '', p.birth ? `${age(p.birth)} ans (${fmtBirth(p.birth)})` : '', p.subcat, teamNames(p.teamIds)].filter((x, i, a) => x && a.indexOf(x) === i).map(esc).join(' · ')}</p></div>
+      <div class="head-actions"><button class="btn" data-act="back">${I.back}<span>Retour</span></button><button class="btn primary" data-act="edit">${I.edit}<span>Modifier</span></button></div></header>
+      <div class="tiles">
+        ${tile(s.att.pct == null ? '–' : s.att.pct + ' %', `Présence à l'entraînement${s.att.total ? ` (${s.att.n}/${s.att.total})` : ''}`, s.att.pct == null ? '' : s.att.pct >= 75 ? 'v' : s.att.pct >= 50 ? 'n' : 'd')}
+        ${tile(s.played.length, 'Matchs joués')}${tile(s.minutes, 'Minutes jouées')}${tile(s.avg == null ? '–' : s.avg + "'", 'Moyenne par match')}
+        ${tile(s.g, 'Buts')}${tile(s.a, 'Passes déc.')}${tile(am ? Ratings.fr(am) : '–', 'Note matchs /5')}${tile(at ? Ratings.fr(at) : '–', 'Note entr. /5')}
+      </div>
+      <p class="muted small">Saison ${esc(seasonLabel())} · les présences comptent les séances où le coach a fait l'appel.</p>
+      <div class="cards2">
+        <section class="card"><h2>${I.phone}Contacts</h2>
+          ${p.phone ? tel(p.phone, 'Joueur') : ''}${(p.parents || []).map(x => `<div class="pp-parent"><b>${esc(x.name || x.rel || 'Parent')}</b>${x.rel && x.name ? ` <span class="muted">(${esc(x.rel)})</span>` : ''}${x.phone ? tel(x.phone) : ''}</div>`).join('')}
+          ${p.email ? `<p><a href="mailto:${esc(p.email)}">${esc(p.email)}</a></p>` : ''}
+          ${!phonesOf(p).length && !p.email ? '<p class="muted">Aucun contact : touche « Modifier » pour ajouter le téléphone des parents.</p>' : ''}
+          ${p.notes ? `<h3 class="sub-h">Infos utiles</h3><p class="pre">${esc(p.notes)}</p>` : ''}
+        </section>
+        <section class="card"><h2>${I.match}Matchs de la saison (${s.ms.length})</h2>
+          ${s.ms.length ? `<ul class="res-list">${s.ms.slice(0, 15).map(m => { const st = (m.stats || {})[p.id] || {}, mn = (m.minutes || {})[p.id];
+            return `<li><a href="#/match/${m.id}"><span class="d">${esc(UI.fmtDate(m.date))}</span><span class="o">${m.home ? 'contre' : 'chez'} ${esc(m.opponent || '?')}</span>
+            <span class="s">${m.played ? `${mn != null && mn !== '' ? esc(mn) + "'" : ''}${st.g ? ' ⚽' + (st.g > 1 ? '×' + st.g : '') : ''}${st.a ? ' 🅿️' + (st.a > 1 ? '×' + st.a : '') : ''}` : hh(m.time) || 'à venir'}</span>${res(m) ? `<span class="res res-${res(m)}">${res(m)}</span>` : ''}</a></li>`; }).join('')}</ul>` : '<p class="muted">Pas encore convoqué cette saison.</p>'}
+        </section>
+        <section class="card"><h2>${I.training}Entraînements (${s.att.n}/${s.att.total})</h2>
+          ${recentTr.length ? `<div class="att-strip">${recentTr.map(t => `<a class="att ${t.presents.includes(p.id) ? 'in' : 'out'}" href="#/entrainement/${t.id}" title="${esc(t.title || 'Entraînement')}"><b>${t.presents.includes(p.id) ? '✓' : '✗'}</b><span>${esc(UI.fmtDate(t.date, { day: 'numeric', month: 'short' }))}</span></a>`).join('')}</div>` : '<p class="muted">Aucun appel fait pour l\'instant.</p>'}
+        </section>
+        <section class="card">${notesHistory(p) || `<h2>⭐ Notes des dirigeants</h2><p class="muted">Pas encore de note.</p>`}</section>
+      </div>`;
+    root.onclick = e => {
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.act === 'back') return history.length > 1 ? history.back() : (location.hash = '#/joueurs');
+      if (b.dataset.act === 'edit') return editPlayer(p, { onSave: () => { if (Store.get('players', p.id)) playerPage(root, p.id); else location.hash = '#/joueurs'; } });
+    };
+  }
+
+  return { isClubList, importClubList, autoCategories, sortByBirth, sortByBirthDialog, catOf, seasonLabel, seasonFrom, editPlayer, editStaff, teamSections, bindTeamSections, staffPicker, listPage, playerPage, age, fmtBirth, tel, name,
+    attendance, pctBadge, matchLength, playerSeason };
 })();

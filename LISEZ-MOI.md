@@ -49,6 +49,17 @@ La messagerie, le planning du terrain et les effectifs sont partagés par le ser
 
 Tu peux toujours envoyer un fichier à la main : **Réglages → Envoyer toutes mes données**, ou **Envoyer** sur un entraînement ou un schéma (AirDrop, WhatsApp ou mail).
 
+## Nouveautés de la version 3.8
+
+**À faire une fois par le responsable, après la mise en ligne :** Réglages → Serveur du club → **Mettre à jour le serveur** → Copier le script → le coller dans Supabase (SQL Editor → New query → Run) → « Success » → revenir et toucher **Tester**. Sans cette étape, tout marche comme avant, mais la page des parents, leurs réponses et les sauvegardes automatiques ne fonctionnent pas encore (l'appli l'indique).
+
+- **Schémas** : « Modèles » (rondo, 3 contre 2, conservation, sortie de balle, centre-tir, déjà animés), bouton copie pour dupliquer un schéma, « Tableau blanc » en plein écran sans enregistrement (« Garder » pour le transformer en schéma).
+- **Joueurs** : présences d'un toucher avec le % de la saison, temps de jeu par match (rubrique « Temps de jeu » d'un match joué), fiche joueur complète (toucher un joueur).
+- **Parents** : sur une catégorie, « Lien pour les parents ». Page en lecture seule (`parents.html`) : matchs, horaires, lieux, séances, covoiturage, et réponses présent / absent. Elle ne montre que le prénom et l'initiale du nom des enfants convoqués : jamais de date de naissance ni de téléphone. « Nouveau lien » annule l'ancien.
+- **Covoiturage** : sur un match à l'extérieur, voitures des parents et enfants rangés dedans, à envoyer sur WhatsApp.
+- **Tableau de bord** (responsables) : chiffres de la saison, détail par catégorie, points à surveiller.
+- **Sauvegardes** : le serveur copie toutes les données chaque lundi à 3 h et garde 8 semaines (Tableau de bord → Sauvegardes). On peut aussi télécharger une copie. **Ces fichiers contiennent des données de mineurs : ne jamais les mettre sur GitHub.**
+
 ## Mettre à jour l'appli
 
 Remplace les fichiers sur GitHub. Augmente ensuite le même numéro partout :

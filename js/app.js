@@ -32,13 +32,15 @@ const App = (() => {
     document.title = (u ? coach + ' · ' : '') + c.name;
   }
   function renderNav(active) {
-    const idx = NAV.findIndex(n => n[0] === active);
-    document.getElementById('nav').innerHTML = NAV.map(([h, l, ic, short], i) =>
+    // the responsables also have the club's dashboard (before Réglages)
+    const nav = Auth.isAdmin() ? [...NAV.slice(0, -1), ['president', 'Tableau de bord', 'shield', 'Président'], NAV[NAV.length - 1]] : NAV;
+    const idx = nav.findIndex(n => n[0] === active);
+    document.getElementById('nav').innerHTML = nav.map(([h, l, ic, short], i) =>
       `<a href="#/${h}" class="${h === active ? 'on' : ''} ${i >= PHONE_MAIN ? 'more' : ''}" ${h === active ? 'aria-current="page"' : ''} aria-label="${l}">${I[ic]}<span class="lg">${l}</span><span class="sh">${short || l}</span></a>`).join('')
       + `<button class="nav-more ${idx >= PHONE_MAIN ? 'on' : ''}" id="navMore" aria-label="Plus de pages">${I.layers}<span class="sh">Plus</span></button>`;
     document.getElementById('navMore').onclick = () => {
       const close = UI.modal({ title: 'Plus', noFocus: true,
-        body: `<div class="more-grid">${NAV.slice(PHONE_MAIN).map(([h, l, ic]) => `<a class="more-item" href="#/${h}">${I[ic]}<span>${l}</span></a>`).join('')}</div>`,
+        body: `<div class="more-grid">${nav.slice(PHONE_MAIN).map(([h, l, ic]) => `<a class="more-item" href="#/${h}">${I[ic]}<span>${l}</span></a>`).join('')}</div>`,
         onOpen: r => r.querySelectorAll('a').forEach(a => a.addEventListener('click', () => close())) });
     };
     Messages.badge();
@@ -54,10 +56,12 @@ const App = (() => {
     if (name !== 'messages') Messages.leave();
     if (name === 'connexion') { history.replaceState(null, '', '#/'); route(); return Auth.connectServer(); }
     document.body.dataset.page = name;
-    const full = name === 'schema';
+    const full = name === 'schema' || name === 'tableau';
     document.body.classList.toggle('editing', full);
-    const navKey = { equipe: 'equipes', joueurs: 'equipes', dirigeants: 'equipes', schema: 'schemas', entrainement: 'entrainements', match: 'matchs' }[name] || name;
+    const navKey = { equipe: 'equipes', joueurs: 'equipes', joueur: 'equipes', dirigeants: 'equipes', schema: 'schemas', tableau: 'schemas', entrainement: 'entrainements', match: 'matchs' }[name] || name;
     renderNav(navKey);
+    // Whiteboard: a blank board, never saved (id = format of the pitch)
+    if (name === 'tableau') { Help.button(); return Editor.open(root, Templates.blank(id || '11'), { scratch: true }); }
     if (full) {
       const sc = Store.get('schemas', id);
       if (!sc) { location.hash = '#/schemas'; return; }
@@ -66,14 +70,15 @@ const App = (() => {
     const fn = { '': Views.home, equipes: Views.teams, equipe: Views.team, schemas: Views.schemas, entrainements: Views.trainings, entrainement: Views.training,
       matchs: Views.matches, match: Views.match, stats: Views.stats, reglages: Views.settings,
       planning: r => Planning.page(r), resultats: r => Results.page(r), club: (r, x) => ClubLife.page(r, x), messages: (r, x) => Messages.page(r, x),
-      bibliotheque: r => Library.page(r), joueurs: r => People.listPage(r, 'player'), dirigeants: r => People.listPage(r, 'staff') }[name] || Views.home;
+      bibliotheque: r => Library.page(r), joueurs: r => People.listPage(r, 'player'), dirigeants: r => People.listPage(r, 'staff'),
+      joueur: (r, x) => People.playerPage(r, x), president: r => President.page(r) }[name] || Views.home;
     fn(root, id);
     if (keep) { root.scrollTop = st; window.scrollTo(0, sy); } else { root.scrollTop = 0; window.scrollTo(0, 0); }
     Help.button();
   }
   /* Updates: version.json on the site says which build is online. When it is newer than this one,
      the app empties its offline copy and reloads (an iPhone can keep an old copy open for days). */
-  const BUILD = 44, UPD = 'raincy-update-tried';
+  const BUILD = 45, UPD = 'raincy-update-tried';
   async function onlineBuild() {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
     return (await r.json()).build || 0;

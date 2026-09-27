@@ -29,6 +29,8 @@ const Cloud = (() => {
     CLE_CLUB: 'Le code du club est incorrect : demande au responsable de te renvoyer le fichier du club.',
     ADMIN: 'Réservé à un responsable (code responsable manquant ou incorrect).',
     HORAIRE: 'L\'heure de fin doit être après l\'heure de début.',
+    LIEN_PARENTS: 'Ce lien n\'est plus valable : demande le nouveau lien au coach.',
+    MATCH_PASSE: 'Ce match est passé : les réponses sont fermées.',
   };
   function nice(msg) {
     const k = Object.keys(ERRORS).find(x => String(msg).includes(x));
@@ -271,6 +273,123 @@ grant execute on function club_unbook_series(text, text, text, text) to anon, au
 grant execute on function club_ping(text), club_admin_ping(text, text), club_messages(text, timestamptz), club_post(text, text, text, text, text),
   club_delete_message(text, uuid, text, text), club_slots(text), club_set_slots(text, text, jsonb), club_bookings(text, date, date),
   club_book(text, jsonb), club_unbook(text, uuid, text, text) to anon, authenticated;
+
+-- Parents (version 3.8) : une page publique en lecture seule par catégorie (lien secret), et les réponses présent / absent aux convocations.
+-- La page ne montre que le prénom et l'initiale du nom des enfants convoqués : jamais de date de naissance, de téléphone ni d'adresse.
+create table if not exists parent_links (token text primary key, team_key text not null unique, team_ids text[] not null default '{}',
+  team_name text not null default '', created_at timestamptz not null default now());
+create table if not exists answers (match_id text not null, player_id text not null, status text not null check (status in ('oui', 'non')),
+  seats int not null default 0, note text, by_coach boolean not null default false, updated_at timestamptz not null default now(), primary key (match_id, player_id));
+alter table parent_links enable row level security;
+alter table answers enable row level security;
+-- Un coach récupère le lien de sa catégorie (toujours le même ; « nouveau lien » annule l'ancien)
+create or replace function club_parent_link(k text, p_team_key text, p_team_ids text[], p_team_name text, p_new boolean) returns jsonb language plpgsql security definer set search_path = public as $$
+declare t text;
+begin if not club_ok(k) then raise exception 'CLE_CLUB'; end if;
+  if coalesce(p_team_key, '') = '' or coalesce(array_length(p_team_ids, 1), 0) = 0 then raise exception 'DONNEES'; end if;
+  select token into t from parent_links where team_key = p_team_key;
+  if t is null or p_new then
+    t := substr(raincy_token(), 1, 24);
+    insert into parent_links (token, team_key, team_ids, team_name) values (t, p_team_key, p_team_ids, coalesce(p_team_name, ''))
+      on conflict (team_key) do update set token = excluded.token, team_ids = excluded.team_ids, team_name = excluded.team_name, created_at = now();
+  else update parent_links set team_ids = p_team_ids, team_name = coalesce(p_team_name, team_name) where team_key = p_team_key;
+  end if;
+  return to_jsonb(t); end $$;
+-- « Prénom N. » d'un licencié
+create or replace function raincy_short(p jsonb) returns text language sql immutable as $$
+  select trim(coalesce(p->>'firstName', '') || case when coalesce(p->>'lastName', '') <> '' then ' ' || upper(left(p->>'lastName', 1)) || '.' else '' end) $$;
+-- La page des parents : matchs de la catégorie (3 semaines avant, 2 mois après), séances des 2 semaines à venir
+create or replace function parent_view(p_token text) returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare l parent_links; today text := to_char(current_date, 'YYYY-MM-DD');
+begin
+  select * into l from parent_links where coalesce(p_token, '') <> '' and token = p_token;
+  if l.token is null then raise exception 'LIEN_PARENTS'; end if;
+  return jsonb_build_object('team', l.team_name,
+    'club', (select jsonb_build_object('name', data->>'name', 'fieldName', data->>'fieldName') from items where col = 'club' and id = 'club' and not deleted),
+    'matches', (select coalesce(jsonb_agg(x order by x->>'date', x->>'time'), '[]'::jsonb) from (
+      select jsonb_build_object('id', i.id, 'date', i.data->>'date', 'time', i.data->>'time', 'rdv', i.data->>'rdv', 'opponent', i.data->>'opponent',
+        'home', coalesce((i.data->>'home')::boolean, false), 'place', i.data->>'place', 'competition', i.data->>'competition',
+        'exempt', coalesce((i.data->>'exempt')::boolean, false), 'played', coalesce((i.data->>'played')::boolean, false), 'gf', i.data->'gf', 'ga', i.data->'ga',
+        'team', (select t.data->>'name' from items t where t.col = 'teams' and t.id = i.data->>'teamId'),
+        'open', not coalesce((i.data->>'played')::boolean, false) and i.data->>'date' >= today,
+        'players', case when not coalesce((i.data->>'played')::boolean, false) and i.data->>'date' >= today then (
+          select coalesce(jsonb_agg(jsonb_build_object('id', p.id, 'name', raincy_short(p.data), 'answer', a.status, 'seats', coalesce(a.seats, 0)) order by p.data->>'firstName'), '[]'::jsonb)
+          from items p left join answers a on a.match_id = i.id and a.player_id = p.id
+          where p.col = 'players' and not p.deleted and p.id in (select jsonb_array_elements_text(coalesce(i.data->'convoked', '[]'::jsonb)))) else '[]'::jsonb end,
+        'carpool', (select coalesce(jsonb_agg(jsonb_build_object('driver', c->>'driver', 'seats', coalesce((c->>'seats')::int, 0), 'from', c->>'from', 'time', c->>'time',
+            'kids', (select coalesce(jsonb_agg(raincy_short(p.data)), '[]'::jsonb) from items p where p.col = 'players' and p.id in (select jsonb_array_elements_text(coalesce(c->'kids', '[]'::jsonb)))))), '[]'::jsonb)
+          from jsonb_array_elements(case when jsonb_typeof(i.data->'carpool') = 'array' then i.data->'carpool' else '[]'::jsonb end) c)) x
+      from items i where i.col = 'matches' and not i.deleted and i.data->>'teamId' = any(l.team_ids)
+        and i.data->>'date' between to_char(current_date - 21, 'YYYY-MM-DD') and to_char(current_date + 60, 'YYYY-MM-DD')) s),
+    'trainings', (select coalesce(jsonb_agg(jsonb_build_object('date', i.data->>'date', 'time', i.data->>'time', 'title', i.data->>'title') order by i.data->>'date', i.data->>'time'), '[]'::jsonb)
+      from items i where i.col = 'trainings' and not i.deleted and i.data->>'teamId' = any(l.team_ids)
+        and i.data->>'date' between today and to_char(current_date + 14, 'YYYY-MM-DD')));
+end $$;
+-- Un parent répond pour son enfant convoqué (présent / absent, et places libres dans sa voiture pour un match à l'extérieur)
+create or replace function parent_answer(p_token text, p_match text, p_player text, p_status text, p_seats int default 0, p_note text default null) returns jsonb language plpgsql security definer set search_path = public as $$
+declare l parent_links; m items;
+begin
+  select * into l from parent_links where coalesce(p_token, '') <> '' and token = p_token;
+  if l.token is null then raise exception 'LIEN_PARENTS'; end if;
+  select * into m from items where col = 'matches' and id = p_match and not deleted;
+  if m.id is null or not (m.data->>'teamId' = any(l.team_ids)) or not (coalesce(m.data->'convoked', '[]'::jsonb) ? p_player) then raise exception 'DONNEES'; end if;
+  if coalesce((m.data->>'played')::boolean, false) or m.data->>'date' < to_char(current_date, 'YYYY-MM-DD') then raise exception 'MATCH_PASSE'; end if;
+  if coalesce(p_status, '') = '' then delete from answers where match_id = p_match and player_id = p_player; return to_jsonb(true); end if;
+  if p_status not in ('oui', 'non') then raise exception 'DONNEES'; end if;
+  insert into answers (match_id, player_id, status, seats, note, by_coach) values (p_match, p_player, p_status, greatest(0, least(coalesce(p_seats, 0), 8)), left(p_note, 200), false)
+    on conflict (match_id, player_id) do update set status = excluded.status, seats = excluded.seats, note = excluded.note, by_coach = false, updated_at = now();
+  return to_jsonb(true); end $$;
+-- Les coachs lisent les réponses, et peuvent répondre à la place d'un parent (appel, SMS)
+create or replace function club_answers(k text, p_matches text[]) returns jsonb language plpgsql security definer set search_path = public as $$
+begin if not club_ok(k) then raise exception 'CLE_CLUB'; end if;
+  return (select coalesce(jsonb_agg(jsonb_build_object('match_id', match_id, 'player_id', player_id, 'status', status, 'seats', seats, 'note', note, 'by_coach', by_coach, 'at', updated_at)), '[]'::jsonb)
+    from answers where match_id = any(p_matches)); end $$;
+create or replace function club_set_answer(k text, p_match text, p_player text, p_status text) returns jsonb language plpgsql security definer set search_path = public as $$
+begin if not club_ok(k) then raise exception 'CLE_CLUB'; end if;
+  if coalesce(p_status, '') = '' then delete from answers where match_id = p_match and player_id = p_player; return to_jsonb(true); end if;
+  if p_status not in ('oui', 'non') then raise exception 'DONNEES'; end if;
+  insert into answers (match_id, player_id, status, by_coach) values (p_match, p_player, p_status, true)
+    on conflict (match_id, player_id) do update set status = excluded.status, by_coach = true, updated_at = now();
+  return to_jsonb(true); end $$;
+grant execute on function club_parent_link(text, text, text[], text, boolean), parent_view(text), parent_answer(text, text, text, text, int, text),
+  club_answers(text, text[]), club_set_answer(text, text, text, text) to anon, authenticated;
+
+-- Sauvegardes du club (version 3.8) : une copie de toutes les données chaque lundi à 3 h, les 8 dernières sont gardées.
+-- Elles restent sur le serveur (privé) ; seul un responsable peut les lister et les télécharger.
+create table if not exists backups (id bigserial primary key, created_at timestamptz not null default now(), kind text not null default 'auto', size int, data jsonb not null);
+alter table backups enable row level security;
+create or replace function raincy_backup(p_kind text default 'auto') returns bigint language plpgsql security definer set search_path = public as $$
+declare d jsonb; n bigint;
+begin
+  d := jsonb_build_object('app', 'raincy-coach', 'version', 1, 'exportedAt', now(), 'backup', true,
+    'data', coalesce((select jsonb_object_agg(col, arr) from (select col, jsonb_agg(data - 'bgData') arr from items where not deleted and data is not null and col <> 'club' group by col) g), '{}'::jsonb)
+      || jsonb_build_object('club', coalesce((select data - 'cloud' from items where col = 'club' and id = 'club' and not deleted), '{}'::jsonb)));
+  insert into backups (kind, size, data) values (coalesce(p_kind, 'auto'), length(d::text), d) returning id into n;
+  delete from backups where id not in (select id from backups order by created_at desc limit 8);
+  return n; end $$;
+revoke all on function raincy_backup(text) from public, anon, authenticated;
+create or replace function club_backups(k text, admin_k text) returns jsonb language plpgsql security definer set search_path = public as $$
+begin if not club_ok(k) then raise exception 'CLE_CLUB'; end if; if not admin_ok(admin_k) then raise exception 'ADMIN'; end if;
+  return (select coalesce(jsonb_agg(jsonb_build_object('id', id, 'at', created_at, 'kind', kind, 'size', size) order by created_at desc), '[]'::jsonb) from backups); end $$;
+create or replace function club_backup_now(k text, admin_k text) returns bigint language plpgsql security definer set search_path = public as $$
+begin if not club_ok(k) then raise exception 'CLE_CLUB'; end if; if not admin_ok(admin_k) then raise exception 'ADMIN'; end if;
+  return raincy_backup('manuel'); end $$;
+create or replace function club_backup_get(k text, admin_k text, p_id bigint) returns jsonb language plpgsql security definer set search_path = public as $$
+begin if not club_ok(k) then raise exception 'CLE_CLUB'; end if; if not admin_ok(admin_k) then raise exception 'ADMIN'; end if;
+  return (select data from backups where id = p_id); end $$;
+create or replace function club_backup_auto(k text) returns boolean language plpgsql security definer set search_path = public as $$
+begin if not club_ok(k) then raise exception 'CLE_CLUB'; end if;
+  return exists (select 1 from pg_extension where extname = 'pg_cron'); end $$;
+grant execute on function club_backups(text, text), club_backup_now(text, text), club_backup_get(text, text, bigint), club_backup_auto(text) to anon, authenticated;
+-- Programmation chaque lundi à 3 h (si l'extension pg_cron n'est pas disponible, la sauvegarde reste possible à la main)
+do $cron$ begin
+  begin
+    create extension if not exists pg_cron with schema pg_catalog;
+    perform cron.unschedule(jobid) from cron.job where jobname = 'raincy-backup';
+    perform cron.schedule('raincy-backup', '0 3 * * 1', 'select public.raincy_backup(''auto'')');
+  exception when others then raise notice 'Sauvegarde automatique non programmée : %', sqlerrm;
+  end;
+end $cron$;
 notify pgrst, 'reload schema';
 `;
   }
@@ -307,6 +426,15 @@ notify pgrst, 'reload schema';
     // shared club data
     pull: since => rpc('club_pull', { p_since: since || 0 }),
     push: list => rpc('club_push', { p: list }),
+    // parents (3.8)
+    parentLink: (teamKey, teamIds, teamName, renew) => rpc('club_parent_link', { p_team_key: teamKey, p_team_ids: teamIds, p_team_name: teamName, p_new: !!renew }),
+    answers: matchIds => rpc('club_answers', { p_matches: matchIds }),
+    setAnswer: (matchId, playerId, status) => rpc('club_set_answer', { p_match: matchId, p_player: playerId, p_status: status || '' }),
+    // backups (3.8)
+    backups: () => rpc('club_backups', { admin_k: adminKey() }),
+    backupNow: () => rpc('club_backup_now', { admin_k: adminKey() }),
+    backupGet: id => rpc('club_backup_get', { admin_k: adminKey(), p_id: id }),
+    backupAuto: () => rpc('club_backup_auto'),
   };
   const inviteLink = code => `${location.origin}${location.pathname.replace(/index\.html$/, '')}#rejoindre=${encodeURIComponent(code)}`;
   async function shareInvite(renew) {

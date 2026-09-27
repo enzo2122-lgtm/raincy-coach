@@ -128,6 +128,7 @@ const Views = (() => {
       ${serverBanner()}
       ${teamSwitch()}
       ${setupCard()}
+      ${President.homeReminder()}
       ${Weather.placeholder()}
       <div class="quick">
         <button class="quick-btn" data-go="new-schema">${I.board}<b>Dessiner un exercice</b><span>Joueurs, flèches, zones</span></button>
@@ -164,6 +165,8 @@ const Views = (() => {
     Planning.upcoming($('#planMini', root));
     homeWeather(root, now);
     const cb = $('[data-connect]', root); if (cb) cb.onclick = () => Auth.connectServer();
+    const bk = $('[data-backup]', root); if (bk) bk.onclick = () => President.saveNow();
+    President.checkAuto();
     $$('[data-go]', root).forEach(b => b.onclick = () => ({ 'new-schema': newSchema, 'new-training': newTraining, 'new-match': newMatch })[b.dataset.go]());
   }
 
@@ -206,6 +209,7 @@ const Views = (() => {
           ${Auth.isAdmin() && Importer.letterNo(t) ? `<label class="fld" style="margin-top:12px"><span>Nom au District (pour ranger les matchs importés)</span><select id="tDistrict">${[1, 2, 3, 4].map(n => `<option value="${n}" ${Importer.districtNo(t) === n ? 'selected' : ''}>${esc(S().club.name)}${n > 1 ? ' ' + n : ''}</option>`).join('')}</select></label>` : ''}
         </section>
         <div id="teamPeople"></div>
+        ${Cloud.ready() ? Parents.teamCard(t) : ''}
         ${Auth.isAdmin() ? `<div class="danger-zone"><button class="btn danger" data-act="delete">${I.trash}<span>Supprimer la catégorie</span></button></div>` : ''}`;
       const box = $('#teamPeople', root);
       const people = () => { box.innerHTML = People.teamSections(t); $('.sub', root).textContent = `${fmtLabel(t.format)} · ${Store.playersOf(t.id).length} joueurs`; };
@@ -227,6 +231,7 @@ const Views = (() => {
     };
     root.onclick = async e => {
       const b = e.target.closest('button'); if (!b || b.closest('#teamPeople')) return;
+      if (b.dataset.parents) return Parents.shareDialog(b.dataset.parents);
       if (b.dataset.fmt) { t.format = b.dataset.fmt; save(); return render(); }
       if (b.dataset.act === 'delete' && await confirmBox(`Supprimer la catégorie ${t.name} ? Les joueurs et dirigeants restent dans le club.`)) {
         [...S().players, ...S().staff].forEach(p => p.teamIds = (p.teamIds || []).filter(x => x !== t.id));
@@ -239,7 +244,7 @@ const Views = (() => {
   function schemas(root) {
     const filt = S().ui.schemaFilter || '';
     const list = S().schemas.filter(s => Auth.sees(s.teamId) && (!filt || s.field.format === filt)).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-    root.innerHTML = `${header('Schémas', 'Exercices et tactiques animés', `<a class="btn" href="#/bibliotheque">${I.video}<span>Bibliothèque</span></a><button class="btn" data-act="import">${I.upload}<span>Recevoir</span></button><button class="btn primary" data-act="new">${I.plus}<span>Nouveau schéma</span></button>`)}
+    root.innerHTML = `${header('Schémas', 'Exercices et tactiques animés', `<a class="btn" href="#/bibliotheque">${I.video}<span>Bibliothèque</span></a><button class="btn" data-act="import">${I.upload}<span>Recevoir</span></button><button class="btn" data-act="board">${I.edit}<span>Tableau blanc</span></button><button class="btn" data-act="models">${I.layers}<span>Modèles</span></button><button class="btn primary" data-act="new">${I.plus}<span>Nouveau schéma</span></button>`)}
       <div class="chips filter">${[['', 'Tous'], ['11', 'Foot à 11'], ['8', 'Foot à 8'], ['5', 'Foot à 5'], ['zone', 'Zones libres']].map(([v, l]) => `<button class="chip ${v === filt ? 'on' : ''}" data-f="${v}">${l}</button>`).join('')}</div>
       ${list.length ? `<div class="grid">${list.map(s => `<article class="card schema-card">
           <a href="#/schema/${s.id}" class="thumb"><img alt="" src="${UI.thumb(s)}"></a>
@@ -250,6 +255,8 @@ const Views = (() => {
       const b = e.target.closest('button'); if (!b) return;
       if (b.dataset.f !== undefined && b.classList.contains('chip')) { S().ui.schemaFilter = b.dataset.f; Store.save(); return schemas(root); }
       if (b.dataset.act === 'new') return newSchema();
+      if (b.dataset.act === 'models') return pickTemplate();
+      if (b.dataset.act === 'board') return whiteboard();
       if (b.dataset.act === 'import') return importFile();
       if (b.dataset.dup) { const s = JSON.parse(JSON.stringify(Store.get('schemas', b.dataset.dup))); s.id = Store.uid(); s.name += ' (copie)'; Store.upsert('schemas', s); return schemas(root); }
       if (b.dataset.del) { const s = Store.get('schemas', b.dataset.del); if (await confirmBox(`Supprimer « ${s.name} » ?`)) { Store.remove('schemas', s.id); schemas(root); } }
@@ -258,15 +265,45 @@ const Views = (() => {
   function blankSchema(name, field, teamId) {
     return { id: Store.uid(), name, teamId: teamId || null, field, overlays: {}, objects: [], zones: [], steps: [{ pos: {}, arrows: [], moves: {}, note: '', dur: 2 }] };
   }
+  // Ready-made exercises: the coach picks one, it becomes his own schema (animated, with notes) that he adapts
+  let tplThumbs = null;
+  function pickTemplate(opts = {}) {
+    const t = teamOf(opts.teamId || activeTeam());
+    if (!tplThumbs) tplThumbs = Object.fromEntries(Templates.LIST.map(x => [x.key, UI.thumb(x.build(), 320, 208)]));
+    const close = modal({ title: 'Partir d\'un modèle', noFocus: true,
+      body: `<p class="muted small">Le modèle devient ton schéma : déplace les joueurs, change les consignes, ajoute des étapes. Touche « Jouer » pour voir l'animation.</p>
+        <div class="pick-grid">${Templates.LIST.map(x => `<button class="pick" data-tpl="${x.key}"><img alt="" src="${tplThumbs[x.key]}"><span><b>${esc(x.name)}</b><br><i class="muted small">${esc(x.desc)}</i></span></button>`).join('')}</div>`,
+      onOpen: r => $$('[data-tpl]', r).forEach(b => b.onclick = () => {
+        close(); const sc = Templates.create(b.dataset.tpl, t ? t.id : null);
+        if (opts.onCreate) opts.onCreate(sc);
+        location.hash = '#/schema/' + sc.id;
+      }) });
+  }
+  // Whiteboard: a blank pitch, full screen, nothing saved (to explain something at half-time or in the changing room)
+  function whiteboard() {
+    const t = teamOf(activeTeam()), fmt = t ? t.format : '11';
+    const close = modal({ title: 'Tableau blanc', noFocus: true,
+      body: `<p>Un terrain vierge en plein écran pour expliquer une idée tout de suite (mi-temps, vestiaire, causerie). <b>Rien n'est enregistré</b> : en quittant, le dessin disparaît, sauf si tu touches « Garder ».</p>
+        <div class="lbl">Terrain</div><div class="chips">${[...FORMATS, ['zone', 'Zone libre']].map(([v, l]) => `<button class="chip ${v === fmt ? 'on' : ''}" data-wb="${v}">${l}</button>`).join('')}</div>`,
+      onOpen: r => $$('[data-wb]', r).forEach(b => b.onclick = () => {
+        close();
+        // the tap itself asks for full screen (browsers only allow it right after a touch)
+        const d = document.documentElement, fs = d.requestFullscreen || d.webkitRequestFullscreen;
+        if (fs) { try { const p = fs.call(d); if (p && p.catch) p.catch(() => {}); } catch (e) {} }
+        location.hash = '#/tableau/' + b.dataset.wb;
+      }) });
+  }
   function newSchema(opts = {}) {
     const t = teamOf(opts.teamId || activeTeam());
     modal({ title: 'Nouveau schéma', body: `
+      <button class="btn soft wide" id="sTpl" type="button">${I.layers}<span>Partir d'un modèle (rondo, 3 contre 2, conservation…)</span></button>
       <label class="fld"><span>Nom</span><input id="sName" value="${esc(opts.name || '')}" placeholder="ex : Conservation 5 contre 5" maxlength="80"></label>
       <div class="lbl">Terrain</div>
       <div class="chips" id="sFmt">${[...FORMATS, ['zone', 'Zone libre']].map(([v, l]) => `<button class="chip ${v === (t ? t.format : '11') ? 'on' : ''}" data-v="${v}">${l}</button>`).join('')}</div>
       <div class="chips" id="sView"><button class="chip on" data-v="full">Terrain entier</button><button class="chip" data-v="half">Demi-terrain</button></div>
       <div class="row2" id="sDims" hidden><label class="fld"><span>Longueur (m)</span><input type="number" id="sW" value="30" min="5" max="110"></label><label class="fld"><span>Largeur (m)</span><input type="number" id="sH" value="20" min="5" max="75"></label></div>`,
-      onOpen: r => {
+      onOpen: (r, close) => {
+        $('#sTpl', r).onclick = () => { close(); setTimeout(() => pickTemplate(opts), 60); };
         const pick = id => $$(`#${id} .chip`, r).forEach(b => b.onclick = () => { $$(`#${id} .chip`, r).forEach(x => x.classList.remove('on')); b.classList.add('on'); sync(); });
         const sync = () => { const z = $('#sFmt .on', r).dataset.v === 'zone'; $('#sDims', r).hidden = !z; $('#sView', r).hidden = z; };
         pick('sFmt'); pick('sView'); sync();
@@ -326,8 +363,10 @@ const Views = (() => {
         <div class="ex-list">${tr.exercises.map((e, i) => exerciseCard(e, i, tr.exercises.length)).join('') || '<p class="muted">Ajoute ton premier exercice.</p>'}</div>
         <button class="btn primary" data-act="addEx">${I.plus}<span>Ajouter un exercice</span></button>
         <h2 class="section">Encadrants</h2><div class="staff-pick">${People.staffPicker(tr.teamId, tr.staffIds)}</div>
-        ${tm ? `<h2 class="section" id="presH">Présents (${(tr.presents || []).length}/${Store.playersOf(tm.id).length})</h2>
-          <div class="chips roster">${Store.playersOf(tm.id).map(p => `<button class="chip ${(tr.presents || []).includes(p.id) ? 'on' : ''}" data-present="${p.id}">${esc(pLabel(p))}</button>`).join('')}</div>` : ''}
+        ${tm ? `<div class="row-head"><h2 class="section" id="presH">Présents (${(tr.presents || []).length}/${Store.playersOf(tm.id).length})</h2>
+          <div class="chips"><button class="btn soft" data-allpres="1">${I.check}<span>Tous présents</span></button><button class="btn soft" data-allpres="0">${I.x}<span>Personne</span></button></div></div>
+          <p class="muted small">Un toucher par joueur. Le % est sa présence sur la saison (séances où l'appel a été fait).</p>
+          <div class="chips roster">${Store.playersOf(tm.id).map(p => `<button class="chip ${(tr.presents || []).includes(p.id) ? 'on' : ''}" data-present="${p.id}">${presChip(p, tm.id)}</button>`).join('')}</div>` : ''}
         <div id="rateBox"></div>
         <div id="docsBox">${Library.docsPlaceholder()}</div>
         ${Media.placeholder('training:' + tr.id, 'Photos et vidéos de la séance')}
@@ -335,6 +374,7 @@ const Views = (() => {
       const box = $('#rateBox', root); if (box) Ratings.bind(box, tr, save);
       rateTr(); Media.mount(root); Library.mountDocs($('#docsBox', root), tr, save);
     };
+    const presChip = (p, teamId) => `<span>${esc(pLabel(p))}</span>${People.pctBadge(People.attendance(p, teamId))}`;
     const rateTr = () => { const box = $('#rateBox', root); if (box) box.innerHTML = Ratings.section(tr, Store.playersOf(tr.teamId || '').filter(p => (tr.presents || []).includes(p.id)), 'training'); };
     const exerciseCard = (e, i, n) => {
       const sc = e.schemaId && Store.get('schemas', e.schemaId);
@@ -367,7 +407,15 @@ const Views = (() => {
     root.onclick = async e => {
       const b = e.target.closest('button'); if (!b) return;
       const card = b.closest('[data-ex]'), ex = card && tr.exercises.find(x => x.id === card.dataset.ex);
-      if (b.dataset.present) { const p = tr.presents = tr.presents || [], i = p.indexOf(b.dataset.present); i < 0 ? p.push(b.dataset.present) : p.splice(i, 1); save(); b.classList.toggle('on'); $('#presH', root).textContent = `Présents (${p.length}/${Store.playersOf(tr.teamId).length})`; rateTr(); return; }
+      if (b.dataset.present) {
+        const p = tr.presents = tr.presents || [], i = p.indexOf(b.dataset.present); i < 0 ? p.push(b.dataset.present) : p.splice(i, 1); save();
+        // the season % of every chip moves too (this session now counts, or no longer counts)
+        $$('[data-present]', root).forEach(c => { const pl = Store.get('players', c.dataset.present); c.classList.toggle('on', p.includes(c.dataset.present)); if (pl) c.innerHTML = presChip(pl, tr.teamId); });
+        $('#presH', root).textContent = `Présents (${p.length}/${Store.playersOf(tr.teamId).length})`; rateTr(); return;
+      }
+      if (b.dataset.allpres) {
+        if (b.dataset.allpres === '0' && (tr.presents || []).length && !(await confirmBox('Décocher tous les présents de cette séance ?', 'Décocher'))) return;
+        tr.presents =b.dataset.allpres === '1' ? Store.playersOf(tr.teamId).map(p => p.id) : []; save(); return render(); }
       if (b.dataset.unstaff) { tr.staffIds = (tr.staffIds || []).filter(x => x !== b.dataset.unstaff); save(); return render(); }
       if (b.dataset.mv) { const i = tr.exercises.indexOf(ex), j = i + +b.dataset.mv; [tr.exercises[i], tr.exercises[j]] = [tr.exercises[j], tr.exercises[i]]; save(); return render(); }
       if (b.hasAttribute('data-delex')) { if (await confirmBox(`Retirer l'exercice « ${ex.title || 'sans nom'} » ?`, 'Retirer')) { tr.exercises = tr.exercises.filter(x => x !== ex); save(); render(); } return; }
@@ -445,12 +493,34 @@ const Views = (() => {
   }
   function sendConvocation(m) {
     const text = convocationText(m);
-    modal({ title: 'Envoyer la convocation', noFocus: true, body: `<p class="muted small">Le message est prêt : choisis où l'envoyer (le groupe WhatsApp des parents, par exemple).</p><textarea id="convTxt" rows="12">${esc(text)}</textarea>`,
+    modal({ title: 'Envoyer la convocation', noFocus: true, body: `<p class="muted small">Le message est prêt : choisis où l'envoyer (le groupe WhatsApp des parents, par exemple).</p>
+      ${Cloud.ready() ? `<button class="btn soft wide" id="convLink" type="button">${I.check}<span>Ajouter le lien pour répondre présent / absent</span></button>` : ''}
+      <textarea id="convTxt" rows="12">${esc(text)}</textarea>`,
+      onOpen: r => { const lb = $('#convLink', r); if (lb) lb.onclick = async () => {
+        lb.disabled = true;
+        try {
+          const url = await Parents.linkOf(m.teamId), ta = $('#convTxt', r);
+          ta.value = ta.value.replace('Merci de confirmer la présence de votre enfant en répondant à ce message.', `👉 Répondez présent ou absent pour votre enfant ici : ${url}`);
+          if (!ta.value.includes(url)) ta.value += `\n👉 Présent ou absent : ${url}`;
+          lb.hidden = true; toast('Lien ajouté au message');
+        } catch (e) { lb.disabled = false; toast(e.code === 'MISE_A_JOUR' ? 'Le serveur doit être mis à jour par le responsable (Réglages → Serveur du club)' : e.message, 'err'); }
+      }; },
       actions: [
         { label: 'WhatsApp', kind: 'primary', icon: I.share, onClick: (c, r) => { window.open('https://wa.me/?text=' + encodeURIComponent($('#convTxt', r).value), '_blank'); return false; } },
         ...(navigator.share ? [{ label: 'Autre appli', icon: I.share, onClick: (c, r) => { navigator.share({ title: 'Convocation', text: $('#convTxt', r).value }).catch(() => {}); return false; } }] : []),
         ...(Cloud.ready() ? [{ label: 'Messagerie du club', icon: I.chat, onClick: (c, r) => { Cloud.post('team:' + m.teamId, $('#convTxt', r).value).then(() => toast('Convocation publiée dans le canal ' + ((teamOf(m.teamId) || {}).name || ''))).catch(e => toast(e.message, 'err')); } }] : []),
         { label: 'Copier', icon: I.copy, onClick: (c, r) => { navigator.clipboard.writeText($('#convTxt', r).value).then(() => toast('Convocation copiée')).catch(() => toast('Sélectionne le texte et copie-le')); return false; } }] });
+  }
+  // Playing time of each convoked player (minutes); the season total is on the player's page and in Stats
+  function minutesCard(m, conv) {
+    const mins = m.minutes || {}, full = People.matchLength(m), total = conv.reduce((a, p) => a + (+mins[p.id] || 0), 0);
+    return `<h2 class="section">Temps de jeu</h2><section class="card">
+      <div class="row-head"><label class="fld inline"><span>Durée du match (min)</span><input type="number" id="mDur" min="10" max="150" inputmode="numeric" value="${full}"></label>
+        <button class="btn soft" data-act="allmin">${I.clock}<span>Match complet pour les autres</span></button></div>
+      <div class="minutes">${conv.map(p => `<div class="min-row"><span class="nm">${esc(pLabel(p))}</span>
+        <span class="min-in"><input type="number" min="0" max="150" inputmode="numeric" data-min="${p.id}" value="${mins[p.id] == null ? '' : esc(mins[p.id])}" placeholder="–" aria-label="Minutes jouées par ${esc(pName(p))}"><span>min</span></span>
+        <span class="min-q"><button class="chip" data-minset="${p.id}" data-v="full">Tout</button><button class="chip" data-minset="${p.id}" data-v="half">½</button><button class="chip" data-minset="${p.id}" data-v="zero">0</button></span></div>`).join('')}</div>
+      <p class="muted small">« Match complet pour les autres » met ${full} min à ceux qui n'ont pas encore de temps. ${total ? `Total saisi : ${total} min.` : ''}</p></section>`;
   }
   function match(root, id) {
     const m = Store.get('matches', id); if (!m) return (location.hash = '#/matchs');
@@ -476,6 +546,8 @@ const Views = (() => {
         </section>
         <div class="row-head"><h2 class="section">Convoqués (${conv.length})</h2>${conv.length ? `<button class="btn primary" data-act="convoc">${I.share}<span>Envoyer la convocation</span></button>` : ''}</div>
         ${t ? `<div class="chips roster">${roster.map(p => `<button class="chip ${(m.convoked || []).includes(p.id) ? 'on' : ''}" data-conv="${p.id}">${esc(pLabel(p))}</button>`).join('')}</div>` : '<p class="muted">Choisis une équipe.</p>'}
+        <div id="answersBox"></div>
+        ${!m.home && !m.exempt ? '<div id="carpoolBox"></div>' : ''}
         <h2 class="section">Encadrants</h2><div class="staff-pick">${People.staffPicker(m.teamId, m.staffIds)}</div>
         <h2 class="section">Composition</h2>
         <section class="card lineup">${lineup ? `<a href="#/schema/${lineup.id}" class="thumb"><img alt="" src="${UI.thumb(lineup)}"></a><a class="btn soft" href="#/schema/${lineup.id}">${I.edit}<span>Modifier la composition</span></a>`
@@ -492,16 +564,24 @@ const Views = (() => {
                 <span class="mini-step" title="Passes décisives"><em>P</em><button data-pl="${p.id}" data-k="a" data-d="-1" aria-label="Moins de passes">−</button><b>${st.a || 0}</b><button data-pl="${p.id}" data-k="a" data-d="1" aria-label="Plus de passes">+</button></span></div>`; }).join('')}</div>` : '<p class="tip">Coche les convoqués pour noter les buteurs.</p>'}` : ''}
           <label class="fld"><span>Notes</span><textarea data-f="notes" rows="3" placeholder="Ce qui a marché, ce qu'on travaille la semaine prochaine">${esc(m.notes || '')}</textarea></label>
         </section>
+        ${m.played && conv.length ? minutesCard(m, conv) : ''}
         <div id="rateBox"></div>
         <div id="docsBox">${Library.docsPlaceholder()}</div>
         ${Media.placeholder('match:' + m.id, 'Photos et vidéos du match')}
         <div class="danger-zone"><button class="btn danger" data-act="delete">${I.trash}<span>Supprimer le match</span></button></div>`;
+      Parents.mountMatch(root, m, conv);
       const box = $('#rateBox', root); box.innerHTML = Ratings.section(m, conv, 'match'); Ratings.bind(box, m, save);
       Media.mount(root); Library.mountDocs($('#docsBox', root), m, save);
     };
     const cheer = before => { if (Ratings.result(m) === 'V' && before !== 'V') Ratings.celebrate(); };
+    const setMin = (pid, v) => { const mm = m.minutes = m.minutes || {}; if (v === '' || v == null) delete mm[pid]; else mm[pid] = Math.max(0, Math.min(150, Math.round(+v) || 0)); };
     render();
-    root.oninput = e => { const f = e.target.dataset.f; if (f) { m[f] = e.target.value; if (f === 'teamId') m.teamManual = true; save(); } };
+    root.oninput = e => {
+      const t = e.target;
+      if (t.dataset.min) { setMin(t.dataset.min, t.value); save(); return; }
+      if (t.id === 'mDur') { m.duration = Math.max(10, Math.min(150, +t.value || 0)) || ''; save(); return; }
+      const f = t.dataset.f; if (f) { m[f] = t.value; if (f === 'teamId') m.teamManual = true; save(); }
+    };
     root.onchange = e => {
       if (e.target.dataset.f === 'teamId') { m.teamId = e.target.value; m.teamManual = true; save(); toast('Match rangé dans ' + (teamOf(m.teamId) || {}).name); return render(); }
       if (e.target.id === 'mPlayed') { const before = Ratings.result(m); m.played = e.target.checked; save(); render(); return cheer(before); }
@@ -511,6 +591,14 @@ const Views = (() => {
     root.onclick = async e => {
       const b = e.target.closest('button'); if (!b) return;
       if (b.dataset.act === 'convoc') return sendConvocation(m);
+      if (b.dataset.minset) {
+        const full = People.matchLength(m), v = { full, half: Math.round(full / 2), zero: 0 }[b.dataset.v];
+        setMin(b.dataset.minset, v); save(); const inp = $(`[data-min="${b.dataset.minset}"]`, root); if (inp) inp.value = v; return;
+      }
+      if (b.dataset.act === 'allmin') {
+        const full = People.matchLength(m), conv = (m.convoked || []);
+        conv.forEach(pid => { if ((m.minutes || {})[pid] == null) setMin(pid, full); }); save(); return render();
+      }
       if (b.dataset.cheer) { ClubLife.cheer(b.dataset.cheer); return render(); }
       if (b.dataset.home) { m.home = b.dataset.home === '1'; save(); return render(); }
       if (b.dataset.unstaff) { m.staffIds = (m.staffIds || []).filter(x => x !== b.dataset.unstaff); save(); return render(); }
@@ -579,7 +667,8 @@ const Views = (() => {
       const played = ms.filter(m => (m.convoked || []).includes(p.id)).length;
       const g = ms.reduce((a, m) => a + (((m.stats || {})[p.id] || {}).g || 0), 0), as = ms.reduce((a, m) => a + (((m.stats || {})[p.id] || {}).a || 0), 0);
       const pr = trs.filter(x => x.presents.includes(p.id)).length;
-      return { p, played, g, a: as, pr, rate: trs.length ? Math.round(pr / trs.length * 100) : null, nm: Ratings.average(p.id, 'match') || 0, nt: Ratings.average(p.id, 'training') || 0 };
+      const min = ms.reduce((a, m) => a + (+((m.minutes || {})[p.id]) || 0), 0);
+      return { p, played, g, a: as, pr, min, rate:trs.length ? Math.round(pr / trs.length * 100) : null, nm: Ratings.average(p.id, 'match') || 0, nt: Ratings.average(p.id, 'training') || 0 };
     }).sort((a, b) => sortKey === 'name' ? Store.byName(a.p, b.p) : sortKey === 'num' ? (+a.p.number || 99) - (+b.p.number || 99) : (b[sortKey] || 0) - (a[sortKey] || 0));
     const th = (k, l) => `<th><button class="th ${sortKey === k ? 'on' : ''}" data-sort="${k}">${l}</button></th>`;
     root.innerHTML = `${header('Statistiques', esc(t.name))}
@@ -595,8 +684,8 @@ const Views = (() => {
       </div>
       <h2 class="section">Joueurs</h2>
       <div class="table-wrap"><table class="tbl">
-        <thead><tr>${th('num', 'N°')}${th('name', 'Joueur')}${th('played', 'Matchs')}${th('g', 'Buts')}${th('a', 'Passes déc.')}${th('pr', 'Entraînements')}${th('nm', 'Note matchs')}${th('nt', 'Note entr.')}</tr></thead>
-        <tbody>${rows.map(r => `<tr><td class="num">${esc(r.p.number)}</td><td>${esc(pName(r.p))}</td><td>${r.played}</td><td><b>${r.g}</b></td><td>${r.a}</td><td>${r.rate === null ? '–' : `${r.pr} <span class="muted">(${r.rate} %)</span>`}</td><td>${r.nm ? '⭐ ' + Ratings.fr(r.nm) : '–'}</td><td>${r.nt ? '⭐ ' + Ratings.fr(r.nt) : '–'}</td></tr>`).join('')}</tbody>
+        <thead><tr>${th('num', 'N°')}${th('name', 'Joueur')}${th('played', 'Matchs')}${th('min', 'Minutes')}${th('g', 'Buts')}${th('a', 'Passes déc.')}${th('pr', 'Entraînements')}${th('nm', 'Note matchs')}${th('nt', 'Note entr.')}</tr></thead>
+        <tbody>${rows.map(r => `<tr><td class="num">${esc(r.p.number)}</td><td><a href="#/joueur/${r.p.id}">${esc(pName(r.p))}</a></td><td>${r.played}</td><td>${r.min ? r.min + "'" : '–'}</td><td><b>${r.g}</b></td><td>${r.a}</td><td>${r.rate === null ? '–' : `${r.pr} <span class="muted">(${r.rate} %)</span>`}</td><td>${r.nm ? '⭐ ' + Ratings.fr(r.nm) : '–'}</td><td>${r.nt ? '⭐ ' + Ratings.fr(r.nt) : '–'}</td></tr>`).join('')}</tbody>
       </table></div>
       <h2 class="section">Résultats</h2>
       ${ms.length ? `<div class="table-wrap"><table class="tbl"><thead><tr><th>Date</th><th>Match</th><th>Score</th><th>Résultat</th></tr></thead>
@@ -623,7 +712,7 @@ const Views = (() => {
         <h2>${I.share}Fichiers du club</h2>
         <p>${Cloud.ready() ? 'Les équipes, joueurs, dirigeants, schémas, entraînements et matchs se partagent tout seuls entre les éducateurs par le serveur du club. Les photos et vidéos restent sur l\'appareil qui les a prises.' : 'Chaque éducateur a l\'appli sur son appareil. Pour partager, envoie un fichier (AirDrop, WhatsApp, mail) : l\'autre éducateur l\'ouvre avec « Recevoir un fichier ».'}</p>
         <p class="muted small">« Recevoir un fichier » sert aussi à charger la liste des licenciés ou une sauvegarde. Les listes de joueurs contiennent des numéros de téléphone : envoie-les seulement aux éducateurs du club.</p>
-        <div class="chips">${Auth.isAdmin() ? `<button class="btn primary" data-act="exportAll">${I.download}<span>Envoyer toutes mes données</span></button>` : ''}
+        <div class="chips">${Auth.isAdmin() ? `<button class="btn primary" data-act="exportAll">${I.download}<span>Envoyer toutes mes données</span></button><button class="btn" data-act="backups">${I.shield}<span>Sauvegardes du club</span></button>` : ''}
         <button class="btn" data-act="import">${I.upload}<span>Recevoir un fichier</span></button></div>
       </section>
       <section class="card">
@@ -653,6 +742,7 @@ const Views = (() => {
       if (b.dataset.auth || b.dataset.reset) return Auth.onSettingsClick(b, () => settings(root));
       if (b.dataset.cloud) return Cloud.onSettingsClick(b, () => settings(root));
       if (b.dataset.act === 'import') return importFile();
+      if (b.dataset.act === 'backups') return President.backupDialog();
       if (b.dataset.act === 'noExamples' && await confirmBox('Supprimer toutes les données d\'exemple ?')) { Store.removeExamples(); toast('Exemples supprimés'); return settings(root); }
       if (b.dataset.act === 'reset' && await confirmBox('Effacer toutes les équipes, schémas, entraînements et matchs de cet appareil ?', 'Tout effacer')) { Store.reset(); toast('Données effacées'); Auth.logout(); }
     };

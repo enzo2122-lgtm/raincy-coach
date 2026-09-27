@@ -26,20 +26,34 @@ const Editor = (() => {
   const findObj = id => E.sc.objects.find(o => o.id === id);
 
   /* ---------- lifecycle ---------- */
+  // Full screen (computer, Android, iPad): hides the browser's bars; not available on iPhone
+  const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
+  const canFs = () => !!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen);
+  function fullscreen(on) {
+    const d = document.documentElement;
+    try {
+      if (on && !fsEl()) { const p = (d.requestFullscreen || d.webkitRequestFullscreen).call(d); if (p && p.catch) p.catch(() => {}); }
+      if (!on && fsEl()) { const p = (document.exitFullscreen || document.webkitExitFullscreen).call(document); if (p && p.catch) p.catch(() => {}); }
+    } catch (e) {}
+  }
   function open(root, sc, opts = {}) {
     close();
     sc.overlays = sc.overlays || {}; sc.zones = sc.zones || [];
     sc.steps.forEach(st => { st.arrows = st.arrows || []; st.moves = st.moves || {}; });
-    E = { sc, k: 0, tool: 'move', arrowType: 'course', zoneColor: 'jaune', coneColor: 'orange', sel: null, playing: false, hist: [], fut: [], drag: null, root, back: opts.back, dpr: 1 };
-    root.innerHTML = `<div class="ed">
+    // scratch = whiteboard: nothing is saved, the drawing disappears when the coach leaves
+    E = { sc, k: 0, tool: 'move', arrowType: 'course', zoneColor: 'jaune', coneColor: 'orange', sel: null, playing: false, hist: [], fut: [], drag: null, root, back: opts.back, dpr: 1, scratch: !!opts.scratch };
+    root.innerHTML = `<div class="ed ${E.scratch ? 'ed-scratch' : ''}">
       <header class="ed-top">
         <button class="icon-btn" data-act="back" aria-label="Retour">${I.back}</button>
-        <input class="ed-title" id="edTitle" value="${esc(sc.name)}" aria-label="Nom du schéma" maxlength="80">
+        ${E.scratch ? `<span class="ed-title ed-wb">✏️ Tableau blanc <i>rien n'est enregistré</i></span>` : `<input class="ed-title" id="edTitle" value="${esc(sc.name)}" aria-label="Nom du schéma" maxlength="80">`}
         <span class="grow"></span>
         <button class="icon-btn" data-act="help" aria-label="Aide">${I.help}</button>
+        ${canFs() ? `<button class="icon-btn" data-act="fullscreen" aria-label="Plein écran">${I.expand}</button>` : ''}
         <button class="icon-btn opt-btn" data-act="panel" aria-label="Options du terrain">${I.layers}</button>
         <button class="icon-btn" data-act="undo" aria-label="Annuler">${I.undo}</button>
         <button class="icon-btn" data-act="redo" aria-label="Rétablir">${I.redo}</button>
+        ${E.scratch ? `<button class="icon-btn" data-act="wipe" aria-label="Tout effacer">${I.eraser}</button><button class="btn" data-act="keep">${I.download}<span>Garder</span></button>`
+          : `<button class="icon-btn" data-act="duplicate" aria-label="Dupliquer le schéma" title="Dupliquer">${I.copy}</button>`}
         <button class="btn primary" data-act="export">${I.share}<span>Exporter</span></button>
       </header>
       <nav class="ed-tools" id="edTools" aria-label="Outils"></nav>
@@ -55,7 +69,8 @@ const Editor = (() => {
   }
   function close() {
     if (!E) return;
-    if (E.saveT) { clearTimeout(E.saveT); Store.upsert('schemas', E.sc); }
+    if (E.saveT) { clearTimeout(E.saveT); if (!E.scratch) Store.upsert('schemas', E.sc); }
+    if (E.scratch) fullscreen(false);
     E.playing = false; cancelAnimationFrame(E.raf); E.ro && E.ro.disconnect(); E = null;
   }
   function resize() {
@@ -75,7 +90,25 @@ const Editor = (() => {
   }
   function undo() { if (!E.hist.length) return UI.toast('Rien à annuler'); E.fut.push(JSON.stringify(E.sc)); restore(E.hist.pop()); }
   function redo() { if (!E.fut.length) return; E.hist.push(JSON.stringify(E.sc)); restore(E.fut.pop()); }
-  function commit() { clearTimeout(E.saveT); E.saveT = null; Store.upsert('schemas', E.sc); draw(); }
+  function commit() { clearTimeout(E.saveT); E.saveT = null; if (!E.scratch) Store.upsert('schemas', E.sc); draw(); }
+  // A copy of the schema (new name « … (copie) »), opened right away
+  function duplicate() {
+    commit();
+    const c = JSON.parse(JSON.stringify(E.sc)); c.id = Store.uid(); c.name = (E.sc.name || 'Schéma') + ' (copie)'; delete c.example;
+    Store.upsert('schemas', c); UI.toast('Copie créée : tu peux la modifier');
+    location.hash = '#/schema/' + c.id;
+  }
+  // Whiteboard → a real schema, if the coach wants to keep the drawing after all
+  function keepScratch() {
+    UI.modal({ title: 'Garder ce dessin', body: `<label class="fld"><span>Nom du schéma</span><input id="kpName" maxlength="80" placeholder="ex : Pressing sur la relance"></label>
+      <p class="tip">Le dessin devient un schéma normal, rangé dans Schémas.</p>`,
+      actions: [{ label: 'Annuler' }, { label: 'Enregistrer', kind: 'primary', onClick: (c, r) => {
+        const sc = JSON.parse(JSON.stringify(E.sc)); sc.id = Store.uid(); delete sc.scratch;
+        sc.name = r.querySelector('#kpName').value.trim() || 'Tableau du ' + new Date().toLocaleDateString('fr-FR');
+        Store.upsert('schemas', sc); E.scratch = false; UI.toast('Schéma enregistré');
+        location.hash = '#/schema/' + sc.id;
+      } }] });
+  }
   // typing: saved half a second after the last letter (nothing is lost if the app is closed right after)
   function saveSoon() { clearTimeout(E.saveT); E.saveT = setTimeout(() => { if (E) commit(); }, 500); draw(); }
 
@@ -477,7 +510,7 @@ const Editor = (() => {
     E.canvas.addEventListener('pointermove', onMove);
     E.canvas.addEventListener('pointerup', onUp);
     E.canvas.addEventListener('pointercancel', onUp);
-    r.querySelector('#edTitle').addEventListener('change', e => { E.sc.name = e.target.value.trim() || 'Sans nom'; commit(); });
+    const ti = r.querySelector('#edTitle'); if (ti) ti.addEventListener('change', e => { E.sc.name = e.target.value.trim() || 'Sans nom'; commit(); });
     r.addEventListener('click', e => {
       const b = e.target.closest('button'); if (!b || !E) return;
       const d = b.dataset;
@@ -504,8 +537,21 @@ const Editor = (() => {
       if (d.fmt) return setSel(() => { sc.field.format = d.fmt; if (d.fmt === 'zone') { sc.field.w = sc.field.w || 30; sc.field.h = sc.field.h || 20; } });
       if (d.view) return setSel(() => sc.field.view = d.view);
       switch (d.act) {
-        case 'back': stopPlay(); close(); return history.length > 1 ? history.back() : (location.hash = '#/schemas');
-        case 'help': return Help.open('schema');
+        case 'back': {
+          const leave = () => { stopPlay(); close(); return history.length > 1 ? history.back() : (location.hash = '#/schemas'); };
+          if (E.scratch && E.sc.objects.length + E.sc.zones.length + E.sc.steps.reduce((a, s) => a + s.arrows.length, 0) > 0)
+            return UI.confirmBox('Quitter le tableau blanc ? Le dessin ne sera pas gardé (touche « Garder » pour l\'enregistrer).', 'Quitter').then(ok => { if (ok && E) leave(); });
+          return leave();
+        }
+        case 'help': return Help.open(E.scratch ? 'tableau' : 'schema');
+        case 'fullscreen': return fullscreen(!fsEl());
+        case 'duplicate': stopPlay(); return duplicate();
+        case 'keep': stopPlay(); return keepScratch();
+        case 'wipe': return UI.confirmBox('Tout effacer sur le tableau ?', 'Effacer').then(ok => {
+          if (!ok || !E) return; stopPlay(); snapshot();
+          Object.assign(E.sc, { objects: [], zones: [], steps: [{ pos: {}, arrows: [], moves: {}, note: '', dur: 2 }] }); E.k = 0; E.sel = null;
+          commit(); renderSteps(); renderPanel();
+        });
         case 'panel': return E.root.querySelector('.ed').classList.toggle('panel-open');
         case 'closePanel': return E.root.querySelector('.ed').classList.remove('panel-open');
         case 'undo': return undo();
