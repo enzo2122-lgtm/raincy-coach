@@ -15,6 +15,12 @@ const Views = (() => {
   const resPill = m => { const r = result(m); return r ? `<span class="res-smiley" aria-hidden="true">${Ratings.smiley(m)}</span><span class="res res-${r}">${r === 'V' ? 'Gagné' : r === 'D' ? 'Perdu' : 'Nul'}</span>` : ''; };
   const scoreTxt = m => m.home ? `${m.gf} – ${m.ga}` : `${m.ga} – ${m.gf}`;
   const matchTitle = m => m.exempt ? `${esc(S().club.name)} <i>exempt · pas de match</i>` : m.home ? `${esc(S().club.name)} <i>contre</i> ${esc(m.opponent || '?')}` : `${esc(m.opponent || '?')} <i>contre</i> ${esc(S().club.name)}`;
+  // « U13 · Raincy – Aulnaysienne » : our category, then the two teams in the order of the score (home first)
+  const usShort = () => String(S().club.name || 'Nous').replace(/^(FA|AS|US|FC|ES|CS|SC|JS|RC)\s+/i, '').replace(/^(Le|La|Les|L')\s*/i, '') || S().club.name;
+  function lastTeams(m) {
+    const t = teamOf(m.teamId), us = `<b class="us">${esc(usShort())}</b>`, them = `<span>${esc(m.opponent || '?')}</span>`;
+    return `${t ? `<i class="rl-cat" style="background:${Planning.teamColor(t.id)}">${esc(t.name)}</i>` : ''}<span class="rl-teams">${m.home ? us + ' – ' + them : them + ' – ' + us}</span>`;
+  }
   const empty = (txt, btn) => `<div class="empty"><p>${txt}</p>${btn || ''}</div>`;
 
   function teamSwitch() {
@@ -144,7 +150,7 @@ const Views = (() => {
         ${Results.homeCard()}
         <section class="card">
           <h2>${I.stats}Derniers résultats</h2>
-          ${last.length ? `<ul class="res-list">${last.map(m => `<li><a href="#/match/${m.id}"><span class="d">${esc(fmtDate(m.date))}</span><span class="o">${esc(m.opponent)}</span><span class="s">${scoreTxt(m)}</span>${resPill(m)}</a></li>`).join('')}</ul>` : `<p class="muted">Pas encore de résultat.</p>`}
+          ${last.length ? `<ul class="res-list">${last.map(m => `<li><a href="#/match/${m.id}"><span class="d">${esc(fmtDate(m.date))}</span><span class="o">${lastTeams(m)}</span><span class="s">${scoreTxt(m)}</span>${resPill(m)}</a></li>`).join('')}</ul>` : `<p class="muted">Pas encore de résultat.</p>`}
         </section>
         <section class="card">
           <h2>${I.board}Derniers schémas</h2>
