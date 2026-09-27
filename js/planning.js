@@ -17,6 +17,19 @@ const Planning = (() => {
   const toMin = t => { const [h, m] = String(t).split(':').map(Number); return h * 60 + (m || 0); };
   const fieldName = () => S().club.fieldName || 'Terrain';
   const myTeams = () => { const u = Auth.current(); return u ? (u.teamIds || []) : []; };
+  // One colour per category, close colours for close ages (U6-U9 greens, U10-U13 blues, U14-U17 purples/pinks, U18-U20 oranges)
+  const CAT_COLORS = { U6: '#2e7d32', U7: '#43a047', U8: '#00897b', U9: '#00838f', U10: '#1e88e5', U11: '#1565c0', U12: '#3949ab', U13: '#283593',
+    U14: '#8e24aa', U15: '#6a1b9a', U16: '#d81b60', U17: '#ad1457', U18: '#ef6c00', U19: '#e65100', U20: '#bf360c', SENIORS: '#7a1f2b', VETERANS: '#455a64' };
+  const ckey = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/\s+/g, '');
+  function catOfBooking(b) {
+    const t = b.team_id && Store.get('teams', b.team_id);
+    const k = [t && t.category, t && t.name, b.team_name].map(ckey).find(x => CAT_COLORS[x] || CAT_COLORS[x.replace(/[^A-Z0-9].*$/, '')]);
+    return k ? (CAT_COLORS[k] ? k : k.replace(/[^A-Z0-9].*$/, '')) : '';
+  }
+  const colorOf = b => CAT_COLORS[catOfBooking(b)] || '';
+  const catLabel = k => ({ SENIORS: 'Seniors', VETERANS: 'Vétérans' })[k] || k;
+  // Short name for the narrow week columns on a phone
+  const shortOf = b => { const k = catOfBooking(b); return k ? ({ SENIORS: 'SEN', VETERANS: 'VÉT' })[k] || k : String(b.team_name || KINDS[b.kind][0]).slice(0, 4); };
   const canDelete = b => Auth.isAdmin() || (Auth.current() && b.author_id === Auth.current().id);
 
   function notReady(root) {
@@ -43,7 +56,7 @@ const Planning = (() => {
     const ui = S().ui, today = iso(new Date());
     ui.planWeek = ui.planWeek || monday(today);
     ui.planDay = ui.planDay || today;
-    const week = ui.planWeek, days = Array.from({ length: 7 }, (_, i) => addDays(week, i)), wk = ui.planView === 'week';
+    const week = ui.planWeek, days = Array.from({ length: 7 }, (_, i) => addDays(week, i)), wk = ui.planView !== 'day';
     if (!days.includes(ui.planDay)) ui.planDay = days[0];
     root.innerHTML = `<header class="page-head"><div><h1>Planning · ${esc(fieldName())}</h1><p class="sub">Grand terrain ou demi-terrain, sans chevauchement</p></div>
       <div class="head-actions">${Auth.isAdmin() ? `<button class="btn" data-p="slots">${I.clock}<span>Créneaux disponibles</span></button>` : ''}
@@ -53,7 +66,7 @@ const Planning = (() => {
         <b>Semaine du ${esc(parse(week).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' }))}</b>
         <button class="icon-btn" data-p="next" aria-label="Semaine suivante">${I.next}</button><button class="btn soft" data-p="today">Aujourd'hui</button>
         <span class="plan-view chips"><button class="chip ${wk ? '' : 'on'}" data-p="vday">Jour</button><button class="chip ${wk ? 'on' : ''}" data-p="vweek">Semaine</button></span>
-        <span class="grow"></span><span class="plan-legend"><i class="k-entrainement"></i>Entraînement <i class="k-match"></i>Match <i class="k-autre"></i>Autre</span></div>
+        <span class="grow"></span><span class="plan-legend" id="planLegend"></span></div>
       <div class="day-chips ${wk ? 'wk' : ''}">${days.map(d => `<button class="chip ${d === ui.planDay ? 'on' : ''}" data-day="${d}">${DAYS[parse(d).getDay()].slice(0, 3)} ${parse(d).getDate()}</button>`).join('')}</div>
       <div class="plan-wrap ${wk ? 'wk' : ''}" id="planGrid"><p class="muted">Chargement du planning…</p></div>`;
     const onChip = $('.day-chips .chip.on', root); if (onChip) onChip.scrollIntoView({ inline: 'center', block: 'nearest' });
@@ -68,29 +81,23 @@ const Planning = (() => {
     const col = d => {
       const free = slotsOf(d), list = bookings.filter(b => b.date === d);
       return `<div class="plan-day ${d === ui.planDay ? 'sel' : ''} ${d === iso(new Date()) ? 'today' : ''}" data-col="${d}">
-        <div class="plan-head">${DAYS[parse(d).getDay()].slice(0, 3)} <b>${parse(d).getDate()}</b></div>
+        <button class="plan-head" data-openday="${d}">${DAYS[parse(d).getDay()].slice(0, 3)} <b>${parse(d).getDate()}</b></button>
         <div class="plan-body" style="height:${H}px" data-date="${d}">
           ${hours.map(m => `<i class="hline" style="top:${(m - lo) * PX}px"></i>`).join('')}
           ${(slots.length ? free : [{ start_min: lo, end_min: hi }]).map(s => `<div class="avail" style="top:${(s.start_min - lo) * PX}px;height:${(s.end_min - s.start_min) * PX}px"></div>`).join('')}
-          ${list.map(b => `<button class="bk k-${esc(b.kind)} part-${b.part} ${mine.has(b.team_id) ? 'mine' : ''}" data-bk="${b.id}" style="top:${(b.start_min - lo) * PX}px;height:${Math.max(22, (b.end_min - b.start_min) * PX - 2)}px">
-            <b>${esc(b.team_name || KINDS[b.kind][0])}</b><span>${hm(b.start_min)}–${hm(b.end_min)}${b.part === 'full' ? '' : ' · ½ ' + b.part}</span></button>`).join('')}
+          ${list.map(b => { const c = colorOf(b); return `<button class="bk k-${esc(b.kind)} part-${b.part} ${mine.has(b.team_id) ? 'mine' : ''}" data-bk="${b.id}" style="top:${(b.start_min - lo) * PX}px;height:${Math.max(22, (b.end_min - b.start_min) * PX - 2)}px${c ? ';background-color:' + c + ';color:#fff' : ''}">
+            <b>${esc(b.team_name || KINDS[b.kind][0])}</b><i class="bk-s">${esc(shortOf(b))}</i><span>${b.kind === 'match' ? 'Match · ' : ''}${hm(b.start_min)}–${hm(b.end_min)}${b.part === 'full' ? '' : ' · ½ ' + b.part}</span></button>`; }).join('')}
         </div></div>`;
     };
     $('#planGrid', root).innerHTML = `<div class="plan-grid">
       <div class="plan-hours"><div class="plan-head">&nbsp;</div><div style="position:relative;height:${H}px">${hours.map(m => `<span style="top:${(m - lo) * PX}px">${hm(m)}</span>`).join('')}</div></div>
       ${days.map(col).join('')}</div>
-      ${weekList(days, mine)}
       ${!slots.length ? '<p class="tip">Aucun créneau défini : le terrain est réservable à toute heure. Le responsable peut fixer les créneaux disponibles.</p>' : ''}`;
     $('#planGrid', root).dataset.lo = lo;
-  }
-  // The whole week as a list, one block per day (phones, « Semaine »)
-  function weekList(days, mine) {
-    return `<div class="plan-list">${days.map(d => {
-      const list = bookings.filter(b => b.date === d).sort((a, b) => a.start_min - b.start_min);
-      return `<div class="pl-day ${d === iso(new Date()) ? 'today' : ''}">
-        <button class="pl-head" data-openday="${d}"><b>${DAYS[parse(d).getDay()]} ${parse(d).getDate()}</b><span>${list.length ? list.length + ' créneau' + (list.length > 1 ? 'x' : '') : 'Libre'}</span></button>
-        ${list.map(b => `<button class="pl-row k-${esc(b.kind)} ${mine.has(b.team_id) ? 'mine' : ''}" data-bk="${b.id}"><span class="pl-t">${hm(b.start_min)}–${hm(b.end_min)}</span><b>${esc(b.team_name || KINDS[b.kind][0])}</b><span class="pl-p">${b.part === 'full' ? 'Grand terrain' : '½ terrain ' + b.part}</span></button>`).join('')}
-      </div>`; }).join('')}</div>`;
+    // Legend: the categories on the pitch this week, then how a match looks
+    const cats = [...new Set(bookings.filter(b => days.includes(b.date)).map(catOfBooking).filter(Boolean))].sort((a, b) => Object.keys(CAT_COLORS).indexOf(a) - Object.keys(CAT_COLORS).indexOf(b));
+    const lg = $('#planLegend', root);
+    if (lg) lg.innerHTML = cats.map(k => `<span><i style="background:${CAT_COLORS[k]}"></i>${esc(catLabel(k))}</span>`).join('') + `<span><i class="lg-match"></i>Match (rayé)</span>`;
   }
   function bind(root) {
     root.onclick = async e => {
