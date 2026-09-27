@@ -101,6 +101,14 @@ const Sync = (() => {
     return out.length;
   }
 
+  // First connection of a device to a club that already has its data on the server: old things kept on this device
+  // (not touched for more than a day, e.g. an old list or examples) are not sent again to everybody; they stay here only.
+  // Recent work of the device is still shared.
+  function adoptStale() {
+    const H = meta().h, old = Date.now() - 864e5;
+    Object.entries(current()).forEach(([k, [col, x]]) => { if (col !== 'club' && !H[k] && (x.updatedAt || 0) < old) H[k] = fp(x); });
+  }
+
   /* ---------- run ---------- */
   function run() {
     if (running) { again = true; return running; }
@@ -108,7 +116,9 @@ const Sync = (() => {
     running = (async () => {
       let changed = false;
       try {
+        const fresh = !meta().rev && !Object.keys(meta().h).length;
         changed = await pull();
+        if (fresh && meta().rev > 0) adoptStale();
         const sent = await push();
         if (changed || sent) Store.persistNow();
         lastOk = Date.now(); lastErr = '';

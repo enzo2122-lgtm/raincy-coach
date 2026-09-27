@@ -63,6 +63,9 @@ const Store = (() => {
   // Same dirigeant twice (an account made by hand + the card from the club file, e.g. « Enzo » and « Enzo (Adnane) »):
   // keep the card that has a password, take over the other card's details, and remember it so a new import doesn't bring it back.
   function mergeStaffDuplicates() {
+    // With the club server, accounts live on the server: a card that looks like a duplicate here may be
+    // another device's account, so nothing is merged (the responsable merges by hand if needed)
+    if (state.auth && state.auth.session) return;
     const users = (state.auth && state.auth.users) || {}, hasPw = id => !!(users[id] && users[id].hash);
     const key = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().trim();
     const firstWords = p => { const f = String(p.firstName || ''), inPar = (f.match(/\(([^)]+)\)/) || [])[1]; return [key(f.replace(/\(.*\)/, '').split(/\s+/)[0]), inPar && key(inPar.split(/\s+/)[0])].filter(Boolean); };
