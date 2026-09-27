@@ -427,6 +427,27 @@ const Views = (() => {
         location.hash = '#/match/' + m.id;
       } }] });
   }
+  /* ---------- convocation to send on WhatsApp (to the parents' group) ---------- */
+  function convocationText(m) {
+    const t = teamOf(m.teamId), conv = (t ? Store.playersOf(t.id) : []).filter(p => (m.convoked || []).includes(p.id)), club = S().club.name || 'FA Le Raincy';
+    const hh = x => String(x || '').replace(':', 'h'), me = Auth.current();
+    return [`⚽ *${club}${t ? ' · ' + t.name : ''}*`, `*Convocation – ${fmtDate(m.date, { weekday: 'long', day: 'numeric', month: 'long' })}*`, '',
+      `Match ${m.home ? 'à domicile' : 'à l\'extérieur'} contre *${m.opponent || '?'}*${m.competition ? ' (' + m.competition + ')' : ''}`,
+      m.place || m.home ? `📍 ${m.place || S().club.fieldName || 'Stade du club'}` : '',
+      m.rdv || m.time ? `🕘 ${m.rdv ? 'Rendez-vous ' + hh(m.rdv) : ''}${m.rdv && m.time ? ' · ' : ''}${m.time ? 'coup d\'envoi ' + hh(m.time) : ''}` : '🕘 Horaire à confirmer', '',
+      `*Joueurs convoqués (${conv.length}) :*`, ...conv.map((p, i) => `${i + 1}. ${p.firstName || ''} ${p.lastName || ''}`.trim()), '',
+      '🎒 Prévoir : tenue du club, protège-tibias, gourde.', 'Merci de confirmer la présence de votre enfant en répondant à ce message.',
+      me ? `${Messages.coachName(me)}` : ''].filter((l, i, a) => l !== '' || (a[i - 1] !== '' && i > 0)).join('\n').replace(/\n+$/, '');
+  }
+  function sendConvocation(m) {
+    const text = convocationText(m);
+    modal({ title: 'Envoyer la convocation', noFocus: true, body: `<p class="muted small">Le message est prêt : choisis où l'envoyer (le groupe WhatsApp des parents, par exemple).</p><textarea id="convTxt" rows="12">${esc(text)}</textarea>`,
+      actions: [
+        { label: 'WhatsApp', kind: 'primary', icon: I.share, onClick: (c, r) => { window.open('https://wa.me/?text=' + encodeURIComponent($('#convTxt', r).value), '_blank'); return false; } },
+        ...(navigator.share ? [{ label: 'Autre appli', icon: I.share, onClick: (c, r) => { navigator.share({ title: 'Convocation', text: $('#convTxt', r).value }).catch(() => {}); return false; } }] : []),
+        ...(Cloud.ready() ? [{ label: 'Messagerie du club', icon: I.chat, onClick: (c, r) => { Cloud.post('team:' + m.teamId, $('#convTxt', r).value).then(() => toast('Convocation publiée dans le canal ' + ((teamOf(m.teamId) || {}).name || ''))).catch(e => toast(e.message, 'err')); } }] : []),
+        { label: 'Copier', icon: I.copy, onClick: (c, r) => { navigator.clipboard.writeText($('#convTxt', r).value).then(() => toast('Convocation copiée')).catch(() => toast('Sélectionne le texte et copie-le')); return false; } }] });
+  }
   function match(root, id) {
     const m = Store.get('matches', id); if (!m) return (location.hash = '#/matchs');
     if (!Auth.sees(m.teamId)) return matchView(root, m);
@@ -449,7 +470,7 @@ const Views = (() => {
           </div>
           <div class="chips"><button class="chip ${m.home ? 'on' : ''}" data-home="1">Domicile</button><button class="chip ${!m.home ? 'on' : ''}" data-home="0">Extérieur</button></div>
         </section>
-        <h2 class="section">Convoqués (${conv.length})</h2>
+        <div class="row-head"><h2 class="section">Convoqués (${conv.length})</h2>${conv.length ? `<button class="btn primary" data-act="convoc">${I.share}<span>Envoyer la convocation</span></button>` : ''}</div>
         ${t ? `<div class="chips roster">${roster.map(p => `<button class="chip ${(m.convoked || []).includes(p.id) ? 'on' : ''}" data-conv="${p.id}">${esc(pLabel(p))}</button>`).join('')}</div>` : '<p class="muted">Choisis une équipe.</p>'}
         <h2 class="section">Encadrants</h2><div class="staff-pick">${People.staffPicker(m.teamId, m.staffIds)}</div>
         <h2 class="section">Composition</h2>
@@ -485,6 +506,7 @@ const Views = (() => {
     };
     root.onclick = async e => {
       const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.act === 'convoc') return sendConvocation(m);
       if (b.dataset.cheer) { ClubLife.cheer(b.dataset.cheer); return render(); }
       if (b.dataset.home) { m.home = b.dataset.home === '1'; save(); return render(); }
       if (b.dataset.unstaff) { m.staffIds = (m.staffIds || []).filter(x => x !== b.dataset.unstaff); save(); return render(); }
