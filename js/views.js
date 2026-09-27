@@ -102,12 +102,14 @@ const Views = (() => {
     root.innerHTML = `${header('Équipes', 'Les catégories du club, leurs joueurs et leurs dirigeants',
       `<a class="btn" href="#/joueurs">${I.team}<span>Tous les joueurs (${S().players.length})</span></a>
        <a class="btn" href="#/dirigeants">${I.whistle}<span>Dirigeants (${S().staff.length})</span></a>
+       ${Auth.isAdmin() ? `<button class="btn" data-act="bybirth">${I.calendar}<span>Ranger par année de naissance</span></button>` : ''}
        <button class="btn primary" data-act="new">${I.plus}<span>Nouvelle catégorie</span></button>`)}
       ${S().teams.length ? `<div class="grid">${S().teams.map(t => { const np = Store.playersOf(t.id).length, ns = Store.staffOf(t.id).length;
         return `<a class="card team-card" href="#/equipe/${t.id}">
           <span class="badge">${fmtLabel(t.format)}</span><h2>${esc(t.name)}</h2><p class="muted">${count(np, 'joueur')} · ${count(ns, 'dirigeant')}</p></a>`; }).join('')}</div>`
         : empty('Crée ta première catégorie pour ajouter tes joueurs.')}`;
     $('[data-act="new"]', root).onclick = newTeam;
+    const bb = $('[data-act="bybirth"]', root); if (bb) bb.onclick = () => People.sortByBirthDialog(() => teams(root));
   }
   function newTeam() {
     modal({ title: 'Nouvelle catégorie', body: `
