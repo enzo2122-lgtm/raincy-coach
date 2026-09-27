@@ -604,6 +604,7 @@ body:not(.editing) main#view { padding-bottom: 96px; }
 /* ---------- planning ---------- */
 .plan-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; }
 .plan-nav b { font: 800 17px var(--round); }
+.plan-nav .sh { display: none; }
 .plan-legend { display: flex; align-items: center; gap: 6px 12px; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
 .plan-legend i { display: inline-block; width: 14px; height: 14px; border-radius: 4px; margin-right: 4px; vertical-align: -2px; }
 .plan-legend > span { white-space: nowrap; }
@@ -687,6 +688,22 @@ button.plan-head { display: block; width: 100%; border: 0; background: none; fon
   .plan-day.sel { display: block; }
   .plan-view { display: flex; }
   .day-chips.wk { display: none; }
+  /* compact top of the planning page on a phone: the grid gets the room */
+  .page-head:has(.plan-actions) .sub { display: none; }
+  .page-head:has(.plan-actions) h1 { font-size: 24px; }
+  .plan-actions { flex-wrap: nowrap; gap: 6px; }
+  .plan-actions .btn { min-height: 42px; padding: 0 12px; }
+  .plan-actions .btn:not(.primary) span { display: none; }
+  .plan-nav { gap: 6px; margin-bottom: 8px; }
+  .plan-nav .lg { display: none; }
+  .plan-nav .sh { display: inline; }
+  .plan-nav b { font-size: 15px; }
+  .plan-nav .icon-btn { width: 40px; height: 40px; }
+  .plan-nav .btn { min-height: 40px; padding: 0 12px; }
+  .plan-nav .grow { display: none; }
+  .plan-view .chip { min-height: 36px; padding: 0 12px; }
+  .plan-legend { font-size: 11.5px; gap: 2px 8px; }
+  body[data-page="planning"] .help-fab { display: none; }
   /* « Semaine » on a phone: the 7 days side by side, coloured blocks, name only */
   .plan-wrap.wk { padding: 6px 4px; }
   .plan-wrap.wk .plan-grid { grid-template-columns: 30px repeat(7, minmax(0, 1fr)); gap: 0 2px; }

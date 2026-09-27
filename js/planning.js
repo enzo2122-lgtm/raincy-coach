@@ -7,6 +7,8 @@ const Planning = (() => {
   const KINDS = { entrainement: ['Entraînement', 'training'], match: ['Match', 'match'], autre: ['Autre', 'calendar'] };
   const PART = { full: 'Grand terrain', A: 'Demi-terrain A', B: 'Demi-terrain B' };
   const PX = 0.8; // pixels per minute in the grid
+  let px = PX;     // on a phone, the week is squeezed to fit the screen height
+  const phone = () => matchMedia('(max-width: 760px)').matches;
   let slots = [], bookings = [], loaded = '';
 
   const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -43,7 +45,14 @@ const Planning = (() => {
     loaded = from;
   }
   const slotsOf = dateStr => slots.filter(s => s.weekday === parse(dateStr).getDay());
-  function range() {
+  function range(days) {
+    // Phone, week view: only the hours that are used this week (at least 4 hours), so the whole week fits on the screen
+    if (days && phone() && S().ui.planView !== 'day') {
+      const used = [...bookings.filter(b => days.includes(b.date)).map(b => [b.start_min, b.end_min]), ...(slots.length ? slots.map(s => [s.start_min, s.end_min]) : [[17 * 60, 21 * 60]])];
+      let lo = Math.floor(Math.min(...used.map(x => x[0])) / 60) * 60, hi = Math.ceil(Math.max(...used.map(x => x[1])) / 60) * 60;
+      if (hi - lo < 240) hi = lo + 240;
+      return [lo, hi];
+    }
     const all = slots.length ? slots : [{ start_min: 17 * 60, end_min: 22 * 60 }];
     const bs = bookings.map(b => [b.start_min, b.end_min]);
     const lo = Math.min(...all.map(s => s.start_min), ...bs.map(x => x[0]), 9 * 60), hi = Math.max(...all.map(s => s.end_min), ...bs.map(x => x[1]), 20 * 60);
@@ -59,12 +68,12 @@ const Planning = (() => {
     const week = ui.planWeek, days = Array.from({ length: 7 }, (_, i) => addDays(week, i)), wk = ui.planView !== 'day';
     if (!days.includes(ui.planDay)) ui.planDay = days[0];
     root.innerHTML = `<header class="page-head"><div><h1>Planning · ${esc(fieldName())}</h1><p class="sub">Grand terrain ou demi-terrain, sans chevauchement</p></div>
-      <div class="head-actions">${Auth.isAdmin() ? `<button class="btn" data-p="slots">${I.clock}<span>Créneaux disponibles</span></button>` : ''}
-      <button class="btn" data-p="recur">${I.rotate}<span>Chaque semaine</span></button>
+      <div class="head-actions plan-actions">${Auth.isAdmin() ? `<button class="btn" data-p="slots" aria-label="Créneaux disponibles">${I.clock}<span>Créneaux disponibles</span></button>` : ''}
+      <button class="btn" data-p="recur" aria-label="Chaque semaine">${I.rotate}<span>Chaque semaine</span></button>
       <button class="btn primary" data-p="new">${I.plus}<span>Réserver</span></button></div></header>
       <div class="plan-nav"><button class="icon-btn" data-p="prev" aria-label="Semaine précédente">${I.back}</button>
-        <b>Semaine du ${esc(parse(week).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' }))}</b>
-        <button class="icon-btn" data-p="next" aria-label="Semaine suivante">${I.next}</button><button class="btn soft" data-p="today">Aujourd'hui</button>
+        <b><span class="lg">Semaine du ${esc(parse(week).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' }))}</span><span class="sh">${parse(week).getDate()} – ${esc(parse(days[6]).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }))}</span></b>
+        <button class="icon-btn" data-p="next" aria-label="Semaine suivante">${I.next}</button><button class="btn soft" data-p="today"><span class="lg">Aujourd'hui</span><span class="sh">Auj.</span></button>
         <span class="plan-view chips"><button class="chip ${wk ? '' : 'on'}" data-p="vday">Jour</button><button class="chip ${wk ? 'on' : ''}" data-p="vweek">Semaine</button></span>
         <span class="grow"></span><span class="plan-legend" id="planLegend"></span></div>
       <label class="day-select ${wk ? 'wk' : ''}"><span>Jour</span><select data-daysel aria-label="Jour">${days.map(d => `<option value="${d}" ${d === ui.planDay ? 'selected' : ''}>${DAYS[parse(d).getDay()]} ${parse(d).getDate()} ${parse(d).toLocaleDateString('fr-FR', { month: 'long' })}</option>`).join('')}</select></label>
@@ -77,21 +86,26 @@ const Planning = (() => {
     bind(root);
   }
   function renderGrid(root, days) {
-    const [lo, hi] = range(), H = (hi - lo) * PX, ui = S().ui, mine = new Set(myTeams());
+    const [lo, hi] = range(days), ui = S().ui, mine = new Set(myTeams());
+    if (phone() && ui.planView !== 'day') {
+      const top = $('#planGrid', root).getBoundingClientRect().top + window.scrollY, room = innerHeight - top - 175; // day names + bottom tab bar
+      px = Math.max(0.35, Math.min(PX, room / (hi - lo)));
+    } else px = PX;
+    const H = (hi - lo) * px;
     const hours = []; for (let m = lo; m <= hi; m += 60) hours.push(m);
     const col = d => {
       const free = slotsOf(d), list = bookings.filter(b => b.date === d);
       return `<div class="plan-day ${d === ui.planDay ? 'sel' : ''} ${d === iso(new Date()) ? 'today' : ''}" data-col="${d}">
         <button class="plan-head" data-openday="${d}">${DAYS[parse(d).getDay()].slice(0, 3)} <b>${parse(d).getDate()}</b></button>
         <div class="plan-body" style="height:${H}px" data-date="${d}">
-          ${hours.map(m => `<i class="hline" style="top:${(m - lo) * PX}px"></i>`).join('')}
-          ${(slots.length ? free : [{ start_min: lo, end_min: hi }]).map(s => `<div class="avail" style="top:${(s.start_min - lo) * PX}px;height:${(s.end_min - s.start_min) * PX}px"></div>`).join('')}
-          ${list.map(b => { const c = colorOf(b); return `<button class="bk k-${esc(b.kind)} part-${b.part} ${mine.has(b.team_id) ? 'mine' : ''}" data-bk="${b.id}" style="top:${(b.start_min - lo) * PX}px;height:${Math.max(22, (b.end_min - b.start_min) * PX - 2)}px${c ? ';background-color:' + c + ';color:#fff' : ''}">
-            <b>${esc(b.team_name || KINDS[b.kind][0])}</b><i class="bk-s">${esc(shortOf(b))}</i><span>${b.kind === 'match' ? 'Match · ' : ''}${hm(b.start_min)}–${hm(b.end_min)}${b.part === 'full' ? '' : ' · ½ ' + b.part}</span></button>`; }).join('')}
+          ${hours.map(m => `<i class="hline" style="top:${(m - lo) * px}px"></i>`).join('')}
+          ${(slots.length ? free : [{ start_min: lo, end_min: hi }]).map(s => `<div class="avail" style="top:${(s.start_min - lo) * px}px;height:${(s.end_min - s.start_min) * px}px"></div>`).join('')}
+          ${list.map(b => { const c = colorOf(b); return `<button class="bk k-${esc(b.kind)} part-${b.part} ${mine.has(b.team_id) ? 'mine' : ''}" data-bk="${b.id}" style="top:${(b.start_min - lo) * px}px;height:${Math.max(phone() ? 16 : 22, (b.end_min - b.start_min) * px - 2)}px${c ? ';background-color:' + c + ';color:#fff' : ''}">
+            <b>${esc(b.team_name || KINDS[b.kind][0])}</b><i class="bk-s">${esc(b.part === 'full' ? shortOf(b) : shortOf(b).replace(/^U(?=\d)/, '').replace(/^SEN$/, 'S').replace(/^VÉT$/, 'V'))}</i><span>${b.kind === 'match' ? 'Match · ' : ''}${hm(b.start_min)}–${hm(b.end_min)}${b.part === 'full' ? '' : ' · ½ ' + b.part}</span></button>`; }).join('')}
         </div></div>`;
     };
     $('#planGrid', root).innerHTML = `<div class="plan-grid">
-      <div class="plan-hours"><div class="plan-head">&nbsp;</div><div style="position:relative;height:${H}px">${hours.map(m => `<span style="top:${(m - lo) * PX}px">${hm(m)}</span>`).join('')}</div></div>
+      <div class="plan-hours"><div class="plan-head">&nbsp;</div><div style="position:relative;height:${H}px">${hours.map(m => `<span style="top:${(m - lo) * px}px">${hm(m)}</span>`).join('')}</div></div>
       ${days.map(col).join('')}</div>
       ${!slots.length ? '<p class="tip">Aucun créneau défini : le terrain est réservable à toute heure. Le responsable peut fixer les créneaux disponibles.</p>' : ''}`;
     $('#planGrid', root).dataset.lo = lo;
@@ -122,7 +136,7 @@ const Planning = (() => {
       const body = e.target.closest('.plan-body');
       if (body) {
         const lo = +$('#planGrid', root).dataset.lo, y = e.clientY - body.getBoundingClientRect().top;
-        const start = Math.round((lo + y / PX) / 15) * 15;
+        const start = Math.round((lo + y / px) / 15) * 15;
         bookForm({ date: body.dataset.date, start }, () => page(root));
       }
     };
