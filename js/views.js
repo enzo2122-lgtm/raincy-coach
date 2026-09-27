@@ -200,6 +200,7 @@ const Views = (() => {
         <section class="card">
           <div class="row-head"><label class="fld inline"><span>Catégorie</span><input id="tCat" value="${esc(t.category || '')}" maxlength="20"></label>
           <div class="chips">${FORMATS.map(([v, l]) => `<button class="chip ${t.format === v ? 'on' : ''}" data-fmt="${v}">${l}</button>`).join('')}</div></div>
+          ${Auth.isAdmin() && Importer.letterNo(t) ? `<label class="fld" style="margin-top:12px"><span>Nom au District (pour ranger les matchs importés)</span><select id="tDistrict">${[1, 2, 3, 4].map(n => `<option value="${n}" ${Importer.districtNo(t) === n ? 'selected' : ''}>${esc(S().club.name)}${n > 1 ? ' ' + n : ''}</option>`).join('')}</select></label>` : ''}
         </section>
         <div id="teamPeople"></div>
         ${Auth.isAdmin() ? `<div class="danger-zone"><button class="btn danger" data-act="delete">${I.trash}<span>Supprimer la catégorie</span></button></div>` : ''}`;
@@ -208,6 +209,15 @@ const Views = (() => {
       people(); People.bindTeamSections(box, t, people);
     };
     render();
+    root.onchange = e => {
+      if (e.target.id !== 'tDistrict') return;
+      t.districtNo = +e.target.value; save();
+      // the other team of the category takes the other number, then the imported matches are put back in the right team
+      const others = S().teams.filter(x => x.id !== t.id && Importer.letterNo(x) && (x.category || '') === (t.category || ''));
+      const clash = others.find(x => Importer.districtNo(x) === t.districtNo); if (clash) { const free = [1, 2, 3, 4].find(n => ![t, ...others].some(x => x !== clash && Importer.districtNo(x) === n)); clash.districtNo = free; Store.upsert('teams', clash); }
+      const n = Importer.reassignImported(t.category || t.name);
+      toast(n ? `${n} match${n > 1 ? 's' : ''} rangé${n > 1 ? 's' : ''} dans la bonne équipe` : 'Numéro enregistré');
+    };
     root.oninput = e => {
       if (e.target.id === 'tName') { t.name = e.target.value; save(); }
       if (e.target.id === 'tCat') { t.category = e.target.value; save(); }
@@ -429,6 +439,7 @@ const Views = (() => {
         `<button class="btn primary" data-act="pdf">${I.pdf}<span>Feuille de match</span></button>`)}
         <section class="card">
           <div class="row3">
+            <label class="fld"><span>Équipe</span><select data-f="teamId">${Auth.teams().map(x => `<option value="${x.id}" ${x.id === m.teamId ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label>
             <label class="fld"><span>Adversaire</span><input data-f="opponent" value="${esc(m.opponent)}"></label>
             <label class="fld"><span>Date</span><input type="date" data-f="date" value="${esc(m.date)}"></label>
             <label class="fld"><span>Coup d'envoi</span><input type="time" data-f="time" value="${esc(m.time || '')}"></label>
@@ -465,8 +476,9 @@ const Views = (() => {
     };
     const cheer = before => { if (Ratings.result(m) === 'V' && before !== 'V') Ratings.celebrate(); };
     render();
-    root.oninput = e => { const f = e.target.dataset.f; if (f) { m[f] = e.target.value; save(); } };
+    root.oninput = e => { const f = e.target.dataset.f; if (f) { m[f] = e.target.value; if (f === 'teamId') m.teamManual = true; save(); } };
     root.onchange = e => {
+      if (e.target.dataset.f === 'teamId') { m.teamId = e.target.value; m.teamManual = true; save(); toast('Match rangé dans ' + (teamOf(m.teamId) || {}).name); return render(); }
       if (e.target.id === 'mPlayed') { const before = Ratings.result(m); m.played = e.target.checked; save(); render(); return cheer(before); }
       if (e.target.hasAttribute('data-staffpick') && e.target.value) { m.staffIds = [...new Set([...(m.staffIds || []), e.target.value])]; save(); return render(); }
       root.oninput(e);

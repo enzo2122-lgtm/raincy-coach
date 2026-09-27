@@ -52,10 +52,35 @@ const Importer = (() => {
     if (/\bU ?(18|19|20)\b/.test(c)) return by('SENIORS');
     for (const u of ['U17', 'U16', 'U15', 'U14', 'U13', 'U12', 'U11', 'U10', 'U9', 'U8', 'U7', 'U6']) if (c.includes(u)) {
       const map = { U16: 'U17', U14: 'U15', U12: 'U13', U10: 'U11', U8: 'U9' }; // older clubs grouped two ages in one category
-      return by(u) || by(map[u]);
+      const t = by(u) || by(map[u]);
+      return t && pickTeam(t, ourName);
     }
-    if (/SENIOR/.test(c)) return by('SENIORS');
+    if (/SENIOR/.test(c)) { const t = by('SENIORS'); return t && pickTeam(t, ourName); }
     return null;
+  }
+  /* The District numbers the club's teams of a category: « FA LE RAINCY » = team 1, « FA LE RAINCY 2 » = team 2…
+     Team 1 is « U14 A », team 2 « U14 B »… unless the responsable set another number on the team (Équipes → the team). */
+  const teamNo = ourName => { const m = norm(ourName).match(/RAINCY\b\D{0,3}(\d)\b/); return m ? +m[1] : 1; };
+  const letterNo = t => { const m = String(t.name || '').trim().match(/\s([A-E])$/i); return m ? m[1].toUpperCase().charCodeAt(0) - 64 : 0; };
+  const districtNo = t => +t.districtNo || letterNo(t);
+  function pickTeam(t, ourName) {
+    const base = norm(t.category || t.name).replace(/\s+[A-E]$/, ''), no = teamNo(ourName);
+    const lettered = S().teams.filter(x => norm(x.category || '').replace(/\s+[A-E]$/, '') === base && letterNo(x));
+    return lettered.find(x => districtNo(x) === no) || t;
+  }
+  // Matches imported before (their note keeps « Équipe : FA LE RAINCY 2 »): put each one in its team, unless moved by hand
+  function reassignImported(onlyCat) {
+    let n = 0;
+    S().matches.forEach(m => {
+      if (m.teamManual) return;
+      const ours = ((m.notes || '').match(/Équipe : (.+)/) || [])[1]; if (!ours) return;
+      const cur = Store.get('teams', m.teamId); if (!cur) return;
+      const base = norm(cur.category || cur.name).replace(/\s+[A-E]$/, ''); if (onlyCat && base !== norm(onlyCat).replace(/\s+[A-E]$/, '')) return;
+      const t = pickTeam(cur, ours);
+      if (t && t.id !== m.teamId) { m.teamId = t.id; m.updatedAt = Date.now(); n++; }
+    });
+    if (n) Store.save();
+    return n;
   }
 
   /* ---------- .ics calendar files ---------- */
@@ -207,5 +232,5 @@ const Importer = (() => {
     return { title: title.slice(0, 120) || 'Exercice', duration: dur ? +dur : 15, org: org.replace(/\n/g, ' ').slice(0, 1500) + (evoList.length ? '\n\nÉvolutions :\n' + evoList.map(e => '+ ' + e).join('\n') : ''), consignes: consList.join('\n'), materiel: mat.replace(/\n/g, ' ') };
   }
 
-  return { parseFFF, parseICS, parseCSV, guessTeam, matchesDialog, trainingsFromICS, isAssistCoach, parseAssistPage };
+  return { parseFFF, parseICS, parseCSV, guessTeam, reassignImported, districtNo, letterNo, matchesDialog, trainingsFromICS, isAssistCoach, parseAssistPage };
 })();
