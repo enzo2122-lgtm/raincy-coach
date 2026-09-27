@@ -22,6 +22,9 @@ const Messages = (() => {
     const f = String(s.firstName || '').replace(/\(.*?\)/g, '').trim().split(/\s+/)[0];
     return 'Coach ' + (f ? f.charAt(0).toUpperCase() + f.slice(1) : String(s.lastName || '').charAt(0) + String(s.lastName || '').slice(1).toLowerCase());
   }
+  const staffOf = m => m.author_id && Store.get('staff', m.author_id);
+  const redraw = () => { if (location.hash.startsWith('#/messages')) App.route(true); };
+  const crestOf = s => s && s.club ? Clubs.crest(s.club, 18, redraw) : '';
   function authorName(m) {
     const s = m.author_id && Store.get('staff', m.author_id);
     if (s) return coachName(s);
@@ -77,7 +80,7 @@ const Messages = (() => {
     const mineTeams = new Set((me().teamIds || []));
     const teams = S().teams.slice(); // club order: U6 … Vétérans
     const dms = [...new Set(msgs.map(m => m.channel).filter(isMineDm))];
-    const item = c => `<a class="ch ${c === ch ? 'on' : ''}" href="#/messages/${encodeURIComponent(c)}"><span class="ch-ic">${c === 'general' ? I.team : c.startsWith('team:') ? I.whistle : I.edit}</span>
+    const item = c => `<a class="ch ${c === ch ? 'on' : ''}" href="#/messages/${encodeURIComponent(c)}"><span class="ch-ic">${c === 'general' ? I.team : c.startsWith('team:') ? I.whistle : (crestOf(Store.get('staff', c.split(':').slice(1).find(id => id !== (me() || {}).id))) || I.edit)}</span>
       <span class="ch-name">${esc(channelName(c))}</span>${unread(c) ? `<i class="ch-badge">${unread(c)}</i>` : ''}</a>`;
     root.innerHTML = `<div class="msg-layout ${ch ? 'has-ch' : ''}">
       <aside class="ch-list">
@@ -105,7 +108,7 @@ const Messages = (() => {
         const d = new Date(m.created_at), ds = d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
         const sep = ds !== day ? `<div class="day-sep">${esc(ds)}</div>` : ''; day = ds;
         const mine = m.author_id === me().id;
-        return `${sep}<div class="bubble ${mine ? 'mine' : ''}" data-m="${m.id}">${mine ? '' : `<b>${esc(authorName(m))}</b>`}<p>${esc(m.body).replace(/\n/g, '<br>')}</p>
+        return `${sep}<div class="bubble ${mine ? 'mine' : ''}" data-m="${m.id}">${mine ? '' : `<b class="author">${crestOf(staffOf(m))}${esc(authorName(m))}</b>`}<p>${esc(m.body).replace(/\n/g, '<br>')}</p>
           <span class="time">${d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}${mine || Auth.isAdmin() ? ` · <button class="linkish" data-delm="${m.id}">supprimer</button>` : ''}</span></div>`;
       }).join('') : '<p class="muted conv-hint">Pas encore de message. Écris le premier !</p>';
       body.scrollTop = body.scrollHeight;
@@ -133,7 +136,7 @@ const Messages = (() => {
   function pickCoach() {
     const others = S().staff.filter(s => s.id !== me().id).sort(Store.byName);
     const close = UI.modal({ title: 'Écrire à un éducateur', noFocus: true,
-      body: others.length ? `<div class="people">${others.map(s => `<button class="person-main" data-to="${s.id}"><span class="pnum role">${I.whistle}</span><span class="pmain"><b>${esc(coachName(s))}</b><span class="muted">${esc([s.role, (s.teamIds || []).map(id => (Store.get('teams', id) || {}).name).filter(Boolean).join(', ')].filter(Boolean).join(' · '))}</span></span></button>`).join('')}</div>` : '<p class="muted">Aucun autre dirigeant dans l\'appli.</p>',
+      body: others.length ? `<div class="people">${others.map(s => `<button class="person-main" data-to="${s.id}"><span class="pnum role">${I.whistle}</span><span class="pmain"><b class="author">${crestOf(s)}${esc(coachName(s))}</b><span class="muted">${esc([s.role, (s.teamIds || []).map(id => (Store.get('teams', id) || {}).name).filter(Boolean).join(', '), s.club ? 'club de cœur : ' + Clubs.name(s.club) : ''].filter(Boolean).join(' · '))}</span></span></button>`).join('')}</div>` : '<p class="muted">Aucun autre dirigeant dans l\'appli.</p>',
       onOpen: r => $$('[data-to]', r).forEach(b => b.onclick = () => { close(); location.hash = '#/messages/' + encodeURIComponent(dmKey(me().id, b.dataset.to)); }) });
   }
   function leave() { fast = false; onNew = null; start(); }
