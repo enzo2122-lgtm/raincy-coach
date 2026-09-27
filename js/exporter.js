@@ -247,7 +247,7 @@ const Exporter = (() => {
       const opp = m.opponent || 'Adversaire', a = m.home ? club.name : opp, b = m.home ? opp : club.name;
       P.label('Score'); P.para(`${a}  ${m.home ? m.gf : m.ga} - ${m.home ? m.ga : m.gf}  ${b}`, 12);
     }
-    const players = team ? Store.playersOf(team.id).filter(p => (m.convoked || []).includes(p.id)) : [];
+    const players = team ? Store.rosterOf(team.id).filter(p => (m.convoked || []).includes(p.id)) : [];
     const staff = (m.staffIds || []).map(id => Store.get('staff', id)).filter(Boolean);
     if (staff.length) { P.label('Encadrants'); P.table(['Nom', 'Rôle', 'Téléphone'], staff.map(s => [Store.fullName(s), s.role || '', s.phone || '']), [.45, .3, .25]); }
     if (players.length) {

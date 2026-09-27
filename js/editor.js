@@ -361,7 +361,7 @@ const Editor = (() => {
       const titles = { player: o.gk ? 'Gardien' : 'Joueur', ball: 'Ballon', cone: 'Plot', goal: 'But' };
       h += `<div class="panel-head"><h3>${titles[o.type]}</h3><button class="icon-btn danger" data-act="delSel" aria-label="Supprimer">${I.trash}</button></div>`;
       if (o.type === 'player') {
-        const roster = sc.teamId ? Store.playersOf(sc.teamId) : [];
+        const roster = sc.teamId ? Store.rosterOf(sc.teamId) : [];
         h += `${roster.length ? `<label class="fld"><span>Joueur de l'effectif</span><select id="pWho"><option value="">Choisir un joueur…</option>${roster.map(p => `<option value="${p.id}" ${p.id === o.playerId ? 'selected' : ''}>${esc(Store.fullName(p))}${p.number ? ' (' + esc(p.number) + ')' : ''}</option>`).join('')}</select></label>` : ''}
           <label class="fld"><span>Numéro ou lettre</span><input id="pLabel" maxlength="3" value="${esc(o.label || '')}"></label>
           <label class="fld"><span>Nom affiché</span><input id="pName" maxlength="24" value="${esc(o.name || '')}" placeholder="Prénom"></label>
@@ -417,7 +417,7 @@ const Editor = (() => {
           : chipRow([['full', 'Terrain entier'], ['half', 'Demi-terrain']], 'view', f.view || 'full')}
         <h3>Équipe</h3>
         <label class="fld"><span>Catégorie</span><select id="scTeam"><option value="">Aucune</option>${Auth.teams().map(t => `<option value="${t.id}" ${t.id === sc.teamId ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></label>
-        ${sc.teamId ? (() => { const onField = new Set(sc.objects.map(o => o.playerId).filter(Boolean)), free = Store.playersOf(sc.teamId).filter(p => !onField.has(p.id));
+        ${sc.teamId ? (() => { const onField = new Set(sc.objects.map(o => o.playerId).filter(Boolean)), free = Store.rosterOf(sc.teamId).filter(p => !onField.has(p.id));
           return `<label class="fld"><span>Mettre un joueur sur le terrain</span><select id="addWho"><option value="">${free.length ? 'Choisir un joueur…' : 'Tout l\'effectif est sur le terrain'}</option>${free.map(p => `<option value="${p.id}">${esc(Store.fullName(p))}${p.number ? ' (' + esc(p.number) + ')' : ''}${p.pos ? ' · ' + esc(p.pos) : ''}</option>`).join('')}</select></label>`; })() : '<p class="tip">Choisis une catégorie pour placer tes joueurs avec un menu.</p>'}
         <button class="btn soft wide" data-act="formation" ${f.format === 'zone' || f.format === 'bg' ? 'disabled' : ''}>${I.formation}<span>Placer une formation</span></button>
         <h3>Les flèches</h3>
@@ -464,7 +464,7 @@ const Editor = (() => {
     snapshot();
     const sc = E.sc, { L, W } = Board.dims(sc.field), c = club();
     if (replace) sc.objects.filter(o => o.type === 'player').map(o => o.id).forEach(id => removeThing({ kind: 'obj', id }));
-    const roster = team ? Store.playersOf(team.id) : [];
+    const roster = team ? Store.rosterOf(team.id) : [];
     const gks = roster.filter(p => p.pos === 'GB'), field = roster.filter(p => p.pos !== 'GB');
     const k = away ? .88 : 1; // with two teams, each one stays in its own half so the strikers don't overlap
     Formations[sc.field.format][home].forEach(([lab, x, y, gk]) => {

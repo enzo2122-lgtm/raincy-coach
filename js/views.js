@@ -7,6 +7,16 @@ const Views = (() => {
   const FORMATS = [['11', 'Foot à 11'], ['8', 'Foot à 8'], ['5', 'Foot à 5']];
   const pName = Store.fullName;
   const pLabel = p => `${p.number ? p.number + ' · ' : ''}${pName(p)}`;
+  // The team's own players (all of its category when nobody is put in the team yet, e.g. « Seniors A »)
+  const squad = teamId => { const own = Store.playersOf(teamId); return own.length ? own : Store.rosterOf(teamId); };
+  // Chips of a team's players, then « Autres joueurs de la catégorie » (a team A / B can call up any player of its category)
+  function rosterChips(teamId, chip) {
+    const all = Store.rosterOf(teamId), own = new Set(Store.playersOf(teamId).map(p => p.id)), mine = all.filter(p => own.has(p.id)), others = all.filter(p => !own.has(p.id));
+    const t = teamOf(teamId);
+    return (mine.length ? `<div class="chips roster">${mine.map(chip).join('')}</div>` : '') +
+      (others.length ? `${mine.length ? `<div class="lbl">Autres joueurs de la catégorie ${esc((t && t.category) || '')} (${others.length})</div>` : ''}<div class="chips roster">${others.map(chip).join('')}</div>` : '') +
+      (!all.length ? '<p class="muted">Aucun joueur dans cette catégorie : ajoute-les dans Équipes.</p>' : '');
+  }
   const POS = [['GB', 'Gardien'], ['DEF', 'Défenseur'], ['MIL', 'Milieu'], ['ATT', 'Attaquant']];
   const COMPS = ['Championnat', 'Coupe', 'Amical', 'Plateau', 'Tournoi'];
   const activeTeam = () => S().ui.teamId && teamOf(S().ui.teamId) && Auth.sees(S().ui.teamId) ? S().ui.teamId : '';
@@ -363,10 +373,10 @@ const Views = (() => {
         <div class="ex-list">${tr.exercises.map((e, i) => exerciseCard(e, i, tr.exercises.length)).join('') || '<p class="muted">Ajoute ton premier exercice.</p>'}</div>
         <button class="btn primary" data-act="addEx">${I.plus}<span>Ajouter un exercice</span></button>
         <h2 class="section">Encadrants</h2><div class="staff-pick">${People.staffPicker(tr.teamId, tr.staffIds)}</div>
-        ${tm ? `<div class="row-head"><h2 class="section" id="presH">Présents (${(tr.presents || []).length}/${Store.playersOf(tm.id).length})</h2>
+        ${tm ? `<div class="row-head"><h2 class="section" id="presH">Présents (${(tr.presents || []).length}/${squad(tm.id).length})</h2>
           <div class="chips"><button class="btn soft" data-allpres="1">${I.check}<span>Tous présents</span></button><button class="btn soft" data-allpres="0">${I.x}<span>Personne</span></button></div></div>
           <p class="muted small">Un toucher par joueur. Le % est sa présence sur la saison (séances où l'appel a été fait).</p>
-          <div class="chips roster">${Store.playersOf(tm.id).map(p => `<button class="chip ${(tr.presents || []).includes(p.id) ? 'on' : ''}" data-present="${p.id}">${presChip(p, tm.id)}</button>`).join('')}</div>` : ''}
+          ${rosterChips(tm.id, p => `<button class="chip ${(tr.presents || []).includes(p.id) ? 'on' : ''}" data-present="${p.id}">${presChip(p, tm.id)}</button>`)}` : ''}
         <div id="rateBox"></div>
         <div id="docsBox">${Library.docsPlaceholder()}</div>
         ${Media.placeholder('training:' + tr.id, 'Photos et vidéos de la séance')}
@@ -375,7 +385,7 @@ const Views = (() => {
       rateTr(); Media.mount(root); Library.mountDocs($('#docsBox', root), tr, save);
     };
     const presChip = (p, teamId) => `<span>${esc(pLabel(p))}</span>${People.pctBadge(People.attendance(p, teamId))}`;
-    const rateTr = () => { const box = $('#rateBox', root); if (box) box.innerHTML = Ratings.section(tr, Store.playersOf(tr.teamId || '').filter(p => (tr.presents || []).includes(p.id)), 'training'); };
+    const rateTr = () => { const box = $('#rateBox', root); if (box) box.innerHTML = Ratings.section(tr, Store.rosterOf(tr.teamId || '').filter(p => (tr.presents || []).includes(p.id)), 'training'); };
     const exerciseCard = (e, i, n) => {
       const sc = e.schemaId && Store.get('schemas', e.schemaId);
       return `<article class="card ex" data-ex="${e.id}">
@@ -411,11 +421,11 @@ const Views = (() => {
         const p = tr.presents = tr.presents || [], i = p.indexOf(b.dataset.present); i < 0 ? p.push(b.dataset.present) : p.splice(i, 1); save();
         // the season % of every chip moves too (this session now counts, or no longer counts)
         $$('[data-present]', root).forEach(c => { const pl = Store.get('players', c.dataset.present); c.classList.toggle('on', p.includes(c.dataset.present)); if (pl) c.innerHTML = presChip(pl, tr.teamId); });
-        $('#presH', root).textContent = `Présents (${p.length}/${Store.playersOf(tr.teamId).length})`; rateTr(); return;
+        $('#presH', root).textContent = `Présents (${p.length}/${squad(tr.teamId).length})`; rateTr(); return;
       }
       if (b.dataset.allpres) {
         if (b.dataset.allpres === '0' && (tr.presents || []).length && !(await confirmBox('Décocher tous les présents de cette séance ?', 'Décocher'))) return;
-        tr.presents =b.dataset.allpres === '1' ? Store.playersOf(tr.teamId).map(p => p.id) : []; save(); return render(); }
+        tr.presents =b.dataset.allpres === '1' ? squad(tr.teamId).map(p => p.id) : []; save(); return render(); }
       if (b.dataset.unstaff) { tr.staffIds = (tr.staffIds || []).filter(x => x !== b.dataset.unstaff); save(); return render(); }
       if (b.dataset.mv) { const i = tr.exercises.indexOf(ex), j = i + +b.dataset.mv; [tr.exercises[i], tr.exercises[j]] = [tr.exercises[j], tr.exercises[i]]; save(); return render(); }
       if (b.hasAttribute('data-delex')) { if (await confirmBox(`Retirer l'exercice « ${ex.title || 'sans nom'} » ?`, 'Retirer')) { tr.exercises = tr.exercises.filter(x => x !== ex); save(); render(); } return; }
@@ -481,7 +491,7 @@ const Views = (() => {
   }
   /* ---------- convocation to send on WhatsApp (to the parents' group) ---------- */
   function convocationText(m) {
-    const t = teamOf(m.teamId), conv = (t ? Store.playersOf(t.id) : []).filter(p => (m.convoked || []).includes(p.id)), club = S().club.name || 'FA Le Raincy';
+    const t = teamOf(m.teamId), conv = (t ? Store.rosterOf(t.id) : []).filter(p => (m.convoked || []).includes(p.id)), club = S().club.name || 'FA Le Raincy';
     const hh = x => String(x || '').replace(':', 'h'), me = Auth.current();
     return [`⚽ *${club}${t ? ' · ' + t.name : ''}*`, `*Convocation – ${fmtDate(m.date, { weekday: 'long', day: 'numeric', month: 'long' })}*`, '',
       `Match ${m.home ? 'à domicile' : 'à l\'extérieur'} contre *${m.opponent || '?'}*${m.competition ? ' (' + m.competition + ')' : ''}`,
@@ -528,7 +538,7 @@ const Views = (() => {
     const save = () => Store.upsert('matches', m);
     const stepper = (key, val, lab) => `<div class="stepper"><span>${lab}</span><button class="icon-btn" data-sc="${key}" data-d="-1" aria-label="Moins">${I.minus}</button><b>${val}</b><button class="icon-btn" data-sc="${key}" data-d="1" aria-label="Plus">${I.plus}</button></div>`;
     const render = () => {
-      const t = teamOf(m.teamId), roster = t ? Store.playersOf(t.id) : [], conv = roster.filter(p => (m.convoked || []).includes(p.id));
+      const t = teamOf(m.teamId), roster = t ? Store.rosterOf(t.id) : [], conv = roster.filter(p => (m.convoked || []).includes(p.id));
       const lineup = m.lineupId && Store.get('schemas', m.lineupId);
       root.innerHTML = `${header(matchTitle(m), `${esc(fmtDate(m.date, { weekday: 'long', day: 'numeric', month: 'long' }))}${t ? ' · ' + esc(t.name) : ''}`,
         `<button class="btn primary" data-act="pdf">${I.pdf}<span>Feuille de match</span></button>`)}
@@ -545,7 +555,7 @@ const Views = (() => {
           <div class="chips"><button class="chip ch-home ${m.home ? 'on' : ''}" data-home="1">🏠 Domicile</button><button class="chip ch-away ${!m.home ? 'on' : ''}" data-home="0">🚌 Extérieur</button></div>
         </section>
         <div class="row-head"><h2 class="section">Convoqués (${conv.length})</h2>${conv.length ? `<button class="btn primary" data-act="convoc">${I.share}<span>Envoyer la convocation</span></button>` : ''}</div>
-        ${t ? `<div class="chips roster">${roster.map(p => `<button class="chip ${(m.convoked || []).includes(p.id) ? 'on' : ''}" data-conv="${p.id}">${esc(pLabel(p))}</button>`).join('')}</div>` : '<p class="muted">Choisis une équipe.</p>'}
+        ${t ? rosterChips(t.id, p => `<button class="chip ${(m.convoked || []).includes(p.id) ? 'on' : ''}" data-conv="${p.id}">${esc(pLabel(p))}</button>`) : '<p class="muted">Choisis une équipe.</p>'}
         <div id="answersBox"></div>
         ${!m.home && !m.exempt ? '<div id="carpoolBox"></div>' : ''}
         <h2 class="section">Encadrants</h2><div class="staff-pick">${People.staffPicker(m.teamId, m.staffIds)}</div>
@@ -633,15 +643,17 @@ const Views = (() => {
   }
   function makeLineup(m) {
     const t = teamOf(m.teamId); if (!t) return toast('Choisis une équipe', 'err');
-    const forms = Object.keys(Formations[t.format]);
+    const fmt = Formations[t.format] ? t.format : '11', forms = Object.keys(Formations[fmt]); // a team without a known format plays at 11
+    const nConv = Store.rosterOf(t.id).filter(p => (m.convoked || []).includes(p.id)).length;
     modal({ title: 'Composition', body: `<label class="fld"><span>Système</span><select id="lf">${forms.map(f => `<option>${esc(f)}</option>`).join('')}</select></label>
-      <p class="tip">Les convoqués sont placés automatiquement : gardien dans le but, puis dans l'ordre de la liste. Tu pourras les déplacer.</p>`,
+      ${nConv ? `<p class="tip">Les ${nConv} convoqués sont placés automatiquement : gardien dans le but, puis défenseurs, milieux et attaquants. Tu pourras les déplacer, et mettre les autres avec « Mettre un joueur sur le terrain ».</p>`
+        : '<p class="tip">⚠️ Aucun joueur convoqué pour ce match : les postes seront placés sans prénoms. Pour avoir les prénoms, coche d\'abord les convoqués (liste « Convoqués » du match), puis refais la composition.</p>'}`,
       actions: [{ label: 'Annuler' }, { label: 'Créer', kind: 'primary', onClick: (c, r) => {
-        const sc = blankSchema(`Compo contre ${m.opponent}`, { format: t.format, view: 'full' }, t.id);
-        const { L, W } = Board.dims(sc.field), players = Store.playersOf(t.id).filter(p => (m.convoked || []).includes(p.id));
+        const sc = blankSchema(`Compo contre ${m.opponent}`, { format: fmt, view: 'full' }, t.id);
+        const { L, W } = Board.dims(sc.field), players = Store.rosterOf(t.id).filter(p => (m.convoked || []).includes(p.id));
         const gks = players.filter(p => p.pos === 'GB'), field = players.filter(p => p.pos !== 'GB');
-        const order = { DEF: 0, MIL: 1, ATT: 2 }; field.sort((a, b) => order[a.pos] - order[b.pos]);
-        Formations[t.format][$('#lf', r).value].forEach(([lab, x, y, gk]) => {
+        const order = { DEF: 0, MIL: 1, ATT: 2 }, rk = p => p.pos in order ? order[p.pos] : 3; field.sort((a, b) => rk(a) - rk(b));
+        Formations[fmt][$('#lf', r).value].forEach(([lab, x, y, gk]) => {
           const who = gk ? gks.shift() : field.shift(), id = Store.uid();
           sc.objects.push({ id, type: 'player', color: gk ? 'jaune' : S().club.homeBib, gk: !!gk, label: who && who.number ? String(who.number) : lab, name: who ? Store.shortName(who) : '', playerId: who ? who.id : undefined });
           sc.steps[0].pos[id] = [Math.min(x * 1.9, .94) * L, y * W]; // spread our half over the whole pitch
@@ -663,13 +675,15 @@ const Views = (() => {
     const V = ms.filter(m => result(m) === 'V').length, N = ms.filter(m => result(m) === 'N').length, D = ms.filter(m => result(m) === 'D').length;
     const bp = ms.reduce((a, m) => a + (+m.gf || 0), 0), bc = ms.reduce((a, m) => a + (+m.ga || 0), 0);
     const sortKey = S().ui.statSort || 'g';
-    const rows = Store.playersOf(t.id).map(p => {
+    // the team's players, plus the category's players who played or trained with it (team A / B)
+    const ownIds = new Set(Store.playersOf(t.id).map(p => p.id));
+    const rows = Store.rosterOf(t.id).map(p => {
       const played = ms.filter(m => (m.convoked || []).includes(p.id)).length;
       const g = ms.reduce((a, m) => a + (((m.stats || {})[p.id] || {}).g || 0), 0), as = ms.reduce((a, m) => a + (((m.stats || {})[p.id] || {}).a || 0), 0);
       const pr = trs.filter(x => x.presents.includes(p.id)).length;
       const min = ms.reduce((a, m) => a + (+((m.minutes || {})[p.id]) || 0), 0);
       return { p, played, g, a: as, pr, min, rate:trs.length ? Math.round(pr / trs.length * 100) : null, nm: Ratings.average(p.id, 'match') || 0, nt: Ratings.average(p.id, 'training') || 0 };
-    }).sort((a, b) => sortKey === 'name' ? Store.byName(a.p, b.p) : sortKey === 'num' ? (+a.p.number || 99) - (+b.p.number || 99) : (b[sortKey] || 0) - (a[sortKey] || 0));
+    }).filter(r => ownIds.has(r.p.id) || !ownIds.size || r.played || r.pr).sort((a, b) => sortKey === 'name' ? Store.byName(a.p, b.p) : sortKey === 'num' ? (+a.p.number || 99) - (+b.p.number || 99) : (b[sortKey] || 0) - (a[sortKey] || 0));
     const th = (k, l) => `<th><button class="th ${sortKey === k ? 'on' : ''}" data-sort="${k}">${l}</button></th>`;
     root.innerHTML = `${header('Statistiques', esc(t.name))}
       ${teamSwitch()}

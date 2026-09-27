@@ -156,13 +156,22 @@ const Store = (() => {
   const inTeam = (x, teamId) => (x.teamIds || []).includes(teamId);
   const byName = (a, b) => (a.lastName || '').localeCompare(b.lastName || '', 'fr') || (a.firstName || '').localeCompare(b.firstName || '', 'fr');
   const playersOf = teamId => state.players.filter(p => inTeam(p, teamId)).sort(byName);
+  // Players a coach can pick for a match, a session or a lineup: the team's own players first, then the rest of its category
+  // (a match of « Seniors A » also offers the Seniors who are not put in group A or B yet)
+  function rosterOf(teamId) {
+    const t = get('teams', teamId); if (!t) return [];
+    const own = playersOf(teamId), key = catKey(t.category || t.name);
+    const fam = new Set(state.teams.filter(x => x.id !== teamId && catKey(x.category || x.name) === key).map(x => x.id));
+    const ownIds = new Set(own.map(p => p.id));
+    return own.concat(state.players.filter(p => !ownIds.has(p.id) && (p.teamIds || []).some(id => fam.has(id))).sort(byName));
+  }
   const staffOf = teamId => state.staff.filter(p => inTeam(p, teamId)).sort(byName);
   const fullName = p => p ? [String(p.lastName || '').toUpperCase(), p.firstName].filter(Boolean).join(' ') || 'Sans nom' : '';
   const shortName = p => p ? (p.firstName ? p.firstName + (p.lastName ? ' ' + p.lastName[0].toUpperCase() + '.' : '') : fullName(p)) : '';
 
   return {
     load, save, persistNow, sortTeams, get, upsert, remove, uid, exportAll, exportTraining, exportSchema, importText, reset, removeExamples,
-    playersOf, staffOf, fullName, shortName, byName,
+    playersOf, rosterOf, staffOf, fullName, shortName, byName,
     get state() { return state; }, on: f => listeners.add(f), off: f => listeners.delete(f),
   };
 })();
