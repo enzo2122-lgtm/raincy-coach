@@ -55,7 +55,7 @@ const App = (() => {
   }
   /* Updates: version.json on the site says which build is online. When it is newer than this one,
      the app empties its offline copy and reloads (an iPhone can keep an old copy open for days). */
-  const BUILD = 21, UPD = 'raincy-update-tried';
+  const BUILD = 22, UPD = 'raincy-update-tried';
   async function onlineBuild() {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
     return (await r.json()).build || 0;
@@ -89,6 +89,8 @@ const App = (() => {
     window.addEventListener('hashchange', route);
     route();
     Sync.start();
+    // After the first exchange with the server: categories U6 … Vétérans for the new season
+    Promise.resolve(Sync.run()).catch(() => {}).then(() => { if (People.autoCategories()) route(); });
     Messages.start();
   }
   return { start, route, refreshChrome, checkUpdate };

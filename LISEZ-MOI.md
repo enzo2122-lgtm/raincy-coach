@@ -53,11 +53,11 @@ Tu peux toujours envoyer un fichier à la main : **Réglages → Envoyer toutes 
 
 Remplace les fichiers sur GitHub. Augmente ensuite le même numéro partout :
 
-- `sw.js` : `raincy-coach-v21` devient `raincy-coach-v22` ;
-- `index.html` : `?v=21` devient `?v=22` ;
-- `js/app.js` : `BUILD = 21` devient `BUILD = 22` ;
-- `version.json` : `"build": 21` devient `"build": 22`.
+- `sw.js` : `raincy-coach-v22` devient `raincy-coach-v23` ;
+- `index.html` : `?v=22` devient `?v=23` ;
+- `js/app.js` : `BUILD = 22` devient `BUILD = 23` ;
+- `version.json` : `"build": 22` devient `"build": 23`.
 
-Change aussi le numéro affiché dans `js/help.js` (`VERSION = '2.4'`).
+Change aussi le numéro affiché dans `js/help.js` (`VERSION = '2.4.1'`).
 
 Au retour sur l'appli, elle compare son numéro à `version.json`. Si le site est plus récent, elle se met à jour toute seule. Sinon, touche **Mettre à jour l'appli** en bas de l'écran de connexion ou des Réglages.

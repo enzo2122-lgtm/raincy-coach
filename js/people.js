@@ -254,7 +254,8 @@ const People = (() => {
   const formatOf = cat => { const n = +cat.slice(1); return cat[0] !== 'U' ? '11' : n <= 9 ? '5' : n <= 13 ? '8' : '11'; };
   function ageTeam(cat) {
     let t = S().teams.find(x => catKey(x.category) === catKey(cat)) || S().teams.find(x => catKey(x.name) === catKey(cat));
-    if (!t) t = Store.upsert('teams', { id: Store.uid(), name: cat, category: cat, format: formatOf(cat) });
+    // Same id on every device, so two devices creating « U8 » at the same time give one category after the sync
+    if (!t) t = Store.upsert('teams', { id: 'cat-' + catKey(cat), name: cat, category: cat, format: formatOf(cat) });
     return t;
   }
   function sortTeams() {
@@ -275,11 +276,20 @@ const People = (() => {
     sortTeams(); Store.save();
     return { moved, noBirth };
   }
+  // Once per season, on a responsable's device: every category exists and each player is in his own
+  // (after that, a player moved by hand, e.g. surclassé, stays where he was put)
+  function autoCategories() {
+    if (!Auth.isAdmin() || !S().players.length) return false;
+    const season = seasonLabel(), c = S().club;
+    if (c.catSeason === season && AGE_CATS.every(k => S().teams.some(t => catKey(t.category) === catKey(k) || catKey(t.name) === catKey(k)))) return false;
+    if (c.catSeason === season) { AGE_CATS.forEach(ageTeam); sortTeams(); Store.save(); return true; }
+    sortByBirth(); c.catSeason = season; Store.save(); return true;
+  }
   function sortByBirthDialog(done) {
     const y = seasonStart() + 1;
     UI.confirmBox(`Créer les catégories U6 à U20, Seniors et Vétérans, et ranger chaque joueur selon son année de naissance (saison ${seasonLabel()} : U13 = né en ${y - 13}, U20 = né en ${y - 20}, Seniors = né en ${y - 21} ou avant) ? Les autres équipes (ex : « U13 A ») et les dirigeants ne changent pas.`, 'Ranger').then(ok => {
       if (!ok) return;
-      const r = sortByBirth();
+      const r = sortByBirth(); S().club.catSeason = seasonLabel(); Store.save();
       toast(`${r.moved} joueur${r.moved > 1 ? 's' : ''} rangé${r.moved > 1 ? 's' : ''}${r.noBirth ? ` · ${r.noBirth} sans date de naissance` : ''}`);
       done && done();
     });
@@ -363,9 +373,9 @@ const People = (() => {
   function importClubList(txt) {
     const [pl, st = ''] = txt.split(/^\s*#?\s*DIRIGEANTS\s*$/im);
     const p = addPlayers(parseLines(pl)), s = addStaff(parseStaff(st));
-    sortByBirth();
+    sortByBirth(); S().club.catSeason = seasonLabel();
     return { players: p, staff: s };
   }
 
-  return { isClubList, importClubList, sortByBirth, sortByBirthDialog, catOf, seasonLabel, editPlayer, editStaff, teamSections, bindTeamSections, staffPicker, listPage, age, fmtBirth, tel, name };
+  return { isClubList, importClubList, autoCategories, sortByBirth, sortByBirthDialog, catOf, seasonLabel, editPlayer, editStaff, teamSections, bindTeamSections, staffPicker, listPage, age, fmtBirth, tel, name };
 })();
