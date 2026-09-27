@@ -181,7 +181,8 @@ const Editor = (() => {
         snapshot();
         const z = { id: Store.uid(), x, y, w, h, color: E.zoneColor, label: '' };
         E.sc.zones.push(z); E.sel = { kind: 'zone', id: z.id }; commit(); renderPanel();
-        const inp = E.root.querySelector('#zLabel'); if (inp) inp.focus();
+        // on a computer the name field is ready to type; on a phone/tablet no keyboard pops up (it made the page jump)
+        const inp = E.root.querySelector('#zLabel'); if (inp && UI.finePointer()) inp.focus();
       } else draw();
       return;
     }

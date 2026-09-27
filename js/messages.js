@@ -131,7 +131,7 @@ const Messages = (() => {
       catch (err) { toast(err.message, 'err'); }
     };
     fast = true; onNew = () => { if (location.hash.startsWith('#/messages/')) { markRead(ch); draw(); badge(); } }; start();
-    setTimeout(() => ta.focus(), 100);
+    if (UI.finePointer()) setTimeout(() => ta.focus(), 100);
   }
   function pickCoach() {
     const others = S().staff.filter(s => s.id !== me().id).sort(Store.byName);

@@ -37,6 +37,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 main#view { padding: calc(env(safe-area-inset-top) + 22px) 28px 48px; max-width: 1240px; width: 100%; min-width: 0; outline: none; }
 body.editing .shell { grid-template-columns: minmax(0, 1fr); }
 body.editing .rail { display: none; }
+/* while drawing, the page itself never scrolls or bounces (the board stays still under the finger) */
+html:has(body.editing), body.editing { overflow: hidden; overscroll-behavior: none; height: 100%; }
 body.editing main#view { padding: 0; max-width: none; height: 100dvh; }
 
 @media (max-width: 760px) {
