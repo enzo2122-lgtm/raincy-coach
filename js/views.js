@@ -31,12 +31,18 @@ const Views = (() => {
 
   /* ================= Accueil ================= */
   // Getting the club ready: shown to responsables until every step is done
+  function serverBanner() {
+    if (!Auth.localOnly()) return '';
+    return `<section class="card server-banner"><h2>${I.share}Connecte-toi au serveur du club</h2>
+      <p>Tu es connecté avec un ancien compte gardé seulement sur ce téléphone. Pour retrouver les dirigeants, le planning et les messages du club, connecte-toi au serveur${Auth.isAdmin() ? ' avec ton <b>code responsable</b> (ou « J\'ai perdu le code responsable »)' : ' avec le lien d\'invitation'}. Tes données de ce téléphone sont gardées et envoyées au serveur.</p>
+      <button class="btn primary" data-connect>${I.check}<span>Me connecter au serveur</span></button></section>`;
+  }
   function setupCard() {
     if (!Auth.isAdmin()) return '';
     const st = S(), steps = [
       [st.players.length > 0, 'Charger les licenciés', 'Réglages → Recevoir un fichier (fichier des licenciés)', '#/reglages'],
       [st.staff.length > 1, 'Ajouter les éducateurs et dirigeants', 'Équipes → Dirigeants → Coller une liste ou Nouveau dirigeant', '#/dirigeants'],
-      [Cloud.ready(), 'Connecter le serveur du club', 'Réglages → Serveur du club', '#/reglages'],
+      [Cloud.ready(), 'Connecter le serveur du club', 'Touche ici, puis « Je suis le responsable du club »', '#/connexion'],
       [!!st.club.reportEmail, 'Indiquer ton e-mail pour les signalements', 'Réglages → Aide et signalements', '#/reglages'],
       [!!(st.ui.invited || st.ui.clubFileSent), 'Inviter les éducateurs', 'Réglages → Serveur du club → Inviter les éducateurs (lien à envoyer par WhatsApp)', '#/reglages'],
     ];
@@ -52,6 +58,7 @@ const Views = (() => {
     const last = matches.filter(m => m.played).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 4);
     const schemas = S().schemas.slice().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).slice(0, 4);
     root.innerHTML = `<header class="hero"><img src="icons/crest.png" alt="" class="hero-crest"><div><p class="eyebrow">Espace éducateurs</p><h1>${esc(S().club.name)}</h1><p class="sub">Tableau tactique, effectifs, entraînements et matchs</p></div></header>
+      ${serverBanner()}
       ${teamSwitch()}
       ${setupCard()}
       <div class="quick">
@@ -85,6 +92,7 @@ const Views = (() => {
       </div>`;
     bindTeamSwitch(root, () => home(root));
     Planning.upcoming($('#planMini', root));
+    const cb = $('[data-connect]', root); if (cb) cb.onclick = () => Auth.connectServer();
     $$('[data-go]', root).forEach(b => b.onclick = () => ({ 'new-schema': newSchema, 'new-training': newTraining, 'new-match': newMatch })[b.dataset.go]());
   }
 
@@ -94,12 +102,14 @@ const Views = (() => {
     root.innerHTML = `${header('Équipes', 'Les catégories du club, leurs joueurs et leurs dirigeants',
       `<a class="btn" href="#/joueurs">${I.team}<span>Tous les joueurs (${S().players.length})</span></a>
        <a class="btn" href="#/dirigeants">${I.whistle}<span>Dirigeants (${S().staff.length})</span></a>
+       ${Auth.isAdmin() ? `<button class="btn" data-act="bybirth">${I.calendar}<span>Ranger par année de naissance</span></button>` : ''}
        <button class="btn primary" data-act="new">${I.plus}<span>Nouvelle catégorie</span></button>`)}
       ${S().teams.length ? `<div class="grid">${S().teams.map(t => { const np = Store.playersOf(t.id).length, ns = Store.staffOf(t.id).length;
         return `<a class="card team-card" href="#/equipe/${t.id}">
           <span class="badge">${fmtLabel(t.format)}</span><h2>${esc(t.name)}</h2><p class="muted">${count(np, 'joueur')} · ${count(ns, 'dirigeant')}</p></a>`; }).join('')}</div>`
         : empty('Crée ta première catégorie pour ajouter tes joueurs.')}`;
     $('[data-act="new"]', root).onclick = newTeam;
+    const bb = $('[data-act="bybirth"]', root); if (bb) bb.onclick = () => People.sortByBirthDialog(() => teams(root));
   }
   function newTeam() {
     modal({ title: 'Nouvelle catégorie', body: `

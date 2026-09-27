@@ -43,7 +43,7 @@ const Planning = (() => {
     const ui = S().ui, today = iso(new Date());
     ui.planWeek = ui.planWeek || monday(today);
     ui.planDay = ui.planDay || today;
-    const week = ui.planWeek, days = Array.from({ length: 7 }, (_, i) => addDays(week, i));
+    const week = ui.planWeek, days = Array.from({ length: 7 }, (_, i) => addDays(week, i)), wk = ui.planView === 'week';
     if (!days.includes(ui.planDay)) ui.planDay = days[0];
     root.innerHTML = `<header class="page-head"><div><h1>Planning · ${esc(fieldName())}</h1><p class="sub">Grand terrain ou demi-terrain, sans chevauchement</p></div>
       <div class="head-actions">${Auth.isAdmin() ? `<button class="btn" data-p="slots">${I.clock}<span>Créneaux disponibles</span></button>` : ''}
@@ -52,9 +52,10 @@ const Planning = (() => {
       <div class="plan-nav"><button class="icon-btn" data-p="prev" aria-label="Semaine précédente">${I.back}</button>
         <b>Semaine du ${esc(parse(week).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' }))}</b>
         <button class="icon-btn" data-p="next" aria-label="Semaine suivante">${I.next}</button><button class="btn soft" data-p="today">Aujourd'hui</button>
+        <span class="plan-view chips"><button class="chip ${wk ? '' : 'on'}" data-p="vday">Jour</button><button class="chip ${wk ? 'on' : ''}" data-p="vweek">Semaine</button></span>
         <span class="grow"></span><span class="plan-legend"><i class="k-entrainement"></i>Entraînement <i class="k-match"></i>Match <i class="k-autre"></i>Autre</span></div>
-      <div class="day-chips">${days.map(d => `<button class="chip ${d === ui.planDay ? 'on' : ''}" data-day="${d}">${DAYS[parse(d).getDay()].slice(0, 3)} ${parse(d).getDate()}</button>`).join('')}</div>
-      <div class="plan-wrap" id="planGrid"><p class="muted">Chargement du planning…</p></div>`;
+      <div class="day-chips ${wk ? 'wk' : ''}">${days.map(d => `<button class="chip ${d === ui.planDay ? 'on' : ''}" data-day="${d}">${DAYS[parse(d).getDay()].slice(0, 3)} ${parse(d).getDate()}</button>`).join('')}</div>
+      <div class="plan-wrap ${wk ? 'wk' : ''}" id="planGrid"><p class="muted">Chargement du planning…</p></div>`;
     const onChip = $('.day-chips .chip.on', root); if (onChip) onChip.scrollIntoView({ inline: 'center', block: 'nearest' });
     try { await load(days[0], days[6]); }
     catch (e) { $('#planGrid', root).innerHTML = `<div class="empty"><p>${esc(e.message)}</p><button class="btn" data-p="retry">Réessayer</button></div>`; bind(root); return; }
@@ -78,8 +79,18 @@ const Planning = (() => {
     $('#planGrid', root).innerHTML = `<div class="plan-grid">
       <div class="plan-hours"><div class="plan-head">&nbsp;</div><div style="position:relative;height:${H}px">${hours.map(m => `<span style="top:${(m - lo) * PX}px">${hm(m)}</span>`).join('')}</div></div>
       ${days.map(col).join('')}</div>
+      ${weekList(days, mine)}
       ${!slots.length ? '<p class="tip">Aucun créneau défini : le terrain est réservable à toute heure. Le responsable peut fixer les créneaux disponibles.</p>' : ''}`;
     $('#planGrid', root).dataset.lo = lo;
+  }
+  // The whole week as a list, one block per day (phones, « Semaine »)
+  function weekList(days, mine) {
+    return `<div class="plan-list">${days.map(d => {
+      const list = bookings.filter(b => b.date === d).sort((a, b) => a.start_min - b.start_min);
+      return `<div class="pl-day ${d === iso(new Date()) ? 'today' : ''}">
+        <button class="pl-head" data-openday="${d}"><b>${DAYS[parse(d).getDay()]} ${parse(d).getDate()}</b><span>${list.length ? list.length + ' créneau' + (list.length > 1 ? 'x' : '') : 'Libre'}</span></button>
+        ${list.map(b => `<button class="pl-row k-${esc(b.kind)} ${mine.has(b.team_id) ? 'mine' : ''}" data-bk="${b.id}"><span class="pl-t">${hm(b.start_min)}–${hm(b.end_min)}</span><b>${esc(b.team_name || KINDS[b.kind][0])}</b><span class="pl-p">${b.part === 'full' ? 'Grand terrain' : '½ terrain ' + b.part}</span></button>`).join('')}
+      </div>`; }).join('')}</div>`;
   }
   function bind(root) {
     root.onclick = async e => {
@@ -90,11 +101,13 @@ const Planning = (() => {
         if (p === 'prev' || p === 'next') { ui.planWeek = addDays(ui.planWeek, p === 'prev' ? -7 : 7); ui.planDay = ui.planWeek; return page(root); }
         if (p === 'today') { ui.planWeek = monday(iso(new Date())); ui.planDay = iso(new Date()); return page(root); }
         if (p === 'retry') return page(root);
+        if (p === 'vday' || p === 'vweek') { ui.planView = p === 'vweek' ? 'week' : 'day'; Store.save(); return page(root); }
         if (p === 'new') return bookForm({ date: ui.planDay, start: 18 * 60 }, () => page(root));
         if (p === 'slots') return slotsForm(() => page(root));
         if (p === 'recur') return recurForm(() => page(root));
       }
       if (b && b.dataset.day) { ui.planDay = b.dataset.day; $$('.day-chips .chip', root).forEach(x => x.classList.toggle('on', x === b)); $$('.plan-day', root).forEach(c => c.classList.toggle('sel', c.dataset.col === ui.planDay)); return; }
+      if (b && b.dataset.openday) { ui.planDay = b.dataset.openday; ui.planView = 'day'; Store.save(); return page(root); }
       if (b && b.dataset.bk) return detail(bookings.find(x => x.id === b.dataset.bk), () => page(root));
       const body = e.target.closest('.plan-body');
       if (body) {

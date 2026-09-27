@@ -35,6 +35,7 @@ const App = (() => {
     root.onclick = root.oninput = root.onchange = null;
     Editor.close();
     if (name !== 'messages') Messages.leave();
+    if (name === 'connexion') { history.replaceState(null, '', '#/'); route(); return Auth.connectServer(); }
     const full = name === 'schema';
     document.body.classList.toggle('editing', full);
     const navKey = { equipe: 'equipes', joueurs: 'equipes', dirigeants: 'equipes', schema: 'schemas', entrainement: 'entrainements', match: 'matchs' }[name] || name;
@@ -54,7 +55,7 @@ const App = (() => {
   }
   /* Updates: version.json on the site says which build is online. When it is newer than this one,
      the app empties its offline copy and reloads (an iPhone can keep an old copy open for days). */
-  const BUILD = 17, UPD = 'raincy-update-tried';
+  const BUILD = 18, UPD = 'raincy-update-tried';
   async function onlineBuild() {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
     return (await r.json()).build || 0;

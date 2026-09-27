@@ -76,7 +76,15 @@ const People = (() => {
         ${parentBlock(0)}${parentBlock(1)}
         <label class="fld"><span>Infos utiles (santé, allergies, transport…)</span><textarea id="pNotes" rows="3">${esc(p.notes || '')}</textarea></label>
         ${isNew ? '' : notesHistory(p)}`,
-      onOpen: bindChips,
+      onOpen: r => {
+        bindChips(r);
+        // A new date of birth selects the matching category (U6 … U20, Seniors, Vétérans)
+        $('#pBirth', r).onchange = e => {
+          const cat = catOf({ birth: e.target.value, subcat: $('#pSub', r).value }); if (!cat) return;
+          const t = S().teams.find(x => catKey(x.category) === catKey(cat)) || S().teams.find(x => catKey(x.name) === catKey(cat)); if (!t) return;
+          $$('#pTeams .chip', r).forEach(b => { const tm = Store.get('teams', b.dataset.t); if (tm && isAgeTeam(tm)) b.classList.toggle('on', b.dataset.t === t.id); });
+        };
+      },
       actions: [
         ...(isNew ? [] : [{ label: 'Supprimer', kind: 'danger', icon: I.trash, onClick: () => { setTimeout(() => confirmBox(`Supprimer ${name(p)} de tout le club ?`).then(ok => { if (ok) { Store.remove('players', p.id); toast('Joueur supprimé'); opts.onSave && opts.onSave(); } }), 60); } }]),
         { label: 'Annuler' },
@@ -229,6 +237,53 @@ const People = (() => {
     });
     return out;
   }
+  /* ---------- categories by year of birth (FFF: a season starts on 1 July, U13 in 2026-2027 = born in 2014) ---------- */
+  const AGE_CATS = ['U6', 'U7', 'U8', 'U9', 'U10', 'U11', 'U12', 'U13', 'U14', 'U15', 'U16', 'U17', 'U18', 'U19', 'U20', 'Seniors', 'Vétérans'];
+  const seasonStart = (d = new Date()) => d.getMonth() >= 6 ? d.getFullYear() : d.getFullYear() - 1;
+  const seasonLabel = () => `${seasonStart()}-${seasonStart() + 1}`;
+  const catKey = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/\s+/g, '');
+  const isAgeTeam = t => AGE_CATS.some(c => catKey(c) === catKey(t.category) || catKey(c) === catKey(t.name));
+  // Category of a player: U + age reached during the season; 21 and over: Seniors, or Vétérans with a vétéran licence
+  function catOf(p) {
+    const y = +(String(p.birth || '').slice(0, 4)); if (!y) return null;
+    const age = seasonStart() + 1 - y;
+    if (/v[ée]t/i.test(p.subcat || '') || age >= 36) return 'Vétérans';
+    if (age >= 21) return 'Seniors';
+    return 'U' + Math.max(6, age);
+  }
+  const formatOf = cat => { const n = +cat.slice(1); return cat[0] !== 'U' ? '11' : n <= 9 ? '5' : n <= 13 ? '8' : '11'; };
+  function ageTeam(cat) {
+    let t = S().teams.find(x => catKey(x.category) === catKey(cat)) || S().teams.find(x => catKey(x.name) === catKey(cat));
+    if (!t) t = Store.upsert('teams', { id: Store.uid(), name: cat, category: cat, format: formatOf(cat) });
+    return t;
+  }
+  function sortTeams() {
+    const rank = t => { const i = AGE_CATS.findIndex(c => catKey(c) === catKey(t.category) || catKey(c) === catKey(t.name)); return i < 0 ? 99 : i; };
+    S().teams.sort((a, b) => rank(a) - rank(b) || String(a.name).localeCompare(String(b.name), 'fr'));
+  }
+  // Creates every category and puts each player with a date of birth in his one (other teams, e.g. « U13 A », are kept)
+  function sortByBirth() {
+    AGE_CATS.forEach(ageTeam);
+    const ageIds = new Set(S().teams.filter(isAgeTeam).map(t => t.id));
+    let moved = 0, noBirth = 0;
+    S().players.forEach(p => {
+      const cat = catOf(p); if (!cat) { noBirth++; return; }
+      const tid = ageTeam(cat).id, before = (p.teamIds || []).slice().sort().join();
+      p.teamIds = [...(p.teamIds || []).filter(id => !ageIds.has(id)), tid];
+      if (p.teamIds.slice().sort().join() !== before) { p.updatedAt = Date.now(); moved++; }
+    });
+    sortTeams(); Store.save();
+    return { moved, noBirth };
+  }
+  function sortByBirthDialog(done) {
+    const y = seasonStart() + 1;
+    UI.confirmBox(`Créer les catégories U6 à U20, Seniors et Vétérans, et ranger chaque joueur selon son année de naissance (saison ${seasonLabel()} : U13 = né en ${y - 13}, U20 = né en ${y - 20}, Seniors = né en ${y - 21} ou avant) ? Les autres équipes (ex : « U13 A ») et les dirigeants ne changent pas.`, 'Ranger').then(ok => {
+      if (!ok) return;
+      const r = sortByBirth();
+      toast(`${r.moved} joueur${r.moved > 1 ? 's' : ''} rangé${r.moved > 1 ? 's' : ''}${r.noBirth ? ` · ${r.noBirth} sans date de naissance` : ''}`);
+      done && done();
+    });
+  }
   function teamForSub(sub) {
     const tn = TEAM_OF_SUB[sub]; if (!tn) return null;
     let t = S().teams.find(x => x.category === tn || x.name === tn);
@@ -237,7 +292,7 @@ const People = (() => {
   }
   function pasteList(done) {
     modal({ title: 'Coller une liste de joueurs',
-      body: `<p class="tip">Dans Footclubs, sélectionne les lignes de la liste des licenciés, copie-les puis colle-les ici. Il faut au minimum le nom, le prénom et la date de naissance sur chaque ligne. Les joueurs sont rangés dans leur catégorie selon leur sous-catégorie (U14 et U15 dans U15, par exemple).</p>
+      body: `<p class="tip">Dans Footclubs, sélectionne les lignes de la liste des licenciés, copie-les puis colle-les ici. Il faut au minimum le nom, le prénom et la date de naissance sur chaque ligne. Les joueurs sont rangés dans leur catégorie selon leur année de naissance (U6 à U20, Seniors, Vétérans).</p>
         <textarea id="pasteTxt" rows="9" placeholder="DUPONT Lucas   12/03/2014   Libre / U13 (- 13 ans)"></textarea><p class="muted small" id="pasteInfo"></p>`,
       onOpen: r => { $('#pasteTxt', r).oninput = e => { const n = parseLines(e.target.value).length; $('#pasteInfo', r).textContent = n ? `${n} joueur${n > 1 ? 's' : ''} reconnu${n > 1 ? 's' : ''}` : ''; }; },
       actions: [{ label: 'Annuler' }, { label: 'Ajouter', kind: 'primary', onClick: (c, r) => {
@@ -246,10 +301,11 @@ const People = (() => {
         let added = 0, updated = 0;
         rows.forEach(x => {
           const ex = S().players.find(p => (p.lastName || '').toUpperCase() === x.lastName && (p.firstName || '').toLowerCase() === x.firstName.toLowerCase() && (!p.birth || p.birth === x.birth));
-          const tid = teamForSub(x.subcat);
-          if (ex) { Object.assign(ex, { birth: x.birth, subcat: x.subcat || ex.subcat }); if (tid && !ex.teamIds.includes(tid)) ex.teamIds.push(tid); Store.upsert('players', ex); updated++; }
+          const cat = catOf(x), tid = cat ? ageTeam(cat).id : teamForSub(x.subcat);
+          if (ex) { Object.assign(ex, { birth: x.birth, subcat: x.subcat || ex.subcat }); if (tid) { const ageIds = new Set(S().teams.filter(isAgeTeam).map(t => t.id)); ex.teamIds = [...(ex.teamIds || []).filter(id => !ageIds.has(id)), tid]; } Store.upsert('players', ex); updated++; }
           else { Store.upsert('players', Object.assign({ id: Store.uid(), number: '', pos: '', phone: '', email: '', parents: [], notes: '', teamIds: tid ? [tid] : [] }, x)); added++; }
         });
+        sortTeams(); Store.save();
         toast(`${added} ajouté${added > 1 ? 's' : ''}, ${updated} mis à jour`); done && done();
       } }] });
   }
@@ -293,5 +349,5 @@ const People = (() => {
       } }] });
   }
 
-  return { editPlayer, editStaff, teamSections, bindTeamSections, staffPicker, listPage, age, fmtBirth, tel, name };
+  return { sortByBirth, sortByBirthDialog, catOf, seasonLabel, editPlayer, editStaff, teamSections, bindTeamSections, staffPicker, listPage, age, fmtBirth, tel, name };
 })();
