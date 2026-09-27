@@ -20,7 +20,9 @@ const People = (() => {
   // A dirigeant who is also a licensed player: same nom and same first prénom (without accents or capitals)
   const nk = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z ]/g, ' ').replace(/\s+/g, ' ').trim();
   const firstOf = s => nk(String(s || '').replace(/\(.*\)/, '')).split(' ')[0];
-  const playerLike = p => S().players.find(x => nk(x.lastName) === nk(p.lastName) && firstOf(x.firstName) === firstOf(p.firstName));
+  // « Giova (Christian) » also matches the licence « Christian »
+  const firstsOf = s => [firstOf(s), ...(String(s || '').match(/\(([^)]*)\)/g) || []).map(m => firstOf(m.slice(1, -1)))].filter(Boolean);
+  const playerLike = p => S().players.find(x => nk(x.lastName) === nk(p.lastName) && firstsOf(p.firstName).includes(firstOf(x.firstName)));
   const linkPlayer = p => { if (!p.playerId || !Store.get('players', p.playerId)) { const x = playerLike(p); if (x) p.playerId = x.id; } };
 
   /* ---------- rows ---------- */
