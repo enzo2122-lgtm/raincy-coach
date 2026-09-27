@@ -41,7 +41,13 @@ const Auth = (() => {
   const PREVIEW = 'raincy-preview';
   const preview = () => { if (!realAdmin()) return null; try { const v = JSON.parse(sessionStorage.getItem(PREVIEW)); return v && Array.isArray(v.teamIds) ? v : null; } catch (e) { return null; } };
   const isAdmin = () => realAdmin() && !preview();
-  const myIds = () => { const pv = preview(); return pv ? pv.teamIds : (user && user.teamIds) || []; };
+  // A category and its teams A / B go together: a coach of « U15 » also sees « U15 A » and « U15 B », and the other way round
+  const famKey = t => String(t.category || t.name || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/\s+/g, '');
+  const myIds = () => {
+    const pv = preview(), raw = pv ? pv.teamIds : (user && user.teamIds) || [];
+    const keys = new Set(raw.map(id => Store.get('teams', id)).filter(Boolean).map(famKey));
+    return [...new Set([...raw, ...Store.state.teams.filter(t => keys.has(famKey(t))).map(t => t.id)])];
+  };
   // What a dirigeant may see: a responsable sees every category, a coach only the ones chosen at his first connection
   // (the pitch planning and the club results stay common to everybody)
   const allTeams = () => !user || isAdmin() || !myIds().some(id => Store.get('teams', id));

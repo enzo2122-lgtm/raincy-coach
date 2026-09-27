@@ -21,7 +21,7 @@ const Planning = (() => {
   const myTeams = () => { const u = Auth.current(); return u ? (u.teamIds || []) : []; };
   // One colour per category, close colours for close ages (U6-U9 greens, U10-U13 blues, U14-U17 purples/pinks)
   // (key order = legend order: Seniors and Vétérans first, then U6 … U17)
-  const CAT_COLORS = { SENIORS: '#7a1f2b', VETERANS: '#455a64', ECOLEDEFOOT: '#689f38', U6: '#2e7d32', U7: '#43a047', U8: '#00897b', U9: '#00838f', U10: '#1e88e5', U11: '#1565c0', U12: '#3949ab', U13: '#283593',
+  const CAT_COLORS = { SENIORS: '#7a1f2b', VETERANS: '#455a64', VETERANSLOISIRS: '#78909c', ECOLEDEFOOT: '#689f38', U6: '#2e7d32', U7: '#43a047', U8: '#00897b', U9: '#00838f', U10: '#1e88e5', U11: '#1565c0', U12: '#3949ab', U13: '#283593',
     U14: '#8e24aa', U15: '#6a1b9a', U16: '#d81b60', U17: '#ad1457' };
   const ckey = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/\s+/g, '');
   function catOfBooking(b) {
@@ -30,9 +30,9 @@ const Planning = (() => {
     return k ? (CAT_COLORS[k] ? k : k.replace(/[^A-Z0-9].*$/, '')) : '';
   }
   const colorOf = b => CAT_COLORS[catOfBooking(b)] || '';
-  const catLabel = k => ({ SENIORS: 'Seniors', VETERANS: 'Vétérans', ECOLEDEFOOT: 'École de foot' })[k] || k;
+  const catLabel = k => ({ SENIORS: 'Seniors', VETERANS: 'Vétérans', VETERANSLOISIRS: 'Vétérans loisirs', ECOLEDEFOOT: 'École de foot' })[k] || k;
   // Short name for the narrow week columns on a phone
-  const shortOf = b => { const k = catOfBooking(b); return k ? ({ SENIORS: 'SEN', VETERANS: 'VÉT' })[k] || k : String(b.team_name || KINDS[b.kind][0]).slice(0, 4); };
+  const shortOf = b => { const k = catOfBooking(b); return k ? ({ SENIORS: 'SEN', VETERANS: 'VÉT', VETERANSLOISIRS: 'LOIS', ECOLEDEFOOT: 'EDF' })[k] || k : String(b.team_name || KINDS[b.kind][0]).slice(0, 4); };
   const canDelete = b => Auth.isAdmin() || (Auth.current() && b.author_id === Auth.current().id);
 
   function notReady(root) {

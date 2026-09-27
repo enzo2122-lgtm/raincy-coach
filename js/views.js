@@ -59,7 +59,10 @@ const Views = (() => {
   function myScope() {
     const me = Auth.current(), pv = Auth.preview();
     const myIds = pv ? pv.teamIds : ((me && me.teamIds) || []), mine = myIds.map(id => Store.get('teams', id)).filter(Boolean);
-    return { mine, isMine: tid => !mine.length || myIds.includes(tid) };
+    // a category goes with its teams A / B (« U15 » ↔ « U15 A », « U15 B »)
+    const fam = t => String((t && (t.category || t.name)) || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/\s+/g, '');
+    const keys = new Set(mine.map(fam));
+    return { mine, isMine: tid => !mine.length || myIds.includes(tid) || keys.has(fam(Store.get('teams', tid))) };
   }
   const addDays = (d, n) => { const x = new Date(d + 'T12:00'); x.setDate(x.getDate() + n); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`; };
   const tName = id => teamOf(id) ? ' ' + teamOf(id).name : '';

@@ -320,6 +320,8 @@ const People = (() => {
     const season = seasonLabel(), c = S().club;
     let changed = false;
     if (!c.noU18U19U20) { removeOldCats(); c.noU18U19U20 = 1; changed = true; }
+    // Vétérans loisirs, next to Vétérans (made once; players are put in it by hand)
+    if (!c.vetLoisirs) { ageTeam('Vétérans loisirs'); c.vetLoisirs = 1; changed = true; }
     if (!c.teamsAB) { AGE_CATS.forEach(ageTeam); extraTeams(); c.teamsAB = 1; changed = true; }
     if (c.catSeason === season && AGE_CATS.every(k => findCat(k))) { if (changed) { sortTeams(); Store.save(); } return changed; }
     if (c.catSeason === season) { AGE_CATS.forEach(ageTeam); sortTeams(); Store.save(); return true; }
