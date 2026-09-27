@@ -2,6 +2,7 @@
 const I = (() => {
   const p = d => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
   return {
+    medal: p('<circle cx="12" cy="15" r="5"/><path d="M8.5 11.2 6 3h4l2 5 2-5h4l-2.5 8.2"/><path d="M12 13v4"/>'),
     home: p('<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/>'),
     team: p('<circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.2c2.8.4 5 2.8 5 5.8"/>'),
     board: p('<rect x="2.5" y="5" width="19" height="14" rx="1.5"/><path d="M12 5v14"/><circle cx="12" cy="12" r="2.5"/><path d="M2.5 9.5h3v5h-3M21.5 9.5h-3v5h3"/>'),
