@@ -22,10 +22,15 @@ const Views = (() => {
     return `<div class="team-switch" role="tablist" aria-label="Équipe">
       <button class="chip ${!t ? 'on' : ''}" data-team="">${Auth.isAdmin() ? 'Toutes les équipes' : Auth.teams().length > 1 ? 'Mes équipes' : 'Tout'}</button>
       ${Auth.teams().map(x => `<button class="chip ${x.id === t ? 'on' : ''}" data-team="${x.id}">${esc(x.name)}</button>`).join('')}
-    </div>`;
+    </div>
+    <label class="team-select"><span>Catégorie</span><select data-teamsel aria-label="Catégorie">
+      <option value="">${Auth.isAdmin() ? 'Toutes les équipes' : Auth.teams().length > 1 ? 'Mes équipes' : 'Tout'}</option>
+      ${Auth.teams().map(x => `<option value="${x.id}" ${x.id === t ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label>`;
   }
+  // Chips on a computer, a drop-down list on phones and tablets (nothing to slide sideways)
   function bindTeamSwitch(root, rerender) {
     $$('[data-team]', root).forEach(b => b.onclick = () => { S().ui.teamId = b.dataset.team; Store.save(); rerender(); });
+    $$('[data-teamsel]', root).forEach(s => s.onchange = () => { S().ui.teamId = s.value; Store.save(); rerender(); });
   }
   const header = (title, sub, actions = '') => `<header class="page-head"><div><h1>${title}</h1>${sub ? `<p class="sub">${sub}</p>` : ''}</div><div class="head-actions">${actions}</div></header>`;
 

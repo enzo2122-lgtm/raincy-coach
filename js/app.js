@@ -3,7 +3,7 @@ const App = (() => {
   // [hash, label, icon, short label for phones]; on phones the first five stay in the tab bar, the others go in « Plus »
   const NAV = [
     ['', 'Accueil', 'home'], ['planning', 'Planning', 'calendar'], ['entrainements', 'Entraînements', 'training', 'Séances'], ['matchs', 'Matchs', 'match'], ['messages', 'Messages', 'chat'],
-    ['resultats', 'Résultats', 'medal'], ['equipes', 'Équipes', 'team'], ['schemas', 'Schémas', 'board'], ['bibliotheque', 'Bibliothèque', 'video'], ['stats', 'Stats', 'stats'], ['reglages', 'Réglages', 'settings'],
+    ['resultats', 'Résultats', 'medal'], ['equipes', 'Équipes', 'team'], ['schemas', 'Schémas', 'board'], ['bibliotheque', 'Bibliothèque', 'video', 'Biblio'], ['stats', 'Stats', 'stats'], ['reglages', 'Réglages', 'settings'],
   ];
   const PHONE_MAIN = 5;
   const view = () => document.getElementById('view');
@@ -55,7 +55,7 @@ const App = (() => {
   }
   /* Updates: version.json on the site says which build is online. When it is newer than this one,
      the app empties its offline copy and reloads (an iPhone can keep an old copy open for days). */
-  const BUILD = 23, UPD = 'raincy-update-tried';
+  const BUILD = 24, UPD = 'raincy-update-tried';
   async function onlineBuild() {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
     return (await r.json()).build || 0;

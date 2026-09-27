@@ -67,6 +67,7 @@ const Planning = (() => {
         <button class="icon-btn" data-p="next" aria-label="Semaine suivante">${I.next}</button><button class="btn soft" data-p="today">Aujourd'hui</button>
         <span class="plan-view chips"><button class="chip ${wk ? '' : 'on'}" data-p="vday">Jour</button><button class="chip ${wk ? 'on' : ''}" data-p="vweek">Semaine</button></span>
         <span class="grow"></span><span class="plan-legend" id="planLegend"></span></div>
+      <label class="day-select ${wk ? 'wk' : ''}"><span>Jour</span><select data-daysel aria-label="Jour">${days.map(d => `<option value="${d}" ${d === ui.planDay ? 'selected' : ''}>${DAYS[parse(d).getDay()]} ${parse(d).getDate()} ${parse(d).toLocaleDateString('fr-FR', { month: 'long' })}</option>`).join('')}</select></label>
       <div class="day-chips ${wk ? 'wk' : ''}">${days.map(d => `<button class="chip ${d === ui.planDay ? 'on' : ''}" data-day="${d}">${DAYS[parse(d).getDay()].slice(0, 3)} ${parse(d).getDate()}</button>`).join('')}</div>
       <div class="plan-wrap ${wk ? 'wk' : ''}" id="planGrid"><p class="muted">Chargement du planning…</p></div>`;
     const onChip = $('.day-chips .chip.on', root); if (onChip) onChip.scrollIntoView({ inline: 'center', block: 'nearest' });
@@ -100,6 +101,8 @@ const Planning = (() => {
     if (lg) lg.innerHTML = cats.map(k => `<span><i style="background:${CAT_COLORS[k]}"></i>${esc(catLabel(k))}</span>`).join('') + `<span><i class="lg-match"></i>Match (rayé)</span>`;
   }
   function bind(root) {
+    const ds = $('[data-daysel]', root);
+    if (ds) ds.onchange = () => { const ui = S().ui; ui.planDay = ds.value; $$('.day-chips .chip', root).forEach(x => x.classList.toggle('on', x.dataset.day === ui.planDay)); $$('.plan-day', root).forEach(c => c.classList.toggle('sel', c.dataset.col === ui.planDay)); };
     root.onclick = async e => {
       const b = e.target.closest('button');
       const ui = S().ui;
