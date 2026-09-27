@@ -150,7 +150,7 @@ const Planning = (() => {
     // Legend: the categories on the pitch this week, then how a match looks
     const cats = [...new Set([...bookings.filter(b => days.includes(b.date)), ...ms.map(m => ({ team_id: m.teamId, team_name: teamNameOf(m) }))].map(catOfBooking).filter(Boolean))].sort((a, b) => Object.keys(CAT_COLORS).indexOf(a) - Object.keys(CAT_COLORS).indexOf(b));
     const lg = $('#planLegend', root);
-    if (lg) lg.innerHTML = cats.map(k => `<span><i style="background:${CAT_COLORS[k]}"></i>${esc(catLabel(k))}</span>`).join('') + `<span><i class="lg-match"></i>Match (rayé)</span>` + (ms.some(m => m.home && !bookingFor(m)) ? `<span><i class="lg-todo"></i>Match à réserver</span>` : '') + (ms.some(m => !m.home) ? `<span>🚌 Extérieur</span>` : '');
+    if (lg) lg.innerHTML = cats.map(k => `<span><i style="background:${CAT_COLORS[k]}"></i>${esc(catLabel(k))}</span>`).join('') + `<span><i class="lg-match"></i>Match (rayé)</span><span><i class="lg-home"></i>Domicile</span>` + (ms.some(m => m.home && !bookingFor(m)) ? `<span><i class="lg-todo"></i>Match à réserver</span>` : '') + (ms.some(m => !m.home) ? `<span><i class="lg-away"></i>🚌 Extérieur</span>` : '');
     const todo = unbookedHome(days).filter(m => Auth.sees(m.teamId)), bb = $('#bookHome', root);
     if (bb) { bb.hidden = !todo.length; bb.querySelector('span').textContent = `Réserver ${todo.length > 1 ? 'les ' + todo.length + ' matchs' : 'le match'} à domicile`; }
   }

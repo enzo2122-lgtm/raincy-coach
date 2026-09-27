@@ -7,14 +7,14 @@ const Editor = (() => {
     ['ball', 'Ballon', 'ball'], ['cone', 'Plot', 'cone'], ['goal', 'But', 'goal'], ['arrow', 'Flèche', 'arrow'], ['zone', 'Zone', 'zone'], ['erase', 'Gomme', 'eraser'],
   ];
   const HINTS = {
-    move: 'Touche un joueur, une flèche ou une zone pour le bouger ou le modifier.',
+    move: 'Fais glisser un joueur pour le placer. Touche une flèche ou une zone pour la modifier.',
     home: 'Touche le terrain pour ajouter un joueur de ton équipe.',
     away: 'Touche le terrain pour ajouter un adversaire.',
     gk: 'Touche le terrain pour ajouter un gardien.',
     ball: 'Touche le terrain pour poser un ballon.',
     cone: 'Touche le terrain pour poser un plot.',
     goal: 'Touche le terrain pour poser un but.',
-    arrow: 'Glisse ton doigt sur le terrain pour tracer une flèche.',
+    arrow: 'Glisse depuis un joueur ou le ballon : il fera ce mouvement quand tu touches « Jouer ».',
     zone: 'Glisse ton doigt sur le terrain pour dessiner une zone.',
     erase: 'Touche ce que tu veux effacer.',
   };
@@ -43,7 +43,7 @@ const Editor = (() => {
         <button class="btn primary" data-act="export">${I.share}<span>Exporter</span></button>
       </header>
       <nav class="ed-tools" id="edTools" aria-label="Outils"></nav>
-      <div class="ed-stage"><canvas aria-label="Terrain"></canvas><div class="ed-hint" id="edHint"></div></div>
+      <div class="ed-stage"><canvas aria-label="Terrain"></canvas><div class="ed-sub" id="edSub"></div><div class="ed-hint" id="edHint"></div></div>
       <aside class="ed-side" id="edSide"></aside>
       <footer class="ed-steps" id="edSteps"></footer>
     </div>`;
@@ -55,6 +55,7 @@ const Editor = (() => {
   }
   function close() {
     if (!E) return;
+    if (E.saveT) { clearTimeout(E.saveT); Store.upsert('schemas', E.sc); }
     E.playing = false; cancelAnimationFrame(E.raf); E.ro && E.ro.disconnect(); E = null;
   }
   function resize() {
@@ -74,7 +75,9 @@ const Editor = (() => {
   }
   function undo() { if (!E.hist.length) return UI.toast('Rien à annuler'); E.fut.push(JSON.stringify(E.sc)); restore(E.hist.pop()); }
   function redo() { if (!E.fut.length) return; E.hist.push(JSON.stringify(E.sc)); restore(E.fut.pop()); }
-  function commit() { Store.upsert('schemas', E.sc); draw(); }
+  function commit() { clearTimeout(E.saveT); E.saveT = null; Store.upsert('schemas', E.sc); draw(); }
+  // typing: saved half a second after the last letter (nothing is lost if the app is closed right after)
+  function saveSoon() { clearTimeout(E.saveT); E.saveT = setTimeout(() => { if (E) commit(); }, 500); draw(); }
 
   function clampW(w) {
     const e = Board.extents(E.sc.field), r = Board.tokenR(E.sc.field);
@@ -104,6 +107,34 @@ const Editor = (() => {
     if (h.kind === 'obj') { sc.objects = sc.objects.filter(o => o.id !== h.id); sc.steps.forEach(st => { delete st.pos[h.id]; delete st.moves[h.id]; }); }
     if (h.kind === 'arrow') cur().arrows = cur().arrows.filter(a => a.id !== h.id);
     if (h.kind === 'zone') sc.zones = sc.zones.filter(z => z.id !== h.id);
+    if (h.kind === 'move') {
+      // the player stays where he was: in the next steps too, as long as they followed this movement
+      const A = cur().pos[h.id], nx = sc.steps[E.k + 1], B = nx && nx.pos[h.id]; if (!A || !B) return;
+      for (let j = E.k + 1; j < sc.steps.length; j++) { const p = sc.steps[j].pos[h.id]; if (p && Board.dist(p, B) < .01) sc.steps[j].pos[h.id] = A.slice(); else break; }
+      delete nx.moves[h.id];
+    }
+  }
+  // Arrow drawn from a player or the ball: it becomes a real movement towards the next step (created if needed)
+  const MOVE_TYPES = { player: ['course', 'conduite', 'pressing', 'bascule'], ball: ['passe', 'tir'] };
+  function makeMove(id, end) {
+    const sc = E.sc, k = E.k, o = findObj(id), A = cur().pos[id], r = Board.tokenR(sc.field);
+    let created = false;
+    if (k === sc.steps.length - 1) { sc.steps.push({ pos: JSON.parse(JSON.stringify(cur().pos)), arrows: [], moves: {}, note: '', dur: 2 }); created = true; }
+    const nx = sc.steps[k + 1], B = clampW(end);
+    const shift = (oid, to) => {
+      const old = nx.pos[oid];
+      for (let j = k + 1; j < sc.steps.length; j++) { const p = sc.steps[j].pos[oid]; if (j === k + 1 || (p && old && Board.dist(p, old) < .01)) sc.steps[j].pos[oid] = to.slice(); else break; }
+    };
+    shift(id, B);
+    const ok = MOVE_TYPES[o.type] || MOVE_TYPES.player, type = ok.includes(E.arrowType) ? E.arrowType : ok[0];
+    nx.moves[id] = { type, c: 0 };
+    // a player dribbling takes the ball with him
+    if (type === 'conduite') {
+      const ball = sc.objects.find(b => b.type === 'ball' && cur().pos[b.id] && Board.dist(cur().pos[b.id], A) < r * 2.6);
+      if (ball) { const bp = cur().pos[ball.id]; shift(ball.id, [B[0] + bp[0] - A[0], B[1] + bp[1] - A[1]]); delete nx.moves[ball.id]; }
+    }
+    E.sel = { kind: 'move', id };
+    if (created) { renderSteps(); UI.toast('Mouvement ajouté : touche « Jouer » pour le voir'); }
   }
   function select(h) { E.sel = h; renderPanel(); draw(); }
 
@@ -119,6 +150,13 @@ const Editor = (() => {
         const a = findArrow(E.sel.id);
         if (a && Board.dist(w, a.a) < r * .9) return (E.drag = { kind: 'arrowEnd', end: 'a', id: a.id });
         if (a && Board.dist(w, a.b) < r * .9) return (E.drag = { kind: 'arrowEnd', end: 'b', id: a.id });
+      }
+      if (E.sel && E.sel.kind === 'move') {
+        const nx = E.sc.steps[E.k + 1], B = nx && nx.pos[E.sel.id];
+        if (B && Board.dist(w, B) < r * 1.1) {
+          const follow = E.sc.steps.map((s, j) => j > E.k + 1 && s.pos[E.sel.id] && Board.dist(s.pos[E.sel.id], B) < .01 ? j : -1).filter(j => j >= 0);
+          return (E.drag = { kind: 'moveEnd', id: E.sel.id, follow });
+        }
       }
       if (E.sel && E.sel.kind === 'zone') {
         const z = findZone(E.sel.id);
@@ -142,7 +180,12 @@ const Editor = (() => {
       E.drag = { kind: 'obj', id: o.id, off: [0, 0], follow: E.sc.steps.map((s, j) => j > E.k ? j : -1).filter(j => j >= 0), placed: true };
       return;
     }
-    if (t === 'arrow') return (E.drag = { kind: 'newArrow', a: w, b: w });
+    if (t === 'arrow') {
+      // starting on a player or the ball: the arrow is his movement
+      const h = Board.hit(E.sc, E.k, E.cam, w), o = h && h.kind === 'obj' && findObj(h.id);
+      if (o && (o.type === 'player' || o.type === 'ball')) return (E.drag = { kind: 'newArrow', a: st.pos[o.id].slice(), b: w, from: o.id });
+      return (E.drag = { kind: 'newArrow', a: w, b: w });
+    }
     if (t === 'zone') return (E.drag = { kind: 'newZone', a: w, b: w });
     if (t === 'erase') {
       const h = Board.hit(E.sc, E.k, E.cam, w);
@@ -152,7 +195,7 @@ const Editor = (() => {
   function onMove(e) {
     if (!E || !E.drag) return;
     const d = E.drag, w = wpos(e), r = E.cam.r;
-    if (!d.moved && !d.placed && ['obj', 'zone', 'arrow', 'arrowEnd', 'zoneResize'].includes(d.kind)) snapshot();
+    if (!d.moved && !d.placed && ['obj', 'zone', 'arrow', 'arrowEnd', 'zoneResize', 'moveEnd'].includes(d.kind)) snapshot();
     d.moved = true;
     if (d.kind === 'obj') {
       const p = clampW([w[0] - d.off[0], w[1] - d.off[1]]);
@@ -161,6 +204,7 @@ const Editor = (() => {
     else if (d.kind === 'zoneResize') { const z = findZone(d.id); z.w = Math.max(r * 1.5, w[0] - z.x); z.h = Math.max(r * 1.5, w[1] - z.y); }
     else if (d.kind === 'arrow') { const a = findArrow(d.id), dx = w[0] - d.start[0], dy = w[1] - d.start[1]; a.a = [d.a0[0] + dx, d.a0[1] + dy]; a.b = [d.b0[0] + dx, d.b0[1] + dy]; }
     else if (d.kind === 'arrowEnd') { findArrow(d.id)[d.end] = w; }
+    else if (d.kind === 'moveEnd') { const p = clampW(w); E.sc.steps[E.k + 1].pos[d.id] = p; d.follow.forEach(j => E.sc.steps[j].pos[d.id] = p.slice()); }
     else if (d.kind === 'newArrow' || d.kind === 'newZone') d.b = w;
     draw();
   }
@@ -170,8 +214,9 @@ const Editor = (() => {
     if (d.kind === 'newArrow') {
       if (Board.dist(d.a, d.b) > r * 1.2) {
         snapshot();
-        const a = { id: Store.uid(), type: E.arrowType, a: d.a, b: d.b, c: 0 };
-        cur().arrows.push(a); E.sel = { kind: 'arrow', id: a.id }; commit(); renderPanel();
+        if (d.from) makeMove(d.from, d.b);
+        else { const a = { id: Store.uid(), type: E.arrowType, a: d.a, b: d.b, c: 0 }; cur().arrows.push(a); E.sel = { kind: 'arrow', id: a.id }; }
+        commit(); renderPanel();
       } else draw();
       return;
     }
@@ -196,7 +241,10 @@ const Editor = (() => {
     const k = E.playing ? E.pk : E.k, u = E.playing ? E.pu : 0;
     E.cam = Board.drawFrame(ctx, W, H, E.sc, k, u, { homeBib: club().homeBib, names: E.sc.overlays.names, vertical: H > W * 1.15, editor: E.playing ? null : { sel: E.sel } });
     const d = E.drag;
-    if (d && d.kind === 'newArrow') Board.drawArrow(ctx, E.cam, d.a, d.b, 0, E.arrowType, 0, 0, .8);
+    if (d && d.kind === 'newArrow') {
+      const o = d.from && findObj(d.from), ok = o && (MOVE_TYPES[o.type] || MOVE_TYPES.player);
+      Board.drawArrow(ctx, E.cam, d.a, d.b, 0, ok ? (ok.includes(E.arrowType) ? E.arrowType : ok[0]) : E.arrowType, o ? E.cam.r * (o.type === 'ball' ? .4 : 1.05) : 0, 0, .8);
+    }
     if (d && d.kind === 'newZone') {
       const [x1, y1] = E.cam.toS(d.a), [x2, y2] = E.cam.toS(d.b);
       ctx.save(); ctx.setLineDash([8, 6]); ctx.lineWidth = 2.5; ctx.strokeStyle = Board.ZONE_COLORS[E.zoneColor];
@@ -238,9 +286,18 @@ const Editor = (() => {
       const style = col ? ` style="color:${col[0]};--tool-ink:${col[1]}"` : '';
       return `<button class="tool ${E.tool === id ? 'on' : ''}" data-tool="${id}" aria-pressed="${E.tool === id}"><span class="ti"${style}>${I[ic]}</span><span>${lab}</span></button>`;
     }).join('');
+    renderSub();
     const hint = E.root.querySelector('#edHint');
     hint.textContent = HINTS[E.tool]; hint.classList.remove('gone');
     clearTimeout(E.hintT); E.hintT = setTimeout(() => hint.classList.add('gone'), 4000);
+  }
+  // The choices of the active tool, right above the pitch (on a phone the options panel is hidden)
+  function renderSub() {
+    const t = E.tool, el = E.root.querySelector('#edSub');
+    el.innerHTML = t === 'arrow' ? chipRow(ARROW_ITEMS(), 'tat', E.arrowType)
+      : t === 'zone' ? chipRow(Object.entries(Board.ZONE_COLORS).map(([k, v]) => [k, '', swatch(v)]), 'tzc', E.zoneColor)
+      : t === 'cone' ? chipRow([['orange', 'Orange'], ['jaune', 'Jaune'], ['bleu', 'Bleu'], ['rouge', 'Rouge']], 'tcone', E.coneColor) : '';
+    el.hidden = !el.innerHTML;
   }
   function renderSteps() {
     const n = E.sc.steps.length, st = cur();
@@ -289,9 +346,15 @@ const Editor = (() => {
             const ty = Board.moveType(sc, E.k - 1, o.id);
             h += `<div class="lbl">Flèche pour arriver ici (depuis l'étape ${E.k})</div>
               ${chipRow(ARROW_ITEMS().concat([['none', 'Pas de flèche', '']]), 'mt', ty)}${CURVES()}`;
-          } else h += `<p class="tip">Pour faire bouger ${o.type === 'ball' ? 'le ballon' : 'ce joueur'} : ajoute une étape, puis déplace-le. La flèche se dessine toute seule.</p>`;
-        } else h += `<p class="tip">Pour montrer un mouvement : touche « + Étape » en bas, puis déplace ${o.type === 'ball' ? 'le ballon' : 'le joueur'}.</p>`;
+          } else h += `<p class="tip">Pour faire bouger ${o.type === 'ball' ? 'le ballon' : 'ce joueur'} : prends l'outil « Flèche » et glisse depuis lui jusqu'à l'arrivée.</p>`;
+        } else h += `<p class="tip">Pour faire bouger ${o.type === 'ball' ? 'le ballon' : 'ce joueur'} : prends l'outil « Flèche » et glisse depuis ${o.type === 'ball' ? 'le ballon' : 'le joueur'} jusqu'à l'arrivée. Touche « Jouer » pour voir l'animation.</p>`;
       }
+    } else if (sel && sel.kind === 'move') {
+      const o = findObj(sel.id), nx = sc.steps[E.k + 1]; if (!o || !nx) { E.sel = null; return renderPanel(); }
+      const ok = MOVE_TYPES[o.type] || MOVE_TYPES.player, ty = Board.moveType(sc, E.k, o.id);
+      h += `<div class="panel-head"><h3>Mouvement ${o.type === 'ball' ? 'du ballon' : 'du joueur ' + esc(o.label || '')}</h3><button class="icon-btn danger" data-act="delSel" aria-label="Supprimer le mouvement">${I.trash}</button></div>
+        <div class="lbl">Type</div>${chipRow(ARROW_ITEMS().filter(([k]) => ok.includes(k)), 'nmt', ty)}<div class="lbl">Forme</div>${CURVES()}
+        <p class="tip">Tire sur le rond blanc pour changer l'arrivée. Touche « Jouer » pour voir le mouvement.</p>`;
     } else if (sel && sel.kind === 'arrow') {
       const a = findArrow(sel.id); if (!a) { E.sel = null; return renderPanel(); }
       h += `<div class="panel-head"><h3>Flèche</h3><button class="icon-btn danger" data-act="delSel" aria-label="Supprimer">${I.trash}</button></div>
@@ -304,9 +367,8 @@ const Editor = (() => {
         <div class="lbl">Couleur</div>${chipRow(Object.entries(Board.ZONE_COLORS).map(([k, v]) => [k, '', swatch(v)]), 'zc', z.color)}
         <p class="tip">Tire sur le rond blanc en bas à droite pour changer la taille.</p>`;
     } else {
-      if (E.tool === 'arrow') h += `<div class="lbl">Type de flèche</div>${chipRow(ARROW_ITEMS(), 'tat', E.arrowType)}`;
-      if (E.tool === 'zone') h += `<div class="lbl">Couleur de la zone</div>${chipRow(Object.entries(Board.ZONE_COLORS).map(([k, v]) => [k, '', swatch(v)]), 'tzc', E.zoneColor)}`;
-      if (E.tool === 'cone') h += `<div class="lbl">Couleur du plot</div>${chipRow([['orange', 'Orange'], ['jaune', 'Jaune'], ['bleu', 'Bleu'], ['rouge', 'Rouge']], 'tcone', E.coneColor)}`;
+      h += `<h3>Notes du schéma</h3>
+        <label class="fld"><span class="sr">Notes du schéma</span><textarea id="scNotes" rows="4" maxlength="2000" placeholder="Objectif, consignes, variantes… (enregistré tout seul)">${esc(sc.notes || '')}</textarea></label>`;
       const ov = sc.overlays, f = sc.field;
       const tg = (id, lab) => `<label class="switch"><input type="checkbox" data-ov="${id}" ${ov[id] ? 'checked' : ''}><span>${lab}</span></label>`;
       if (sc.trace) h += `<h3>Calque : ton dessin d'origine</h3>
@@ -427,16 +489,18 @@ const Editor = (() => {
       if (d.cone && sel) return setSel(() => findObj(sel.id).color = d.cone);
       if (d.gsize) return setSel(() => findObj(sel.id).size = d.gsize);
       if (d.mt) return setSel(() => { const m = cur().moves[sel.id] = cur().moves[sel.id] || {}; m.type = d.mt; });
+      if (d.nmt && sel) return setSel(() => { const nx = sc.steps[E.k + 1]; nx.moves[sel.id] = Object.assign(nx.moves[sel.id] || {}, { type: d.nmt }); });
       if (d.curve !== undefined) {
+        if (sel && sel.kind === 'move') return setSel(() => { const nx = sc.steps[E.k + 1]; nx.moves[sel.id] = Object.assign(nx.moves[sel.id] || {}, { c: +d.curve }); });
         if (sel && sel.kind === 'arrow') return setSel(() => findArrow(sel.id).c = +d.curve);
         if (sel && sel.kind === 'obj' && E.k > 0) return setSel(() => { const m = cur().moves[sel.id] = cur().moves[sel.id] || {}; m.c = +d.curve; });
         return;
       }
       if (d.at) return setSel(() => findArrow(sel.id).type = d.at);
       if (d.zc) return setSel(() => findZone(sel.id).color = d.zc);
-      if (d.tat) { E.arrowType = d.tat; return renderPanel(); }
-      if (d.tzc) { E.zoneColor = d.tzc; return renderPanel(); }
-      if (d.tcone) { E.coneColor = d.tcone; return renderPanel(); }
+      if (d.tat) { E.arrowType = d.tat; return renderSub(); }
+      if (d.tzc) { E.zoneColor = d.tzc; return renderSub(); }
+      if (d.tcone) { E.coneColor = d.tcone; return renderSub(); }
       if (d.fmt) return setSel(() => { sc.field.format = d.fmt; if (d.fmt === 'zone') { sc.field.w = sc.field.w || 30; sc.field.h = sc.field.h || 20; } });
       if (d.view) return setSel(() => sc.field.view = d.view);
       switch (d.act) {
@@ -470,15 +534,17 @@ const Editor = (() => {
       if (!E) return;
       const t = e.target, sel = E.sel;
       if (t.id === 'traceOp' && E.sc.trace) { E.sc.trace.opacity = +t.value / 100; draw(); }
-      if (t.id === 'pLabel') { findObj(sel.id).label = t.value.trim(); draw(); }
-      if (t.id === 'pName') { findObj(sel.id).name = t.value.trim(); draw(); }
-      if (t.id === 'zLabel') { findZone(sel.id).label = t.value; draw(); }
-      if (t.id === 'stepNote') { cur().note = t.value; }
+      if (t.id === 'pLabel') { findObj(sel.id).label = t.value.trim(); saveSoon(); }
+      if (t.id === 'pName') { findObj(sel.id).name = t.value.trim(); saveSoon(); }
+      if (t.id === 'zLabel') { findZone(sel.id).label = t.value; saveSoon(); }
+      if (t.id === 'stepNote') { cur().note = t.value; saveSoon(); }
+      if (t.id === 'scNotes') { E.sc.notes = t.value; saveSoon(); }
+      if (t.id === 'edTitle') { E.sc.name = t.value.trim() || 'Sans nom'; saveSoon(); }
     });
     r.addEventListener('change', e => {
       if (!E) return;
       const t = e.target, sc = E.sc;
-      if (['pLabel', 'pName', 'zLabel', 'stepNote'].includes(t.id)) { commit(); return; }
+      if (['pLabel', 'pName', 'zLabel', 'stepNote', 'scNotes'].includes(t.id)) { commit(); return; }
       if (t.id === 'pGk') { snapshot(); const o = findObj(E.sel.id); o.gk = t.checked; if (t.checked) { o.color = 'jaune'; o.label = o.label || 'G'; } commit(); return renderPanel(); }
       if (t.dataset.ov) { sc.overlays[t.dataset.ov] = t.checked; return commit(); }
       if (t.dataset.trace && sc.trace) { sc.trace.on = t.checked; return commit(); }

@@ -17,6 +17,9 @@ const Views = (() => {
   const matchTitle = m => m.exempt ? `${esc(S().club.name)} <i>exempt · pas de match</i>` : m.home ? `${esc(S().club.name)} <i>contre</i> ${esc(m.opponent || '?')}` : `${esc(m.opponent || '?')} <i>contre</i> ${esc(S().club.name)}`;
   // « U13 · Raincy – Aulnaysienne » : our category, then the two teams in the order of the score (home first)
   const usShort = () => String(S().club.name || 'Nous').replace(/^(FA|AS|US|FC|ES|CS|SC|JS|RC)\s+/i, '').replace(/^(Le|La|Les|L')\s*/i, '') || S().club.name;
+  // Home (green) or away (blue) tint of a match, the same everywhere in the app
+  const side = m => m.exempt ? '' : m.home ? 'side-home' : 'side-away';
+  const sideTag = m => m.exempt ? '' : `<i class="side-tag">${m.home ? '🏠 Dom.' : '🚌 Ext.'}</i>`;
   function lastTeams(m) {
     const t = teamOf(m.teamId), us = `<b class="us">${esc(usShort())}</b>`, them = `<span>${esc(m.opponent || '?')}</span>`;
     return `${t ? `<i class="rl-cat" style="background:${Planning.teamColor(t.id)}">${esc(t.name)}</i>` : ''}<span class="rl-teams">${m.home ? us + ' – ' + them : them + ' – ' + us}</span>`;
@@ -136,7 +139,7 @@ const Views = (() => {
         ${ClubLife.homeCard()}
         <section class="card">
           <h2>${I.match}Prochain match</h2>
-          ${next ? `<a class="rowlink" href="#/match/${next.id}"><div><b>${matchTitle(next)}</b><span>${esc(fmtDate(next.date, { weekday: 'long', day: 'numeric', month: 'long' }))} · ${esc(next.time || '')} · ${next.home ? 'Domicile' : 'Extérieur'}</span></div>${I.next}</a>` : `<p class="muted">Aucun match prévu.</p>`}
+          ${next ? `<a class="rowlink ${side(next)}" href="#/match/${next.id}"><div><b>${matchTitle(next)}</b><span>${esc(fmtDate(next.date, { weekday: 'long', day: 'numeric', month: 'long' }))} · ${esc(next.time || '')} · ${next.home ? 'Domicile' : 'Extérieur'}</span></div>${I.next}</a>` : `<p class="muted">Aucun match prévu.</p>`}
         </section>
         <section class="card">
           <h2>${I.training}Prochain entraînement</h2>
@@ -150,7 +153,7 @@ const Views = (() => {
         ${Results.homeCard()}
         <section class="card">
           <h2>${I.stats}Derniers résultats</h2>
-          ${last.length ? `<ul class="res-list">${last.map(m => `<li><a href="#/match/${m.id}"><span class="d">${esc(fmtDate(m.date))}</span><span class="o">${lastTeams(m)}</span><span class="s">${scoreTxt(m)}</span>${resPill(m)}</a></li>`).join('')}</ul>` : `<p class="muted">Pas encore de résultat.</p>`}
+          ${last.length ? `<ul class="res-list">${last.map(m => `<li><a class="${side(m)}" href="#/match/${m.id}"><span class="d">${esc(fmtDate(m.date))}</span><span class="o">${lastTeams(m)}</span><span class="s">${scoreTxt(m)}</span>${resPill(m)}</a></li>`).join('')}</ul>` : `<p class="muted">Pas encore de résultat.</p>`}
         </section>
         <section class="card">
           <h2>${I.board}Derniers schémas</h2>
@@ -397,13 +400,14 @@ const Views = (() => {
     const done = list.filter(m => m.played || m.date < now).sort((a, b) => b.date.localeCompare(a.date));
     const shown = ui.matchMore ? up : up.slice(0, 20);
     const item = m => { const tm = teamOf(m.teamId);
-      return `<a class="list-item" href="#/match/${m.id}"><div class="date-box"><b>${new Date(m.date + 'T12:00').getDate()}</b><span>${esc(fmtDate(m.date, { month: 'short' }))}</span></div>
-      <div class="li-main"><b>${matchTitle(m)}</b><span class="muted">${tm ? `<i class="li-cat" style="background:${Planning.teamColor(tm.id)}">${esc(tm.name)}</i> ` : ''}${m.exempt ? '' : (m.home ? 'Domicile' : 'Extérieur') + (m.time ? ' · ' + esc(m.time) : '')}</span></div>
+      return `<a class="list-item ${side(m)}" href="#/match/${m.id}"><div class="date-box"><b>${new Date(m.date + 'T12:00').getDate()}</b><span>${esc(fmtDate(m.date, { month: 'short' }))}</span></div>
+      <div class="li-main"><b>${matchTitle(m)}</b><span class="muted">${tm ? `<i class="li-cat" style="background:${Planning.teamColor(tm.id)}">${esc(tm.name)}</i> ` : ''}${m.exempt ? '' : sideTag(m) + (m.time ? ' · ' + esc(m.time) : '')}</span></div>
       ${m.played ? `<span class="score">${scoreTxt(m)}</span>${resPill(m)}` : ''}${I.next}</a>`; };
     root.innerHTML = `${header('Matchs', 'Agenda et résultats de tout le club', `<button class="btn" data-act="imp">${I.upload}<span>Importer (FFF, agenda…)</span></button><button class="btn primary" data-act="new">${I.plus}<span>Nouveau match</span></button>`)}
       ${coach && !t ? `<div class="seg"><button class="seg-b ${scope === 'club' ? 'on' : ''}" data-scope="club">🏟️ Tout le club</button><button class="seg-b ${scope === 'mine' ? 'on' : ''}" data-scope="mine">⭐ Mes équipes</button></div>` : ''}
       <label class="team-select all-sizes"><span>Catégorie</span><select data-mteam aria-label="Catégorie"><option value="">Toutes les catégories</option>
         ${S().teams.map(x => `<option value="${x.id}" ${x.id === t ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label>
+      <div class="side-legend"><span class="side-home">🏠 Domicile</span><span class="side-away">🚌 Extérieur</span></div>
       <h2 class="section">À venir (${up.length})</h2>${up.length ? `<div class="list">${shown.map(item).join('')}</div>${up.length > shown.length ? `<button class="btn soft wide" data-act="more">Voir les ${up.length - shown.length} matchs suivants</button>` : ''}` : '<p class="muted">Aucun match prévu.</p>'}
       <h2 class="section">Résultats</h2>${done.length ? `<div class="list">${done.map(item).join('')}</div>` : '<p class="muted">Pas encore de résultat.</p>'}`;
     $$('[data-mteam]', root).forEach(s => s.onchange = () => { ui.matchTeam = s.value; ui.matchMore = 0; Store.persistNow(); matches(root); });
@@ -458,7 +462,7 @@ const Views = (() => {
       const lineup = m.lineupId && Store.get('schemas', m.lineupId);
       root.innerHTML = `${header(matchTitle(m), `${esc(fmtDate(m.date, { weekday: 'long', day: 'numeric', month: 'long' }))}${t ? ' · ' + esc(t.name) : ''}`,
         `<button class="btn primary" data-act="pdf">${I.pdf}<span>Feuille de match</span></button>`)}
-        <section class="card">
+        <section class="card ${side(m)}">
           <div class="row3">
             <label class="fld"><span>Équipe</span><select data-f="teamId">${Auth.teams().map(x => `<option value="${x.id}" ${x.id === m.teamId ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label>
             <label class="fld"><span>Adversaire</span><input data-f="opponent" value="${esc(m.opponent)}"></label>
@@ -468,7 +472,7 @@ const Views = (() => {
             <label class="fld"><span>Compétition</span><select data-f="competition">${COMPS.map(c => `<option ${c === m.competition ? 'selected' : ''}>${c}</option>`).join('')}</select></label>
             <label class="fld"><span>Lieu</span><input data-f="place" value="${esc(m.place || '')}" placeholder="Stade, adresse"></label>
           </div>
-          <div class="chips"><button class="chip ${m.home ? 'on' : ''}" data-home="1">Domicile</button><button class="chip ${!m.home ? 'on' : ''}" data-home="0">Extérieur</button></div>
+          <div class="chips"><button class="chip ch-home ${m.home ? 'on' : ''}" data-home="1">🏠 Domicile</button><button class="chip ch-away ${!m.home ? 'on' : ''}" data-home="0">🚌 Extérieur</button></div>
         </section>
         <div class="row-head"><h2 class="section">Convoqués (${conv.length})</h2>${conv.length ? `<button class="btn primary" data-act="convoc">${I.share}<span>Envoyer la convocation</span></button>` : ''}</div>
         ${t ? `<div class="chips roster">${roster.map(p => `<button class="chip ${(m.convoked || []).includes(p.id) ? 'on' : ''}" data-conv="${p.id}">${esc(pLabel(p))}</button>`).join('')}</div>` : '<p class="muted">Choisis une équipe.</p>'}
@@ -526,10 +530,10 @@ const Views = (() => {
     const t = teamOf(m.teamId);
     const draw = () => {
       root.innerHTML = `${header(matchTitle(m), `${esc(fmtDate(m.date, { weekday: 'long', day: 'numeric', month: 'long' }))}${t ? ' · ' + esc(t.name) : ''}`, `<a class="btn" href="#/matchs">${I.back}<span>Matchs</span></a>`)}
-        <section class="card match-view">
+        <section class="card match-view ${side(m)}">
           ${m.exempt ? '<p class="lead">Exempt : pas de match ce week-end.</p>' : `
           <div class="mv-score">${m.played ? `<b>${esc(scoreTxt(m))}</b>${resPill(m)}` : `<span>${m.time ? 'Coup d\'envoi à ' + esc(m.time) : 'Horaire à venir'}</span>`}</div>
-          <p>${m.home ? '🏠 À domicile' : '🚌 À l\'extérieur'}${m.place ? ' · 📍 ' + esc(m.place) : ''}${m.rdv ? ' · rendez-vous ' + esc(m.rdv) : ''}</p>
+          <p><i class="side-tag big">${m.home ? '🏠 À domicile' : '🚌 À l\'extérieur'}</i>${m.place ? ' · 📍 ' + esc(m.place) : ''}${m.rdv ? ' · rendez-vous ' + esc(m.rdv) : ''}</p>
           <p class="muted small">${esc(m.competition || '')}${m.notes ? ' · ' + esc(String(m.notes).split('\n')[0]) : ''}</p>
           ${ClubLife.cheerBar(m)}`}
           <p class="tip">Match des ${esc(t ? t.name : 'autres catégories')} : tu peux le suivre et encourager l'équipe. Seuls ses coachs le modifient.</p>
