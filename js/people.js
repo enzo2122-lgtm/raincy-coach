@@ -298,6 +298,12 @@ const People = (() => {
       actions: [{ label: 'Annuler' }, { label: 'Ajouter', kind: 'primary', onClick: (c, r) => {
         const rows = parseLines($('#pasteTxt', r).value);
         if (!rows.length) { toast('Aucune ligne reconnue : il faut une date de naissance jj/mm/aaaa', 'err'); return false; }
+        const { added, updated } = addPlayers(rows);
+        toast(`${added} ajouté${added > 1 ? 's' : ''}, ${updated} mis à jour`); done && done();
+      } }] });
+  }
+  // Players from a Footclubs list: same nom + prénom (+ date of birth) → updated, otherwise added; category from the year of birth
+  function addPlayers(rows) {
         let added = 0, updated = 0;
         rows.forEach(x => {
           const ex = S().players.find(p => (p.lastName || '').toUpperCase() === x.lastName && (p.firstName || '').toLowerCase() === x.firstName.toLowerCase() && (!p.birth || p.birth === x.birth));
@@ -306,8 +312,7 @@ const People = (() => {
           else { Store.upsert('players', Object.assign({ id: Store.uid(), number: '', pos: '', phone: '', email: '', parents: [], notes: '', teamIds: tid ? [tid] : [] }, x)); added++; }
         });
         sortTeams(); Store.save();
-        toast(`${added} ajouté${added > 1 ? 's' : ''}, ${updated} mis à jour`); done && done();
-      } }] });
+        return { added, updated };
   }
 
   /* ---------- paste a list of dirigeants: « NOM Prénom · rôle · téléphone · catégories » on each line ---------- */
@@ -338,6 +343,11 @@ const People = (() => {
       actions: [{ label: 'Annuler' }, { label: 'Ajouter', kind: 'primary', onClick: (c, r) => {
         const rows = parseStaff($('#stTxt', r).value);
         if (!rows.length) { toast('Aucune ligne reconnue', 'err'); return false; }
+        const { added, updated } = addStaff(rows);
+        toast(`${added} ajouté${added > 1 ? 's' : ''}, ${updated} mis à jour. Ils apparaissent maintenant dans « Première connexion ».`); done && done();
+      } }] });
+  }
+  function addStaff(rows) {
         let added = 0, updated = 0;
         rows.forEach(x => {
           const teamIds = x.cats.map(cat => (S().teams.find(t => normCat(t.category) === cat || normCat(t.name) === cat) || {}).id).filter(Boolean);
@@ -345,9 +355,17 @@ const People = (() => {
           if (ex) { Object.assign(ex, { role: x.role || ex.role, phone: x.phone || ex.phone, email: x.email || ex.email, teamIds: [...new Set([...(ex.teamIds || []), ...teamIds])] }); linkPlayer(ex); Store.upsert('staff', ex); updated++; }
           else { const n = { id: Store.uid(), lastName: x.lastName, firstName: x.firstName, role: x.role, phone: x.phone, email: x.email, notes: '', teamIds }; linkPlayer(n); Store.upsert('staff', n); added++; }
         });
-        toast(`${added} ajouté${added > 1 ? 's' : ''}, ${updated} mis à jour. Ils apparaissent maintenant dans « Première connexion ».`); done && done();
-      } }] });
+        return { added, updated };
   }
 
-  return { sortByBirth, sortByBirthDialog, catOf, seasonLabel, editPlayer, editStaff, teamSections, bindTeamSections, staffPicker, listPage, age, fmtBirth, tel, name };
+  /* ---------- a club list as a text file: Footclubs lines, then a line « DIRIGEANTS » and one dirigeant per line ---------- */
+  const isClubList = txt => !/^\s*[{[]/.test(txt) && (parseLines(txt).length > 0 || /^\s*#?\s*DIRIGEANTS\s*$/im.test(txt));
+  function importClubList(txt) {
+    const [pl, st = ''] = txt.split(/^\s*#?\s*DIRIGEANTS\s*$/im);
+    const p = addPlayers(parseLines(pl)), s = addStaff(parseStaff(st));
+    sortByBirth();
+    return { players: p, staff: s };
+  }
+
+  return { isClubList, importClubList, sortByBirth, sortByBirthDialog, catOf, seasonLabel, editPlayer, editStaff, teamSections, bindTeamSections, staffPicker, listPage, age, fmtBirth, tel, name };
 })();

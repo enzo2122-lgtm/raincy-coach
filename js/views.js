@@ -530,6 +530,14 @@ const Views = (() => {
   }
   // Receive a .raincy.json file (players, staff, sessions, matches…) from another coach or from the club
   async function receiveText(txt) {
+    txt = String(txt).replace(/^\uFEFF/, '');
+    if (People.isClubList(txt)) {
+      const r = People.importClubList(txt), p = r.players, s = r.staff;
+      App.route();
+      modal({ title: 'Liste reçue', noFocus: true, body: `<p class="lead">Joueurs : ${p.added} ajouté${p.added > 1 ? 's' : ''}, ${p.updated} mis à jour. Dirigeants : ${s.added} ajouté${s.added > 1 ? 's' : ''}, ${s.updated} mis à jour.</p>
+        <p class="muted">Chaque joueur est rangé dans sa catégorie selon son année de naissance. Retrouve-les dans Équipes.</p>`, actions: [{ label: 'OK', kind: 'primary' }] });
+      return true;
+    }
     try {
       const r = Store.importText(String(txt).replace(/^﻿/, '').trim());
       await Library.restoreBackgrounds();
@@ -543,7 +551,7 @@ const Views = (() => {
   }
   function importFile() {
     modal({ title: 'Recevoir un fichier', noFocus: true,
-      body: `<p>Choisis le fichier <b>.raincy.json</b> (liste des licenciés, données d'un autre éducateur…). Sur iPhone ou iPad, il doit d'abord être enregistré dans l'app <b>Fichiers</b> ; sur PC ou Android, dans Téléchargements.</p>
+      body: `<p>Choisis le fichier <b>.raincy.json</b> ou la liste <b>.txt</b> des licenciés et dirigeants (liste des licenciés, données d'un autre éducateur…). Sur iPhone ou iPad, il doit d'abord être enregistré dans l'app <b>Fichiers</b> ; sur PC ou Android, dans Téléchargements.</p>
         <button class="btn primary wide" id="rcvPick">${I.upload}<span>Choisir le fichier</span></button>
         <details class="paste-box"><summary>Le fichier ne se sélectionne pas ?</summary>
           <p class="muted small">Ouvre le fichier dans une autre appli (Fichiers, Mail, Notes…), copie tout son texte, puis colle-le ici.</p>
