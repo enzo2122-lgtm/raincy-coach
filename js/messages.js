@@ -14,7 +14,7 @@ const Messages = (() => {
   const isMineDm = ch => ch.startsWith('dm:') && me() && ch.split(':').includes(me().id);
   function visible(ch) {
     if (ch === 'general') return true;
-    if (ch.startsWith('team:')) return true;
+    if (ch.startsWith('team:')) return Auth.sees(ch.slice(5));
     return isMineDm(ch);
   }
   function channelName(ch) {
@@ -62,9 +62,9 @@ const Messages = (() => {
         ${Auth.isAdmin() ? `<a class="btn primary" href="#/reglages">${I.settings}<span>Configurer le serveur</span></a>` : '<p class="muted">Déconnecte-toi puis reconnecte-toi avec ton nom et ton mot de passe. Si ça ne marche pas, préviens le responsable.</p>'}</div>`;
       return;
     }
-    const ch = chParam ? decodeURIComponent(chParam) : '';
+    const ch = chParam && visible(decodeURIComponent(chParam)) ? decodeURIComponent(chParam) : '';
     const mineTeams = new Set((me().teamIds || []));
-    const teams = S().teams.slice().sort((a, b) => (mineTeams.has(b.id) - mineTeams.has(a.id)) || a.name.localeCompare(b.name));
+    const teams = Auth.teams().slice().sort((a, b) => (mineTeams.has(b.id) - mineTeams.has(a.id)) || a.name.localeCompare(b.name));
     const dms = [...new Set(msgs.map(m => m.channel).filter(isMineDm))];
     const item = c => `<a class="ch ${c === ch ? 'on' : ''}" href="#/messages/${encodeURIComponent(c)}"><span class="ch-ic">${c === 'general' ? I.team : c.startsWith('team:') ? I.whistle : I.edit}</span>
       <span class="ch-name">${esc(channelName(c))}</span>${unread(c) ? `<i class="ch-badge">${unread(c)}</i>` : ''}</a>`;

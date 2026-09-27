@@ -37,6 +37,12 @@ const Auth = (() => {
 
   const current = () => user;
   const isAdmin = () => { if (!user) return false; const s = sess(); if (s && s.staff_id === user.id) return !!s.admin; return !!(U(user.id) && U(user.id).admin); };
+  // What a dirigeant may see: a responsable sees every category, a coach only the ones chosen at his first connection
+  // (the pitch planning and the club results stay common to everybody)
+  const allTeams = () => !user || isAdmin() || !(user.teamIds || []).some(id => Store.get('teams', id));
+  const teams = () => allTeams() ? Store.state.teams : Store.state.teams.filter(t => (user.teamIds || []).includes(t.id));
+  const sees = teamId => allTeams() || !teamId || (user.teamIds || []).includes(teamId);
+  const seesPerson = p => allTeams() || (p.teamIds || []).some(id => (user.teamIds || []).includes(id)) || (user && p.id === user.id);
   const hasAccounts = () => Object.values(A().users).some(u => u.hash);
   async function setPassword(id, pw, extra = {}) {
     const salt = newSalt(), hash = await derive(pw, salt);
@@ -528,5 +534,5 @@ const Auth = (() => {
     if (serverMode() && isAdmin()) Cloud.accountSet({ staff_id: staffId, delete: true }).catch(() => {});
   }
 
-  return { gate, current, isAdmin, logout, localOnly, connectServer, expired, settingsSection, mountSettings, onSettingsClick, onSettingsChange, forget, setInvite, nkey, firstKeys };
+  return { gate, current, isAdmin, teams, sees, seesPerson, logout, localOnly, connectServer, expired, settingsSection, mountSettings, onSettingsClick, onSettingsChange, forget, setInvite, nkey, firstKeys };
 })();

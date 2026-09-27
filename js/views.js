@@ -9,8 +9,8 @@ const Views = (() => {
   const pLabel = p => `${p.number ? p.number + ' · ' : ''}${pName(p)}`;
   const POS = [['GB', 'Gardien'], ['DEF', 'Défenseur'], ['MIL', 'Milieu'], ['ATT', 'Attaquant']];
   const COMPS = ['Championnat', 'Coupe', 'Amical', 'Plateau', 'Tournoi'];
-  const activeTeam = () => S().ui.teamId && teamOf(S().ui.teamId) ? S().ui.teamId : '';
-  const byTeam = list => { const t = activeTeam(); return t ? list.filter(x => x.teamId === t) : list; };
+  const activeTeam = () => S().ui.teamId && teamOf(S().ui.teamId) && Auth.sees(S().ui.teamId) ? S().ui.teamId : '';
+  const byTeam = list => { const t = activeTeam(); return t ? list.filter(x => x.teamId === t) : list.filter(x => Auth.sees(x.teamId)); };
   const result = m => !m.played ? null : m.gf > m.ga ? 'V' : m.gf < m.ga ? 'D' : 'N';
   const resPill = m => { const r = result(m); return r ? `<span class="res-smiley" aria-hidden="true">${Ratings.smiley(m)}</span><span class="res res-${r}">${r === 'V' ? 'Gagné' : r === 'D' ? 'Perdu' : 'Nul'}</span>` : ''; };
   const scoreTxt = m => m.home ? `${m.gf} – ${m.ga}` : `${m.ga} – ${m.gf}`;
@@ -20,8 +20,8 @@ const Views = (() => {
   function teamSwitch() {
     const t = activeTeam();
     return `<div class="team-switch" role="tablist" aria-label="Équipe">
-      <button class="chip ${!t ? 'on' : ''}" data-team="">Toutes les équipes</button>
-      ${S().teams.map(x => `<button class="chip ${x.id === t ? 'on' : ''}" data-team="${x.id}">${esc(x.name)}</button>`).join('')}
+      <button class="chip ${!t ? 'on' : ''}" data-team="">${Auth.isAdmin() ? 'Toutes les équipes' : Auth.teams().length > 1 ? 'Mes équipes' : 'Tout'}</button>
+      ${Auth.teams().map(x => `<button class="chip ${x.id === t ? 'on' : ''}" data-team="${x.id}">${esc(x.name)}</button>`).join('')}
     </div>`;
   }
   function bindTeamSwitch(root, rerender) {
@@ -56,7 +56,7 @@ const Views = (() => {
     const next = matches.filter(m => !m.played && m.date >= now).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time))[0];
     const nextTr = trainings.filter(t => t.date >= now).sort((a, b) => a.date.localeCompare(b.date))[0];
     const last = matches.filter(m => m.played).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 4);
-    const schemas = S().schemas.slice().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).slice(0, 4);
+    const schemas = S().schemas.filter(s => Auth.sees(s.teamId)).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).slice(0, 4);
     root.innerHTML = `<header class="hero"><img src="icons/crest.png" alt="" class="hero-crest"><div><p class="eyebrow">Espace éducateurs</p><h1>${esc(S().club.name)}</h1><p class="sub">Tableau tactique, effectifs, entraînements et matchs</p></div></header>
       ${serverBanner()}
       ${teamSwitch()}
@@ -81,6 +81,7 @@ const Views = (() => {
           <div id="planMini"><p class="muted">Chargement…</p></div>
           <a class="btn soft" href="#/planning" style="margin-top:8px">${I.calendar}<span>Ouvrir le planning</span></a>
         </section>
+        ${Results.homeCard()}
         <section class="card">
           <h2>${I.stats}Derniers résultats</h2>
           ${last.length ? `<ul class="res-list">${last.map(m => `<li><a href="#/match/${m.id}"><span class="d">${esc(fmtDate(m.date))}</span><span class="o">${esc(m.opponent)}</span><span class="s">${scoreTxt(m)}</span>${resPill(m)}</a></li>`).join('')}</ul>` : `<p class="muted">Pas encore de résultat.</p>`}
@@ -100,15 +101,15 @@ const Views = (() => {
   function teams(root) {
     const count = (n, w) => `${n} ${w}${n > 1 ? 's' : ''}`;
     root.innerHTML = `${header('Équipes', 'Les catégories du club, leurs joueurs et leurs dirigeants',
-      `<a class="btn" href="#/joueurs">${I.team}<span>Tous les joueurs (${S().players.length})</span></a>
-       <a class="btn" href="#/dirigeants">${I.whistle}<span>Dirigeants (${S().staff.length})</span></a>
+      `<a class="btn" href="#/joueurs">${I.team}<span>${Auth.isAdmin() ? 'Tous les joueurs' : 'Mes joueurs'} (${S().players.filter(Auth.seesPerson).length})</span></a>
+       <a class="btn" href="#/dirigeants">${I.whistle}<span>Dirigeants (${S().staff.filter(Auth.seesPerson).length})</span></a>
        ${Auth.isAdmin() ? `<button class="btn" data-act="bybirth">${I.calendar}<span>Ranger par année de naissance</span></button>` : ''}
-       <button class="btn primary" data-act="new">${I.plus}<span>Nouvelle catégorie</span></button>`)}
-      ${S().teams.length ? `<div class="grid">${S().teams.map(t => { const np = Store.playersOf(t.id).length, ns = Store.staffOf(t.id).length;
+       ${Auth.isAdmin() ? `<button class="btn primary" data-act="new">${I.plus}<span>Nouvelle catégorie</span></button>` : ''}`)}
+      ${Auth.teams().length ? `<div class="grid">${Auth.teams().map(t => { const np = Store.playersOf(t.id).length, ns = Store.staffOf(t.id).length;
         return `<a class="card team-card" href="#/equipe/${t.id}">
           <span class="badge">${fmtLabel(t.format)}</span><h2>${esc(t.name)}</h2><p class="muted">${count(np, 'joueur')} · ${count(ns, 'dirigeant')}</p></a>`; }).join('')}</div>`
         : empty('Crée ta première catégorie pour ajouter tes joueurs.')}`;
-    $('[data-act="new"]', root).onclick = newTeam;
+    const nb = $('[data-act="new"]', root); if (nb) nb.onclick = newTeam;
     const bb = $('[data-act="bybirth"]', root); if (bb) bb.onclick = () => People.sortByBirthDialog(() => teams(root));
   }
   function newTeam() {
@@ -124,7 +125,7 @@ const Views = (() => {
       } }] });
   }
   function team(root, id) {
-    const t = teamOf(id); if (!t) return (location.hash = '#/equipes');
+    const t = teamOf(id); if (!t || !Auth.sees(t.id)) return (location.hash = '#/equipes');
     const save = () => Store.upsert('teams', t);
     const render = () => {
       root.innerHTML = `${header(`<input class="h1-input" id="tName" value="${esc(t.name)}" aria-label="Nom de la catégorie">`, `${fmtLabel(t.format)} · ${Store.playersOf(t.id).length} joueurs`,
@@ -134,7 +135,7 @@ const Views = (() => {
           <div class="chips">${FORMATS.map(([v, l]) => `<button class="chip ${t.format === v ? 'on' : ''}" data-fmt="${v}">${l}</button>`).join('')}</div></div>
         </section>
         <div id="teamPeople"></div>
-        <div class="danger-zone"><button class="btn danger" data-act="delete">${I.trash}<span>Supprimer la catégorie</span></button></div>`;
+        ${Auth.isAdmin() ? `<div class="danger-zone"><button class="btn danger" data-act="delete">${I.trash}<span>Supprimer la catégorie</span></button></div>` : ''}`;
       const box = $('#teamPeople', root);
       const people = () => { box.innerHTML = People.teamSections(t); $('.sub', root).textContent = `${fmtLabel(t.format)} · ${Store.playersOf(t.id).length} joueurs`; };
       people(); People.bindTeamSections(box, t, people);
@@ -157,7 +158,7 @@ const Views = (() => {
   /* ================= Schémas ================= */
   function schemas(root) {
     const filt = S().ui.schemaFilter || '';
-    const list = S().schemas.filter(s => !filt || s.field.format === filt).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    const list = S().schemas.filter(s => Auth.sees(s.teamId) && (!filt || s.field.format === filt)).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
     root.innerHTML = `${header('Schémas', 'Exercices et tactiques animés', `<a class="btn" href="#/bibliotheque">${I.video}<span>Bibliothèque</span></a><button class="btn" data-act="import">${I.upload}<span>Recevoir</span></button><button class="btn primary" data-act="new">${I.plus}<span>Nouveau schéma</span></button>`)}
       <div class="chips filter">${[['', 'Tous'], ['11', 'Foot à 11'], ['8', 'Foot à 8'], ['5', 'Foot à 5'], ['zone', 'Zones libres']].map(([v, l]) => `<button class="chip ${v === filt ? 'on' : ''}" data-f="${v}">${l}</button>`).join('')}</div>
       ${list.length ? `<div class="grid">${list.map(s => `<article class="card schema-card">
@@ -220,14 +221,14 @@ const Views = (() => {
     modal({ title: 'Nouvel entraînement', body: `
       <label class="fld"><span>Thème</span><input id="trTitle" placeholder="ex : Sortie de balle à 3" maxlength="80"></label>
       <div class="row2"><label class="fld"><span>Date</span><input type="date" id="trDate" value="${today()}"></label><label class="fld"><span>Heure</span><input type="time" id="trTime" value="18:00"></label></div>
-      <label class="fld"><span>Équipe</span><select id="trTeam"><option value="">Aucune</option>${S().teams.map(x => `<option value="${x.id}" ${x.id === t ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label>`,
+      <label class="fld"><span>Équipe</span><select id="trTeam"><option value="">Aucune</option>${Auth.teams().map(x => `<option value="${x.id}" ${x.id === t ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label>`,
       actions: [{ label: 'Annuler' }, { label: 'Créer', kind: 'primary', onClick: (c, r) => {
         const tr = Store.upsert('trainings', { id: Store.uid(), title: $('#trTitle', r).value.trim() || 'Entraînement', date: $('#trDate', r).value || today(), time: $('#trTime', r).value, teamId: $('#trTeam', r).value || null, goal: '', exercises: [], presents: [] });
         location.hash = '#/entrainement/' + tr.id;
       } }] });
   }
   function training(root, id) {
-    const tr = Store.get('trainings', id); if (!tr) return (location.hash = '#/entrainements');
+    const tr = Store.get('trainings', id); if (!tr || !Auth.sees(tr.teamId)) return (location.hash = '#/entrainements');
     const save = () => Store.upsert('trainings', tr);
     const render = () => {
       const tm = teamOf(tr.teamId), total = tr.exercises.reduce((a, e) => a + (+e.duration || 0), 0);
@@ -237,7 +238,7 @@ const Views = (() => {
           <div class="row3">
             <label class="fld"><span>Date</span><input type="date" id="trDate" value="${esc(tr.date)}"></label>
             <label class="fld"><span>Heure</span><input type="time" id="trTime" value="${esc(tr.time || '')}"></label>
-            <label class="fld"><span>Équipe</span><select id="trTeam"><option value="">Aucune</option>${S().teams.map(x => `<option value="${x.id}" ${x.id === tr.teamId ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label>
+            <label class="fld"><span>Équipe</span><select id="trTeam"><option value="">Aucune</option>${Auth.teams().map(x => `<option value="${x.id}" ${x.id === tr.teamId ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label>
           </div>
           <label class="fld"><span>Objectif de la séance</span><textarea id="trGoal" rows="2" placeholder="ex : jouer vers l'avant après la récupération">${esc(tr.goal || '')}</textarea></label>
         </section>
@@ -302,7 +303,7 @@ const Views = (() => {
     };
   }
   function pickSchema(cb) {
-    const list = S().schemas.slice().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    const list = S().schemas.filter(s => Auth.sees(s.teamId)).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
     const close = modal({ title: 'Choisir un schéma', noFocus: true,
       body: list.length ? `<div class="pick-grid">${list.map(s => `<button class="pick" data-id="${s.id}"><img alt="" src="${UI.thumb(s, 320, 208)}"><span>${esc(s.name)}</span></button>`).join('')}</div>` : '<p class="muted">Aucun schéma pour l\'instant.</p>',
       onOpen: r => $$('.pick', r).forEach(b => b.onclick = () => { close(); cb(Store.get('schemas', b.dataset.id)); }) });
@@ -325,13 +326,13 @@ const Views = (() => {
     $('[data-act="imp"]', root).onclick = () => Importer.matchesDialog(() => matches(root));
   }
   function newMatch() {
-    const t = activeTeam() || (S().teams[0] && S().teams[0].id) || '';
+    const t = activeTeam() || (Auth.teams()[0] && Auth.teams()[0].id) || '';
     modal({ title: 'Nouveau match', body: `
       <label class="fld"><span>Adversaire</span><input id="mOpp" placeholder="ex : AS Bondy" maxlength="40"></label>
       <div class="row2"><label class="fld"><span>Date</span><input type="date" id="mDate" value="${today()}"></label><label class="fld"><span>Coup d'envoi</span><input type="time" id="mTime" value="10:00"></label></div>
       <div class="chips" id="mHome"><button class="chip on" data-v="1">Domicile</button><button class="chip" data-v="0">Extérieur</button></div>
       <div class="row2"><label class="fld"><span>Compétition</span><select id="mComp">${COMPS.map(c => `<option>${c}</option>`).join('')}</select></label>
-      <label class="fld"><span>Équipe</span><select id="mTeam">${S().teams.map(x => `<option value="${x.id}" ${x.id === t ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label></div>`,
+      <label class="fld"><span>Équipe</span><select id="mTeam">${Auth.teams().map(x => `<option value="${x.id}" ${x.id === t ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label></div>`,
       onOpen: r => $$('#mHome .chip', r).forEach(b => b.onclick = () => { $$('#mHome .chip', r).forEach(x => x.classList.remove('on')); b.classList.add('on'); }),
       actions: [{ label: 'Annuler' }, { label: 'Créer', kind: 'primary', onClick: (c, r) => {
         if (!S().teams.length) { toast('Crée d\'abord une équipe', 'err'); return false; }
@@ -340,7 +341,7 @@ const Views = (() => {
       } }] });
   }
   function match(root, id) {
-    const m = Store.get('matches', id); if (!m) return (location.hash = '#/matchs');
+    const m = Store.get('matches', id); if (!m || !Auth.sees(m.teamId)) return (location.hash = '#/matchs');
     const save = () => Store.upsert('matches', m);
     const stepper = (key, val, lab) => `<div class="stepper"><span>${lab}</span><button class="icon-btn" data-sc="${key}" data-d="-1" aria-label="Moins">${I.minus}</button><b>${val}</b><button class="icon-btn" data-sc="${key}" data-d="1" aria-label="Plus">${I.plus}</button></div>`;
     const render = () => {
@@ -429,7 +430,7 @@ const Views = (() => {
 
   /* ================= Stats ================= */
   function stats(root) {
-    const tid = activeTeam() || (S().teams[0] && S().teams[0].id);
+    const tid = activeTeam() || (Auth.teams()[0] && Auth.teams()[0].id);
     const t = teamOf(tid);
     if (!t) { root.innerHTML = header('Statistiques') + empty('Crée une équipe pour voir ses statistiques.'); return; }
     S().ui.teamId = tid;
@@ -476,24 +477,24 @@ const Views = (() => {
       ${Auth.settingsSection()}
       ${Cloud.settingsSection()}
       ${Help.settingsSection()}
-      <section class="card">
+      ${Auth.isAdmin() ? `<section class="card">
         <h2>${I.team}Club</h2>
         <label class="fld"><span>Nom du club</span><input id="clubName" value="${esc(c.name)}" maxlength="40"></label>
         <div class="lbl">Couleur de nos maillots</div>${bibs('home', c.homeBib)}
         <div class="lbl">Couleur des adversaires</div>${bibs('away', c.awayBib)}
-      </section>
+      </section>` : ''}
       <section class="card">
         <h2>${I.share}Fichiers du club</h2>
         <p>${Cloud.ready() ? 'Les équipes, joueurs, dirigeants, schémas, entraînements et matchs se partagent tout seuls entre les éducateurs par le serveur du club. Les photos et vidéos restent sur l\'appareil qui les a prises.' : 'Chaque éducateur a l\'appli sur son appareil. Pour partager, envoie un fichier (AirDrop, WhatsApp, mail) : l\'autre éducateur l\'ouvre avec « Recevoir un fichier ».'}</p>
         <p class="muted small">« Recevoir un fichier » sert aussi à charger la liste des licenciés ou une sauvegarde. Les listes de joueurs contiennent des numéros de téléphone : envoie-les seulement aux éducateurs du club.</p>
-        <div class="chips"><button class="btn primary" data-act="exportAll">${I.download}<span>Envoyer toutes mes données</span></button>
+        <div class="chips">${Auth.isAdmin() ? `<button class="btn primary" data-act="exportAll">${I.download}<span>Envoyer toutes mes données</span></button>` : ''}
         <button class="btn" data-act="import">${I.upload}<span>Recevoir un fichier</span></button></div>
       </section>
       <section class="card">
         <h2>${I.help}Installer l'appli sur l'iPad ou l'iPhone</h2>
         <ol class="steps-help"><li>Ouvre cette page dans <b>Safari</b>.</li><li>Touche le bouton <b>Partager</b> (le carré avec une flèche vers le haut).</li><li>Choisis <b>Sur l'écran d'accueil</b>, puis <b>Ajouter</b>.</li><li>Lance l'appli depuis son icône : elle marche ensuite sans internet.</li></ol>
       </section>
-      ${S().teams.some(t => t.example) || S().schemas.some(s => s.example) ? `<section class="card">
+      ${Auth.isAdmin() && (S().teams.some(t => t.example) || S().schemas.some(s => s.example)) ? `<section class="card">
         <h2>${I.layers}Exemples</h2>
         <p class="muted">L'appli contient des équipes, schémas, entraînements et matchs d'exemple.</p>
         <button class="btn" data-act="noExamples">${I.trash}<span>Supprimer les exemples</span></button>
@@ -507,7 +508,7 @@ const Views = (() => {
     Help.onSettings(root, () => settings(root));
     Auth.mountSettings(root);
     root.onchange = e => Auth.onSettingsChange(e.target);
-    $('#clubName', root).oninput = e => { c.name = e.target.value || 'Mon club'; Store.save(); App.refreshChrome(); };
+    const cn = $('#clubName', root); if (cn) cn.oninput = e => { c.name = e.target.value || 'Mon club'; Store.save(); App.refreshChrome(); };
     root.onclick = async e => {
       const b = e.target.closest('button'); if (!b) return;
       if (b.dataset.home) { c.homeBib = b.dataset.home; Store.save(); App.refreshChrome(); return settings(root); }

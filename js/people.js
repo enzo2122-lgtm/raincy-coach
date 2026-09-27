@@ -45,9 +45,10 @@ const People = (() => {
       ${teamId ? `<button class="icon-btn" data-unlink="${p.id}" data-kind="staff" aria-label="Retirer ${esc(name(p))} de la catégorie">${I.x}</button>` : ''}
     </div>`;
   }
-  const teamChips = ids => `<div class="chips" id="pTeams">${S().teams.map(t => `<button type="button" class="chip ${(ids || []).includes(t.id) ? 'on' : ''}" data-t="${t.id}">${esc(t.name)}</button>`).join('') || '<p class="muted">Crée d\'abord une catégorie dans Équipes.</p>'}</div>`;
+  const teamChips = ids => `<div class="chips" id="pTeams">${Auth.teams().map(t => `<button type="button" class="chip ${(ids || []).includes(t.id) ? 'on' : ''}" data-t="${t.id}">${esc(t.name)}</button>`).join('') || '<p class="muted">Crée d\'abord une catégorie dans Équipes.</p>'}</div>`;
   const bindChips = r => $$('#pTeams .chip', r).forEach(b => b.onclick = () => b.classList.toggle('on'));
-  const pickedTeams = r => $$('#pTeams .chip.on', r).map(b => b.dataset.t);
+  // Chips only show the categories this dirigeant sees: the other categories of the person are kept as they were
+  const pickedTeams = (r, before = []) => [...before.filter(id => !Auth.teams().some(t => t.id === id)), ...$$('#pTeams .chip.on', r).map(b => b.dataset.t)];
   const opt = (list, cur) => list.map(v => Array.isArray(v) ? `<option value="${esc(v[0])}" ${v[0] === cur ? 'selected' : ''}>${esc(v[1])}</option>` : `<option ${v === cur ? 'selected' : ''}>${esc(v)}</option>`).join('');
 
   /* ---------- player sheet ---------- */
@@ -91,7 +92,7 @@ const People = (() => {
         { label: 'Enregistrer', kind: 'primary', onClick: (c, r) => {
           const v = id => $('#' + id, r).value.trim();
           if (!v('pLast') && !v('pFirst')) { toast('Écris au moins le nom ou le prénom', 'err'); return false; }
-          Object.assign(p, { lastName: v('pLast').toUpperCase(), firstName: v('pFirst'), birth: v('pBirth'), subcat: v('pSub'), number: v('pNum') === '' ? '' : +v('pNum'), pos: v('pPos'), phone: v('pTel'), email: v('pMail'), notes: $('#pNotes', r).value, teamIds: pickedTeams(r),
+          Object.assign(p, { lastName: v('pLast').toUpperCase(), firstName: v('pFirst'), birth: v('pBirth'), subcat: v('pSub'), number: v('pNum') === '' ? '' : +v('pNum'), pos: v('pPos'), phone: v('pTel'), email: v('pMail'), notes: $('#pNotes', r).value, teamIds: pickedTeams(r, p.teamIds || []),
             parents: [0, 1].map(i => ({ name: v(`par${i}n`), rel: v(`par${i}r`), phone: v(`par${i}t`) })).filter(x => x.name || x.phone) });
           Store.upsert('players', p); toast('Enregistré'); opts.onSave && opts.onSave(p);
         } },
@@ -132,7 +133,7 @@ const People = (() => {
           const v = id => $('#' + id, r).value.trim();
           if (!v('sLast') && !v('sFirst')) { toast('Écris au moins le nom ou le prénom', 'err'); return false; }
           Object.assign(p, { lastName: v('sLast').toUpperCase(), firstName: v('sFirst'), role: v('sRole'), phone: v('sTel'), email: v('sMail'), notes: $('#sNotes', r).value });
-          if (Auth.isAdmin() || isNew) p.teamIds = pickedTeams(r);
+          if (Auth.isAdmin() || isNew) p.teamIds = pickedTeams(r, p.teamIds || []);
           const sp = $('#sPlayer', r); if (sp) { if (sp.value) p.playerId = sp.value; else delete p.playerId; }
           Store.upsert('staff', p); toast('Enregistré'); opts.onSave && opts.onSave(p);
         } },
@@ -143,7 +144,7 @@ const People = (() => {
   /* ---------- dropdowns ---------- */
   // Select listing people not yet in the team, grouped by their categories
   function addSelect(kind, teamId, label) {
-    const list = (kind === 'player' ? S().players : S().staff).filter(p => !(p.teamIds || []).includes(teamId)).sort(Store.byName);
+    const list = (kind === 'player' ? S().players : S().staff).filter(p => Auth.seesPerson(p) && !(p.teamIds || []).includes(teamId)).sort(Store.byName);
     const groups = new Map();
     list.forEach(p => { const g = teamNames(p.teamIds) || 'Sans catégorie'; if (!groups.has(g)) groups.set(g, []); groups.get(g).push(p); });
     return `<select class="add-select" data-add="${kind}" aria-label="${esc(label)}"><option value="">${esc(label)}</option>
@@ -199,15 +200,15 @@ const People = (() => {
   function listPage(root, kind) {
     const isP = kind === 'player', ui = S().ui, key = isP ? 'plFilter' : 'stFilter';
     const filt = ui[key] || '', q = (ui[key + 'Q'] || '').toLowerCase();
-    const all = (isP ? S().players : S().staff).slice().sort(Store.byName);
+    const all = (isP ? S().players : S().staff).filter(Auth.seesPerson).sort(Store.byName);
     const list = all.filter(p => (!filt || (filt === '-' ? !(p.teamIds || []).length : (p.teamIds || []).includes(filt))) && (!q || name(p).toLowerCase().includes(q)));
-    root.innerHTML = `<header class="page-head"><div><h1>${isP ? 'Joueurs' : 'Dirigeants'}</h1><p class="sub">${list.length} sur ${all.length} · tout le club</p></div>
+    root.innerHTML = `<header class="page-head"><div><h1>${isP ? 'Joueurs' : 'Dirigeants'}</h1><p class="sub">${list.length} sur ${all.length} · ${Auth.isAdmin() ? 'tout le club' : 'mes catégories'}</p></div>
       <div class="head-actions"><a class="btn" href="#/equipes">${I.back}<span>Équipes</span></a>
       <button class="btn" data-act="paste">${I.paste}<span>Coller une liste</span></button>
       <button class="btn primary" data-act="new">${I.plus}<span>${isP ? 'Nouveau joueur' : 'Nouveau dirigeant'}</span></button></div></header>
       <div class="filters">
         <label class="search">${I.search}<input id="q" type="search" placeholder="Chercher un nom" value="${esc(ui[key + 'Q'] || '')}"></label>
-        <select id="cat" aria-label="Catégorie"><option value="">Toutes les catégories</option>${S().teams.map(t => `<option value="${t.id}" ${t.id === filt ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}<option value="-" ${filt === '-' ? 'selected' : ''}>Sans catégorie</option></select>
+        <select id="cat" aria-label="Catégorie"><option value="">${Auth.isAdmin() ? 'Toutes les catégories' : 'Mes catégories'}</option>${Auth.teams().map(t => `<option value="${t.id}" ${t.id === filt ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}<option value="-" ${filt === '-' ? 'selected' : ''}>Sans catégorie</option></select>
       </div>
       <div class="people big">${list.map(p => isP ? playerRow(p) : staffRow(p)).join('') || '<p class="muted">Personne ici.</p>'}</div>`;
     const again = () => listPage(root, kind);

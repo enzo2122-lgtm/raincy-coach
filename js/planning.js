@@ -277,5 +277,7 @@ const Planning = (() => {
     } catch (e) { el.innerHTML = `<p class="muted">${esc(e.message)}</p>`; }
   }
 
-  return { page, upcoming };
+  // Colour of a category (results page, legend…)
+  const teamColor = teamId => colorOf({ team_id: teamId }) || '#0e1d45';
+  return { page, upcoming, teamColor };
 })();
