@@ -89,6 +89,8 @@ const App = (() => {
     window.addEventListener('hashchange', route);
     route();
     Sync.start();
+    // After the first exchange with the server: categories U6 … Vétérans for the new season
+    Promise.resolve(Sync.run()).catch(() => {}).then(() => { if (People.autoCategories()) route(); });
     Messages.start();
   }
   return { start, route, refreshChrome, checkUpdate };

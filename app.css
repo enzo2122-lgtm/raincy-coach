@@ -103,6 +103,8 @@ h2.section { font-size: 21px; font-weight: 800; margin: 26px 0 10px; }
 .filter, .team-switch { margin-bottom: 16px; }
 .team-switch { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: none; }
 .team-switch .chip { flex: none; }
+/* iPad and computer: every category visible, on several lines if needed; phones keep one line that slides */
+@media (min-width: 761px) { .team-switch { flex-wrap: wrap; overflow: visible; } }
 .fld { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; min-width: 0; }
 .fld > span, .lbl { font-size: 13px; font-weight: 700; color: var(--muted); letter-spacing: .02em; }
 .lbl { display: block; margin: 12px 0 7px; }
