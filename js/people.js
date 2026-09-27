@@ -546,6 +546,51 @@ const People = (() => {
   const pctClass = v => v == null ? '' : v >= 75 ? 'pct-good' : v >= 50 ? 'pct-mid' : 'pct-low';
   const pctBadge = a => a.pct == null ? '' : `<i class="pct ${pctClass(a.pct)}" title="${a.n} séance${a.n > 1 ? 's' : ''} sur ${a.total} cette saison">${a.pct} %</i>`;
 
+  /* ---------- lineup: each spot of a formation gets the player whose positions fit it best ---------- */
+  // A spot of Formations: [label, x (0 = our goal, .5 = halfway), y (0 = our left), gk]
+  function slotOf([, x, y, gk]) {
+    if (gk) return { line: 'GB', ideal: ['GB'] };
+    const line = x < .22 ? 'DEF' : x < .4 ? 'MIL' : 'ATT', side = y < .3 ? 'G' : y > .7 ? 'D' : 'C';
+    const ideal = line === 'DEF' ? (side === 'G' ? ['LG'] : side === 'D' ? ['LD'] : ['DC'])
+      : line === 'MIL' ? (side === 'G' ? ['MG', 'LG', 'AG'] : side === 'D' ? ['MD', 'LD', 'AD'] : x <= .3 ? ['MDC', 'MC'] : x >= .37 ? ['MOC', 'MC', 'SA'] : ['MC', 'MDC', 'MOC'])
+      : (side === 'G' ? ['AG', 'MG'] : side === 'D' ? ['AD', 'MD'] : ['BU', 'SA']);
+    return { line, side, ideal };
+  }
+  const sideOf = c => /D$/.test(c) && c !== 'MOD' ? 'D' : /G$/.test(c) ? 'G' : c === 'DC' || c === 'BU' || c === 'SA' || /^M(DC|C|OC)$/.test(c) ? 'C' : '';
+  function fit(code, slot) {
+    const pt = postOf(code); if (!pt) return 0;
+    if (slot.line === 'GB') return code === 'GB' ? 10 : -99;
+    if (code === 'GB') return -20;
+    const i = slot.ideal.indexOf(code); if (i >= 0) return 10 - i * 2;
+    if (pt[3] === slot.line) return code === pt[3] ? 6 : sideOf(code) === slot.side ? 5 : 4;
+    return 1; // another line: only if nobody better
+  }
+  // players → one player (or undefined) per spot; the main position counts more than the others
+  function assignSlots(players, rows) {
+    const slots = rows.map(slotOf), pairs = [];
+    players.forEach(p => slots.forEach((sl, j) => {
+      const ps = postsOf(p), sc = ps.length ? Math.max(...ps.map((c, i) => fit(c, sl) - (i ? 1 : 0))) : (sl.line === 'GB' ? -99 : 2);
+      if (sc > -50) pairs.push([sc, p, j]);
+    }));
+    pairs.sort((a, b) => b[0] - a[0] || Store.byName(a[1], b[1]));
+    const out = new Array(rows.length), used = new Set();
+    for (const [, p, j] of pairs) if (!out[j] && !used.has(p.id)) { out[j] = p; used.add(p.id); }
+    return { out, bench: players.filter(p => !used.has(p.id)) };
+  }
+
+  /* ---------- fair playing time: players who played much less than the others this season ---------- */
+  function lowPlaytime(teamId) {
+    const t = Store.get('teams', teamId); if (!t) return [];
+    const fam = new Set(S().teams.filter(x => catKey(x.category || x.name) === catKey(t.category || t.name)).map(x => x.id));
+    const from = seasonFrom(), ms = S().matches.filter(m => fam.has(m.teamId) && m.played && !m.exempt && m.date >= from && m.minutes && Object.keys(m.minutes).length);
+    if (ms.length < 3) return []; // not enough matches with playing time yet
+    const own = Store.playersOf(teamId), squad = own.length ? own : Store.rosterOf(teamId);
+    const rows = squad.map(p => ({ p, min: ms.reduce((a, m) => a + (+(m.minutes[p.id]) || 0), 0), conv: ms.filter(m => (m.convoked || []).includes(p.id)).length }));
+    const played = rows.filter(r => r.min > 0); if (!played.length) return [];
+    const avg = played.reduce((a, r) => a + r.min, 0) / played.length;
+    return rows.filter(r => r.min < avg * .5).map(r => Object.assign(r, { avg: Math.round(avg) })).sort((a, b) => a.min - b.min);
+  }
+
   /* ---------- the full player page (#/joueur/id) ---------- */
   function playerPage(root, id) {
     const p = Store.get('players', id);
@@ -589,5 +634,5 @@ const People = (() => {
   }
 
   return { isClubList, importClubList, autoCategories, sortByBirth, sortByBirthDialog, catOf, seasonLabel, seasonFrom, editPlayer, editStaff, teamSections, bindTeamSections, staffPicker, listPage, playerPage, age, fmtBirth, tel, name,
-    attendance, pctBadge, matchLength, playerSeason, POSTS, TYPES, postsOf, postsLabel, lineOf, sortPlayers, byLine, sortBar, PHONE_SHOW, staffPhone };
+    attendance, pctBadge, matchLength, playerSeason, assignSlots, lowPlaytime, POSTS, TYPES, postsOf, postsLabel, lineOf, sortPlayers, byLine, sortBar, PHONE_SHOW, staffPhone };
 })();

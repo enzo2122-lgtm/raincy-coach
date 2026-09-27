@@ -45,7 +45,8 @@ const President = (() => {
       noBirth && `<li><b>${pl(noBirth, 'joueur')} sans date de naissance</b> (catégorie impossible à calculer)</li>`,
     ].filter(Boolean);
     root.innerHTML = `<header class="page-head"><div><h1>Tableau de bord</h1><p class="sub">Le club en un coup d'œil · saison ${esc(People.seasonLabel())}</p></div>
-      <div class="head-actions"><button class="btn" data-act="backup">${I.shield}<span>Sauvegardes</span></button></div></header>
+      <div class="head-actions"><a class="btn" href="#/licences">${I.check}<span>Licences et cotisations</span></a><a class="btn" href="#/encadrement">${I.whistle}<span>Qui encadre ?</span></a>
+        <button class="btn" data-act="excel">${I.download}<span>Excel (présences, temps de jeu)</span></button><button class="btn" data-act="backup">${I.shield}<span>Sauvegardes</span></button></div></header>
       <div class="tiles">
         ${tile(S().players.length, 'Licenciés')}${tile(S().staff.length, 'Dirigeants')}${tile(f.rows.length, 'Équipes actives')}
         ${tile(f.played.length, 'Matchs joués')}${tile(V, 'Gagnés', 'v')}${tile(N, 'Nuls', 'n')}${tile(D, 'Perdus', 'd')}
@@ -68,7 +69,7 @@ const President = (() => {
           <td>${r.played}</td><td>${r.played ? `${r.V}-${r.N}-${r.D}` : '–'}</td>
           <td>${r.last ? `<a href="#/match/${r.last.id}">${esc(fmtDate(r.last.date))} ${r.last.home ? r.last.gf + '–' + r.last.ga : r.last.ga + '–' + r.last.gf}</a>` : '–'}</td></tr>`).join('')}</tbody></table></div>
       <p class="muted small">Présence : moyenne des séances où l'appel a été fait. Encadrants : dirigeants rattachés à la catégorie.</p>`;
-    root.onclick = e => { const b = e.target.closest('button'); if (b && b.dataset.act === 'backup') return backupDialog(); };
+    root.onclick = e => { const b = e.target.closest('button'); if (b && b.dataset.act === 'backup') return backupDialog(); if (b && b.dataset.act === 'excel') return ClubAdmin.csvSeason(); };
     backupCard($('#bkCard', root));
   }
 

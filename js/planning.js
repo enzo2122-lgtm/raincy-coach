@@ -99,7 +99,7 @@ const Planning = (() => {
     const week = ui.planWeek, days = Array.from({ length: 7 }, (_, i) => addDays(week, i)), wk = ui.planView !== 'day';
     if (!days.includes(ui.planDay)) ui.planDay = days[0];
     root.innerHTML = `<header class="page-head"><div><h1>Planning · ${esc(fieldName())}</h1><p class="sub">Grand terrain ou demi-terrain, sans chevauchement</p></div>
-      <div class="head-actions plan-actions">${Auth.isAdmin() ? `<button class="btn" data-p="slots" aria-label="Créneaux disponibles">${I.clock}<span>Créneaux disponibles</span></button>` : ''}
+      <div class="head-actions plan-actions"><a class="btn" href="#/encadrement" aria-label="Qui encadre ?">${I.whistle}<span>Qui encadre ?</span></a>${Auth.isAdmin() ? `<button class="btn" data-p="slots" aria-label="Créneaux disponibles">${I.clock}<span>Créneaux disponibles</span></button>` : ''}
       <button class="btn" data-p="bookHome" id="bookHome" hidden aria-label="Réserver les matchs à domicile">${I.match}<span>Réserver les matchs à domicile</span></button>
       <button class="btn" data-p="recur" aria-label="Chaque semaine">${I.rotate}<span>Chaque semaine</span></button>
       <button class="btn primary" data-p="new">${I.plus}<span>Réserver</span></button></div></header>

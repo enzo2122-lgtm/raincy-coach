@@ -60,6 +60,18 @@ Tu peux toujours envoyer un fichier à la main : **Réglages → Envoyer toutes 
 - **Tableau de bord** (responsables) : chiffres de la saison, détail par catégorie, points à surveiller.
 - **Sauvegardes** : le serveur copie toutes les données chaque lundi à 3 h et garde 8 semaines (Tableau de bord → Sauvegardes). On peut aussi télécharger une copie. **Ces fichiers contiennent des données de mineurs : ne jamais les mettre sur GitHub.**
 
+## Nouveautés de la version 3.10
+
+**À faire une fois par le responsable :** Réglages → Serveur du club → Mettre à jour le serveur (photos des matchs pour les parents).
+
+- Composition selon les postes précis (DC, LD, AG…), remplaçants notés dans le schéma.
+- Relance WhatsApp des parents qui n'ont pas répondu ; temps de jeu à surveiller (Stats et convocation).
+- Séances types du club, et « Dupliquer » vers une autre catégorie.
+- Licences, certificats, cotisations et droit à l'image (Tableau de bord → Licences et cotisations), ⚠️ dans les convocations.
+- Exports Excel : présences et temps de jeu (Stats, Tableau de bord), licences.
+- « Qui encadre ? » : encadrants de la semaine et absences des dirigeants.
+- Page des parents : « Ajouter à mon agenda » et photos du match choisies par le coach (effacées après 90 jours).
+
 ## Mettre à jour l'appli
 
 Remplace les fichiers sur GitHub. Augmente ensuite le même numéro partout :

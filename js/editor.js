@@ -465,10 +465,10 @@ const Editor = (() => {
     const sc = E.sc, { L, W } = Board.dims(sc.field), c = club();
     if (replace) sc.objects.filter(o => o.type === 'player').map(o => o.id).forEach(id => removeThing({ kind: 'obj', id }));
     const roster = team ? Store.rosterOf(team.id) : [];
-    const gks = roster.filter(p => p.pos === 'GB'), field = roster.filter(p => p.pos !== 'GB');
+    const rows = Formations[sc.field.format][home], { out } = People.assignSlots(roster, rows); // each spot gets the player whose positions fit it
     const k = away ? .88 : 1; // with two teams, each one stays in its own half so the strikers don't overlap
-    Formations[sc.field.format][home].forEach(([lab, x, y, gk]) => {
-      const who = gk ? gks.shift() : field.shift();
+    rows.forEach(([lab, x, y, gk], j) => {
+      const who = out[j];
       addObject({ type: 'player', color: gk ? 'jaune' : c.homeBib, gk: !!gk, label: who && who.number ? String(who.number) : lab, name: who ? Store.shortName(who) : '', playerId: who ? who.id : undefined }, [x * k * L, y * W]);
     });
     if (away) Formations[sc.field.format][away].forEach(([lab, x, y, gk]) => addObject({ type: 'player', color: gk ? 'orange' : c.awayBib, gk: !!gk, label: gk ? 'G' : lab }, [(1 - x * k) * L, (1 - y) * W]));

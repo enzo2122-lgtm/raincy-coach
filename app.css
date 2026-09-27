@@ -1010,3 +1010,22 @@ h2.section svg { width: 22px; height: 22px; vertical-align: -4px; margin-right: 
 .posts-more summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
 .post-group { margin: 6px 0; }
 .post-group .chips { margin-top: 4px; }
+.adm-b { min-height: 36px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); font: 700 13.5px var(--round); color: var(--muted); cursor: pointer; white-space: nowrap; }
+.adm-b.good { background: color-mix(in srgb, var(--good) 14%, var(--surface)); color: var(--good); border-color: color-mix(in srgb, var(--good) 35%, var(--line)); }
+.adm-b.mid { background: color-mix(in srgb, var(--draw) 14%, var(--surface)); color: var(--draw); }
+.adm-b.bad { background: color-mix(in srgb, var(--bad) 12%, var(--surface)); color: var(--bad); }
+.adm-paid { width: 80px; min-height: 36px; border: 1px solid var(--line); border-radius: 10px; padding: 0 8px; background: var(--surface); color: var(--ink); font: inherit; }
+.adm-tbl td { vertical-align: middle; }
+.lic-warn { margin-right: 4px; }
+.enc-item { display: flex; align-items: center; gap: 10px; }
+.enc-item .li-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.enc-none { border-color: color-mix(in srgb, var(--bad) 40%, var(--line)); }
+.my-abs { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0 4px; }
+.models-card summary { cursor: pointer; }
+.models-card .list { margin-top: 10px; }
+.model-item { display: flex; align-items: center; gap: 10px; }
+.model-item .li-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.playtime-tip { margin: 6px 0; }
+.pick-photos .thumb-btn.sel { outline: 3px solid var(--accent); outline-offset: 2px; }
+.pick-photos .thumb-btn.on { opacity: .55; }
+@media (max-width: 600px) { .hero-wx { white-space: normal; } }

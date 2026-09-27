@@ -8,7 +8,7 @@ const Views = (() => {
   const pName = Store.fullName;
   const pLabel = p => `${p.number ? p.number + ' · ' : ''}${pName(p)}`;
   // name on a roster chip, with the positions in short (« DC/LD »)
-  const chipLabel = p => `${esc(pLabel(p))}${People.postsLabel(p, true) ? ` <i class="post-tag">${esc(People.postsLabel(p, true))}</i>` : ''}`;
+  const chipLabel = p => { const pb = ClubAdmin.problem(p); return `${pb ? `<span class="lic-warn" title="${esc(pb)}" aria-label="${esc(pb)}">⚠️</span>` : ''}${esc(pLabel(p))}${People.postsLabel(p, true) ? ` <i class="post-tag">${esc(People.postsLabel(p, true))}</i>` : ''}`; };
   // The team's own players (all of its category when nobody is put in the team yet, e.g. « Seniors A »)
   const squad = teamId => { const own = Store.playersOf(teamId); return own.length ? own : Store.rosterOf(teamId); };
   // Chips of a team's players, then « Autres joueurs de la catégorie » (a team A / B can call up any player of its category)
@@ -17,7 +17,8 @@ const Views = (() => {
     const mine = all.filter(p => own.has(p.id)), others = all.filter(p => !own.has(p.id)), t = teamOf(teamId);
     // sorted by position: one row of chips per line (goalkeepers, defenders, midfielders, forwards)
     const block = list => mode === 'post' ? People.byLine(list).map(([lab, ps]) => `<div class="lbl line-lbl">${esc(lab)} (${ps.length})</div><div class="chips roster">${ps.map(chip).join('')}</div>`).join('') : `<div class="chips roster">${People.sortPlayers(list, mode).map(chip).join('')}</div>`;
-    return (all.length > 1 ? People.sortBar(mode, 'rsort') : '') + (mine.length ? block(mine) : '') +
+    const warn = all.filter(p => ClubAdmin.problem(p));
+    return (all.length > 1 ? People.sortBar(mode, 'rsort') : '') + (warn.length ? `<p class="muted small">⚠️ = pas en règle (${warn.length}) : licence en attente ou certificat médical à fournir. Voir avec le responsable.</p>` : '') + (mine.length ? block(mine) : '') +
       (others.length ? `${mine.length ? `<div class="lbl">Autres joueurs de la catégorie ${esc((t && t.category) || '')} (${others.length})</div>` : ''}${block(others)}` : '') +
       (!all.length ? '<p class="muted">Aucun joueur dans cette catégorie : ajoute-les dans Équipes.</p>' : '');
   }
@@ -333,19 +334,38 @@ const Views = (() => {
 
   /* ================= Entraînements ================= */
   function trainings(root) {
-    const now = today(), list = byTeam(S().trainings);
+    const now = today(), list = byTeam(S().trainings).filter(t => !t.model), models = S().trainings.filter(t => t.model).sort((a, b) => String(a.title).localeCompare(String(b.title), 'fr'));
     const up = list.filter(t => t.date >= now).sort((a, b) => a.date.localeCompare(b.date)), past = list.filter(t => t.date < now).sort((a, b) => b.date.localeCompare(a.date));
     const item = t => { const tm = teamOf(t.teamId), dur = t.exercises.reduce((a, e) => a + (+e.duration || 0), 0);
       return `<a class="list-item" href="#/entrainement/${t.id}"><div class="date-box"><b>${new Date(t.date + 'T12:00').getDate()}</b><span>${esc(fmtDate(t.date, { month: 'short' }))}</span></div>
         <div class="li-main"><b>${esc(t.title || 'Entraînement')}</b><span class="muted">${tm ? esc(tm.name) + ' · ' : ''}${t.exercises.length} exercice${t.exercises.length > 1 ? 's' : ''} · ${dur} min</span></div>${I.next}</a>`; };
     root.innerHTML = `${header('Entraînements', 'Séances, exercices et présences', `<button class="btn" data-act="import">${I.upload}<span>Recevoir</span></button><button class="btn" data-act="ics">${I.calendar}<span>Agenda (.ics)</span></button><a class="btn" href="#/bibliotheque">${I.pdf}<span>PDF (AssistCoachAI…)</span></a><button class="btn primary" data-act="new">${I.plus}<span>Nouvel entraînement</span></button>`)}
       ${teamSwitch()}
+      <details class="card models-card" ${S().ui.modelsOpen ? 'open' : ''}><summary><b>📚 Séances types du club (${models.length})</b><span class="muted small"> · des séances prêtes, pour toutes les catégories</span></summary>
+        ${models.length ? `<div class="list">${models.map(t => `<div class="list-item model-item"><a class="li-main" href="#/entrainement/${t.id}"><b>${esc(t.title || 'Séance type')}</b><span class="muted">${t.exercises.length} exercice${t.exercises.length > 1 ? 's' : ''} · ${t.exercises.reduce((a, e) => a + (+e.duration || 0), 0)} min${t.goal ? ' · ' + esc(String(t.goal).slice(0, 60)) : ''}</span></a><button class="btn primary" data-use="${t.id}">${I.plus}<span>Utiliser</span></button></div>`).join('')}</div>`
+          : '<p class="muted small">Pas encore de séance type. Dans une séance réussie, touche « Enregistrer comme séance type » (en bas) : elle servira à tous les coachs.</p>'}</details>
       <h2 class="section">À venir</h2>${up.length ? `<div class="list">${up.map(item).join('')}</div>` : '<p class="muted">Aucun entraînement prévu.</p>'}
       <h2 class="section">Passés</h2>${past.length ? `<div class="list">${past.map(item).join('')}</div>` : '<p class="muted">Rien pour l\'instant.</p>'}`;
     bindTeamSwitch(root, () => trainings(root));
     $('[data-act="new"]', root).onclick = newTraining;
     $('[data-act="import"]', root).onclick = importFile;
     $('[data-act="ics"]', root).onclick = () => Importer.trainingsFromICS(() => trainings(root));
+    $('.models-card', root).ontoggle = e => { S().ui.modelsOpen = e.target.open; Store.persistNow(); };
+    $$('[data-use]', root).forEach(b => b.onclick = () => copyTraining(Store.get('trainings', b.dataset.use), 'use'));
+  }
+  // A session copied for a category and a date (from a template session, or « Dupliquer » towards another category)
+  function copyTraining(tr, how) {
+    const t = how === 'use' ? activeTeam() : tr.teamId;
+    modal({ title: how === 'use' ? `Utiliser « ${tr.title} »` : 'Dupliquer la séance', body: `
+      <label class="fld"><span>Pour la catégorie</span><select id="cpTeam"><option value="">Aucune</option>${Auth.teams().map(x => `<option value="${x.id}" ${x.id === t ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label>
+      <div class="row2"><label class="fld"><span>Date</span><input type="date" id="cpDate" value="${today()}"></label><label class="fld"><span>Heure</span><input type="time" id="cpTime" value="${esc(tr.time || '18:00')}"></label></div>
+      <p class="muted small">Les exercices, consignes et schémas sont copiés. Les présences et les notes repartent à zéro.</p>`,
+      actions: [{ label: 'Annuler' }, { label: 'Créer la séance', kind: 'primary', onClick: (c, r) => {
+        const n = JSON.parse(JSON.stringify(tr)); n.id = Store.uid(); delete n.model; delete n.ratings; delete n.docIds;
+        Object.assign(n, { teamId: $('#cpTeam', r).value || null, date: $('#cpDate', r).value || today(), time: $('#cpTime', r).value, presents: [], staffIds: [] });
+        if (how !== 'use') n.title = tr.title + (n.teamId === tr.teamId ? ' (copie)' : '');
+        n.exercises.forEach(x => x.id = Store.uid()); Store.upsert('trainings', n); toast('Séance créée'); location.hash = '#/entrainement/' + n.id;
+      } }] });
   }
   function newTraining() {
     const t = activeTeam();
@@ -363,6 +383,7 @@ const Views = (() => {
     const save = () => Store.upsert('trainings', tr);
     const render = () => {
       const tm = teamOf(tr.teamId), total = tr.exercises.reduce((a, e) => a + (+e.duration || 0), 0);
+      if (tr.model) return renderModel(total);
       root.innerHTML = `${header(`<input class="h1-input" id="trTitle" value="${esc(tr.title)}" aria-label="Thème">`, `${total} min au total`,
         `<button class="btn" data-act="share">${I.share}<span>Envoyer</span></button><button class="btn primary" data-act="pdf">${I.pdf}<span>PDF</span></button>`)}
         <section class="card">
@@ -384,9 +405,19 @@ const Views = (() => {
         <div id="rateBox"></div>
         <div id="docsBox">${Library.docsPlaceholder()}</div>
         ${Media.placeholder('training:' + tr.id, 'Photos et vidéos de la séance')}
-        <div class="danger-zone"><button class="btn" data-act="dup">${I.copy}<span>Dupliquer la séance</span></button><button class="btn danger" data-act="delete">${I.trash}<span>Supprimer</span></button></div>`;
+        <div class="danger-zone"><button class="btn" data-act="dup">${I.copy}<span>Dupliquer (autre date ou catégorie)</span></button><button class="btn" data-act="model">📚<span>Enregistrer comme séance type</span></button><button class="btn danger" data-act="delete">${I.trash}<span>Supprimer</span></button></div>`;
       const box = $('#rateBox', root); if (box) Ratings.bind(box, tr, save);
       rateTr(); Media.mount(root); Library.mountDocs($('#docsBox', root), tr, save);
+    };
+    const renderModel = total => {
+      root.innerHTML = `${header(`<input class="h1-input" id="trTitle" value="${esc(tr.title)}" aria-label="Thème">`, `📚 Séance type du club · ${total} min`,
+        `<a class="btn" href="#/entrainements">${I.back}<span>Séances</span></a><button class="btn" data-act="pdf">${I.pdf}<span>PDF</span></button><button class="btn primary" data-act="use">${I.plus}<span>Utiliser pour une séance</span></button>`)}
+        <p class="tip">Une séance type sert de modèle à tous les coachs du club : « Utiliser » la copie pour une catégorie et une date. Ce que tu changes ici change le modèle.</p>
+        <section class="card"><label class="fld"><span>Objectif de la séance</span><textarea id="trGoal" rows="2">${esc(tr.goal || '')}</textarea></label></section>
+        <h2 class="section">Exercices</h2>
+        <div class="ex-list">${tr.exercises.map((e, i) => exerciseCard(e, i, tr.exercises.length)).join('') || '<p class="muted">Ajoute ton premier exercice.</p>'}</div>
+        <button class="btn primary" data-act="addEx">${I.plus}<span>Ajouter un exercice</span></button>
+        <div class="danger-zone"><button class="btn danger" data-act="delete">${I.trash}<span>Supprimer la séance type</span></button></div>`;
     };
     const presChip = (p, teamId) => `<span>${chipLabel(p)}</span>${People.pctBadge(People.attendance(p, teamId))}`;
     const rateTr = () => { const box = $('#rateBox', root); if (box) box.innerHTML = Ratings.section(tr, Store.rosterOf(tr.teamId || '').filter(p => (tr.presents || []).includes(p.id)), 'training'); };
@@ -440,8 +471,15 @@ const Views = (() => {
         case 'addEx': tr.exercises.push({ id: Store.uid(), title: '', duration: 15, org: '', consignes: '', materiel: '', schemaId: null }); save(); render(); { const l = $$('.ex-title', root).pop(); if (l && UI.finePointer()) l.focus(); } return; // no keyboard popping up on phones (the page jumped)
         case 'pdf': return runExport('Création du PDF…', () => Exporter.pdfTraining(tr, teamOf(tr.teamId), S().club, { homeBib: S().club.homeBib }));
         case 'share': return runExport('Préparation du fichier…', async () => Exporter.json(await Library.withBackgrounds(Store.exportTraining(tr)), tr.title || 'entrainement'));
-        case 'dup': { const c = JSON.parse(JSON.stringify(tr)); c.id = Store.uid(); c.title += ' (copie)'; c.date = today(); c.presents = []; c.exercises.forEach(x => x.id = Store.uid()); Store.upsert('trainings', c); location.hash = '#/entrainement/' + c.id; return; }
-        case 'delete': if (await confirmBox(`Supprimer l'entraînement « ${tr.title} » ? Les schémas restent dans la liste des schémas.`)) { Store.remove('trainings', tr.id); Media.removeRef('training:' + tr.id); location.hash = '#/entrainements'; } return;
+        case 'dup': return copyTraining(tr, 'dup');
+        case 'use': return copyTraining(tr, 'use');
+        case 'model': {
+          const n = JSON.parse(JSON.stringify(tr)); n.id = Store.uid(); n.model = true;
+          Object.assign(n, { date: '', teamId: null, presents: [], staffIds: [], by: (Auth.current() || {}).id || null }); delete n.ratings; delete n.docIds;
+          n.exercises.forEach(x => x.id = Store.uid()); Store.upsert('trainings', n); S().ui.modelsOpen = true;
+          toast('Séance type enregistrée : tous les coachs la trouvent dans Séances'); return;
+        }
+        case 'delete': if (await confirmBox(`Supprimer ${tr.model ? 'la séance type' : 'l\'entraînement'} « ${tr.title} » ? Les schémas restent dans la liste des schémas.`)) { Store.remove('trainings', tr.id); Media.removeRef('training:' + tr.id); location.hash = '#/entrainements'; } return;
       }
     };
   }
@@ -561,6 +599,7 @@ const Views = (() => {
         </section>
         <div class="row-head"><h2 class="section">Convoqués (${conv.length})</h2>${conv.length ? `<button class="btn primary" data-act="convoc">${I.share}<span>Envoyer la convocation</span></button>` : ''}</div>
         ${t ? rosterChips(t.id, p => `<button class="chip ${(m.convoked || []).includes(p.id) ? 'on' : ''}" data-conv="${p.id}">${chipLabel(p)}</button>`) : '<p class="muted">Choisis une équipe.</p>'}
+        ${!m.played && t ? (() => { const low = People.lowPlaytime(t.id); return low.length ? `<p class="tip playtime-tip">⏱️ Peu de temps de jeu cette saison : ${low.slice(0, 8).map(x => `<b>${esc(Store.shortName(x.p))}</b> (${x.min}')`).join(', ')}${low.length > 8 ? '…' : ''} · moyenne de l'équipe ${low[0].avg}'.</p>` : ''; })() : ''}
         <div id="answersBox"></div>
         ${!m.home && !m.exempt ? '<div id="carpoolBox"></div>' : ''}
         <h2 class="section">Encadrants</h2><div class="staff-pick">${People.staffPicker(m.teamId, m.staffIds)}</div>
@@ -583,6 +622,7 @@ const Views = (() => {
         <div id="rateBox"></div>
         <div id="docsBox">${Library.docsPlaceholder()}</div>
         ${Media.placeholder('match:' + m.id, 'Photos et vidéos du match')}
+        ${Cloud.ready() ? '<div id="parentPhotos"></div>' : ''}
         <div class="danger-zone"><button class="btn danger" data-act="delete">${I.trash}<span>Supprimer le match</span></button></div>`;
       Parents.mountMatch(root, m, conv);
       const box = $('#rateBox', root); box.innerHTML = Ratings.section(m, conv, 'match'); Ratings.bind(box, m, save);
@@ -652,19 +692,19 @@ const Views = (() => {
     const fmt = Formations[t.format] ? t.format : '11', forms = Object.keys(Formations[fmt]); // a team without a known format plays at 11
     const nConv = Store.rosterOf(t.id).filter(p => (m.convoked || []).includes(p.id)).length;
     modal({ title: 'Composition', body: `<label class="fld"><span>Système</span><select id="lf">${forms.map(f => `<option>${esc(f)}</option>`).join('')}</select></label>
-      ${nConv ? `<p class="tip">Les ${nConv} convoqués sont placés automatiquement : gardien dans le but, puis défenseurs, milieux et attaquants. Tu pourras les déplacer, et mettre les autres avec « Mettre un joueur sur le terrain ».</p>`
+      ${nConv ? `<p class="tip">Les ${nConv} convoqués sont placés selon leur poste (le DC dans l'axe, le LD à droite, l'AG à gauche…). Les autres sont notés comme remplaçants. Tu pourras tout déplacer.</p>`
         : '<p class="tip">⚠️ Aucun joueur convoqué pour ce match : les postes seront placés sans prénoms. Pour avoir les prénoms, coche d\'abord les convoqués (liste « Convoqués » du match), puis refais la composition.</p>'}`,
       actions: [{ label: 'Annuler' }, { label: 'Créer', kind: 'primary', onClick: (c, r) => {
         const sc = blankSchema(`Compo contre ${m.opponent}`, { format: fmt, view: 'full' }, t.id);
         const { L, W } = Board.dims(sc.field), players = Store.rosterOf(t.id).filter(p => (m.convoked || []).includes(p.id));
-        const gks = players.filter(p => p.pos === 'GB'), field = players.filter(p => p.pos !== 'GB');
-        const order = { DEF: 0, MIL: 1, ATT: 2 }, rk = p => p.pos in order ? order[p.pos] : 3; field.sort((a, b) => rk(a) - rk(b));
-        Formations[fmt][$('#lf', r).value].forEach(([lab, x, y, gk]) => {
-          const who = gk ? gks.shift() : field.shift(), id = Store.uid();
+        const rows = Formations[fmt][$('#lf', r).value], { out, bench } = People.assignSlots(players, rows);
+        rows.forEach(([lab, x, y, gk], j) => {
+          const who = out[j], id = Store.uid();
           sc.objects.push({ id, type: 'player', color: gk ? 'jaune' : S().club.homeBib, gk: !!gk, label: who && who.number ? String(who.number) : lab, name: who ? Store.shortName(who) : '', playerId: who ? who.id : undefined });
           sc.steps[0].pos[id] = [Math.min(x * 1.9, .94) * L, y * W]; // spread our half over the whole pitch
         });
         sc.overlays.names = true;
+        if (bench.length) sc.notes = 'Remplaçants : ' + bench.map(p => Store.shortName(p) + (People.postsLabel(p, true) ? ' (' + People.postsLabel(p, true) + ')' : '')).join(', ');
         Store.upsert('schemas', sc); m.lineupId = sc.id; Store.upsert('matches', m);
         location.hash = '#/schema/' + sc.id;
       } }] });
@@ -691,7 +731,7 @@ const Views = (() => {
       return { p, post: People.postsLabel(p, true), played, g, a: as, pr, min, rate:trs.length ? Math.round(pr / trs.length * 100) : null, nm: Ratings.average(p.id, 'match') || 0, nt: Ratings.average(p.id, 'training') || 0 };
     }).filter(r => ownIds.has(r.p.id) || !ownIds.size || r.played || r.pr).sort((a, b) => sortKey === 'post' ? People.sortPlayers([a.p, b.p], 'post')[0] === a.p ? -1 : 1 : sortKey === 'name' ? Store.byName(a.p, b.p) : sortKey === 'num' ? (+a.p.number || 99) - (+b.p.number || 99) : (b[sortKey] || 0) - (a[sortKey] || 0));
     const th = (k, l) => `<th><button class="th ${sortKey === k ? 'on' : ''}" data-sort="${k}">${l}</button></th>`;
-    root.innerHTML = `${header('Statistiques', esc(t.name))}
+    root.innerHTML = `${header('Statistiques', esc(t.name), `<button class="btn" data-act="excel">${I.download}<span>Excel</span></button>`)}
       ${teamSwitch()}
       <div class="tiles">
         <div class="tile"><b>${ms.length}</b><span>Matchs</span></div>
@@ -702,6 +742,7 @@ const Views = (() => {
         <div class="tile"><b>${bc}</b><span>Buts encaissés</span></div>
         <div class="tile"><b>${V * 3 + N}</b><span>Points</span></div>
       </div>
+      ${(() => { const low = People.lowPlaytime(t.id); return low.length ? `<section class="card playtime-card"><h2>⏱️ Temps de jeu à surveiller</h2><p class="muted small">Joueurs qui ont joué moins de la moitié de la moyenne de l'équipe (${low[0].avg} min) sur les matchs où le temps de jeu est noté.</p><ul class="alerts">${low.map(x => `<li><a href="#/joueur/${x.p.id}"><b>${esc(pName(x.p))}</b></a> : ${x.min} min${x.conv ? ` · ${x.conv} convocation${x.conv > 1 ? 's' : ''}` : ' · jamais convoqué'}</li>`).join('')}</ul></section>` : ''; })()}
       <h2 class="section">Joueurs</h2>
       <div class="table-wrap"><table class="tbl">
         <thead><tr>${th('num', 'N°')}${th('name', 'Joueur')}${th('post', 'Poste')}${th('played', 'Matchs')}${th('min', 'Minutes')}${th('g', 'Buts')}${th('a', 'Passes déc.')}${th('pr', 'Entraînements')}${th('nm', 'Note matchs')}${th('nt', 'Note entr.')}</tr></thead>
@@ -712,6 +753,7 @@ const Views = (() => {
         <tbody>${ms.map(m => `<tr><td>${esc(fmtDate(m.date))}</td><td><a href="#/match/${m.id}">${matchTitle(m)}</a></td><td class="num">${scoreTxt(m)}</td><td>${resPill(m)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">Pas encore de match joué.</p>'}`;
     bindTeamSwitch(root, () => stats(root));
     $$('[data-sort]', root).forEach(b => b.onclick = () => { S().ui.statSort = b.dataset.sort; Store.save(); stats(root); });
+    $('[data-act="excel"]', root).onclick = () => ClubAdmin.csvSeason([t.id]);
   }
 
   /* ================= Réglages ================= */

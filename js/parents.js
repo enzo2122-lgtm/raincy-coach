@@ -71,7 +71,21 @@ const Parents = (() => {
       <p class="ans-sum"><span class="ans-yes">✓ ${yes.length} présent${yes.length > 1 ? 's' : ''}</span> · <span class="ans-no">✗ ${no.length} absent${no.length > 1 ? 's' : ''}</span> · <span>? ${conv.length - yes.length - no.length} sans réponse</span></p>
       <div class="chips ans-list">${conv.map(p => { const r = rows[p.id];
         return `<button class="chip ans-chip ${r ? 'ans-' + r.status : ''}" data-ans="${p.id}" ${isOpen(m) ? '' : 'disabled'} title="${r ? (r.by_coach ? 'Noté par un coach' : 'Réponse du parent') : 'Pas de réponse'}">${mark(p)}<span>${esc(Store.shortName(p))}</span>${r && r.seats && r.status === 'oui' && !m.home ? ` <i class="muted">🚗 ${r.seats}</i>` : ''}${r && r.note ? ` <i class="muted">« ${esc(r.note)} »</i>` : ''}</button>`; }).join('')}</div>
+      ${isOpen(m) && conv.length - yes.length - no.length > 0 ? `<button class="btn soft" data-remind>${I.chat}<span>Relancer les ${conv.length - yes.length - no.length} sans réponse</span></button>` : ''}
       <p class="muted small">${isOpen(m) ? 'Un parent a répondu par téléphone ? Touche le prénom : présent → absent → pas de réponse.' : 'Match passé : les réponses sont fermées.'}</p>`}</section>`;
+  }
+
+  // A ready WhatsApp message for the parents who haven't answered yet
+  async function remind(m, conv) {
+    const rows = (cache[m.id] || {}).rows || {}, missing = conv.filter(p => !rows[p.id]);
+    if (!missing.length) return toast('Tout le monde a répondu 👍');
+    let url = ''; try { url = await linkOf(m.teamId); } catch (e) {}
+    const t = Store.get('teams', m.teamId);
+    const text = [`⚽ *${S().club.name}${t ? ' · ' + t.name : ''}* – match ${m.home ? 'contre' : 'chez'} ${m.opponent || '?'}, ${fmtDate(m.date, { weekday: 'long', day: 'numeric', month: 'long' })}`, '',
+      `Nous attendons encore la réponse pour : ${missing.map(short).join(', ').replace(/\.?$/, '.')}`, url ? `Merci de répondre présent ou absent ici : ${url}` : 'Merci de répondre présent ou absent au coach.'].join('\n');
+    modal({ title: `Relancer (${missing.length})`, noFocus: true, body: `<p class="muted small">Message prêt pour le groupe WhatsApp des parents.</p><textarea id="rmTxt" rows="8">${esc(text)}</textarea>`,
+      actions: [{ label: 'Copier', icon: I.copy, onClick: (c, r) => { navigator.clipboard.writeText($('#rmTxt', r).value).then(() => toast('Message copié')).catch(() => toast('Sélectionne le texte et copie-le')); return false; } },
+        { label: 'WhatsApp', kind: 'primary', icon: I.share, onClick: (c, r) => { window.open('https://wa.me/?text=' + encodeURIComponent($('#rmTxt', r).value), '_blank'); return false; } }] });
   }
 
   /* ---------- car sharing (away matches) ---------- */
@@ -148,15 +162,64 @@ const Parents = (() => {
       } }] });
   }
 
+  /* ---------- photos of the match for the parents' page ---------- */
+  const phCache = {}; // photo id → data URL (miniature)
+  async function drawPhotos(box, m) {
+    let list;
+    try { list = await Cloud.photos(m.id) || []; }
+    catch (e) { box.innerHTML = e.code === 'MISE_A_JOUR' ? '' : `<p class="muted small">${esc(e.message)}</p>`; return; }
+    if (!box.isConnected) return;
+    const noImg = (m.convoked || []).map(id => Store.get('players', id)).filter(p => p && ClubAdmin.noImage(p));
+    box.innerHTML = `<section class="card"><div class="row-head"><h2>${I.image}Photos pour les parents (${list.length})</h2><button class="btn" data-phadd>${I.plus}<span>Choisir des photos</span></button></div>
+      <p class="muted small">Ces photos apparaissent sur la page des parents de la catégorie. Elles sont effacées du serveur au bout de 90 jours.</p>
+      ${noImg.length ? `<p class="tip">📵 Droit à l'image refusé : <b>${noImg.map(p => esc(Store.shortName(p))).join(', ')}</b>. Ne partage pas de photo où on les reconnaît.</p>` : ''}
+      <div class="gallery">${list.map(x => `<button class="thumb-btn" data-phdel="${x.id}" aria-label="Retirer cette photo">${phCache[x.id] ? `<img alt="" src="${phCache[x.id]}">` : `<span class="no-thumb">${I.image}</span>`}<span class="play-badge">${I.x}</span></button>`).join('') || '<p class="muted">Aucune photo partagée.</p>'}</div></section>`;
+    list.filter(x => !phCache[x.id]).forEach(async x => { try { phCache[x.id] = await Cloud.photoGet(x.id); const b = box.querySelector(`[data-phdel="${x.id}"]`); if (b && phCache[x.id]) b.firstElementChild.outerHTML = `<img alt="" src="${phCache[x.id]}">`; } catch (e) {} });
+    box.onclick = async e => {
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.phdel) { if (await UI.confirmBox('Retirer cette photo de la page des parents ?', 'Retirer')) { try { await Cloud.photoDel(b.dataset.phdel); drawPhotos(box, m); } catch (err) { toast(err.message, 'err'); } } return; }
+      if (b.hasAttribute('data-phadd')) return pickPhotos(box, m, list);
+    };
+  }
+  async function pickPhotos(box, m, shared) {
+    const mine = (await Media.list('match:' + m.id)).filter(x => x.kind === 'image'), done = new Set(shared.map(x => x.src));
+    if (!mine.length) return toast('Ajoute d\'abord des photos dans « Photos et vidéos du match » (plus haut)', 'err');
+    const close = modal({ title: 'Photos pour les parents', noFocus: true,
+      body: `<p class="muted small">Touche les photos à montrer aux parents, puis « Partager ».</p><div class="gallery pick-photos">${mine.map(x => `<button class="thumb-btn ${done.has(x.id) ? 'on' : ''}" data-ph="${x.id}" ${done.has(x.id) ? 'disabled' : ''}><img alt="" src="${x.thumb}">${done.has(x.id) ? '<span class="play-badge">✓</span>' : ''}</button>`).join('')}</div>
+        <label class="switch"><input type="checkbox" id="phOk"><span>Les enfants reconnaissables ont l'accord de leurs parents (droit à l'image)</span></label>`,
+      onOpen: r => r.querySelectorAll('[data-ph]').forEach(b => b.onclick = () => b.classList.toggle('sel')),
+      actions: [{ label: 'Annuler' }, { label: 'Partager', kind: 'primary', icon: I.share, onClick: (c, r) => {
+        const ids = [...r.querySelectorAll('[data-ph].sel')].map(b => b.dataset.ph);
+        if (!ids.length) { toast('Touche au moins une photo', 'err'); return false; }
+        if (!r.querySelector('#phOk').checked) { toast('Coche la case sur le droit à l\'image', 'err'); return false; }
+        (async () => {
+          const bz = UI.busy('Envoi des photos…'); let n = 0;
+          try {
+            for (const id of ids) {
+              const rec = await Media.get(id); if (!rec || !rec.blob) continue;
+              const img = await Media.loadImage(URL.createObjectURL(rec.blob));
+              let q = .72, data = Media.drawScaled(img, img.naturalWidth, img.naturalHeight, 1280).toDataURL('image/jpeg', q);
+              while (data.length > 400000 && q > .35) { q -= .12; data = Media.drawScaled(img, img.naturalWidth, img.naturalHeight, 1024).toDataURL('image/jpeg', q); }
+              await Cloud.photoAdd(m.id, id, data); n++;
+            }
+            toast(`${n} photo${n > 1 ? 's' : ''} partagée${n > 1 ? 's' : ''} avec les parents`);
+          } catch (e) { toast(needUpdate(e), 'err'); } finally { bz.done(); close(); drawPhotos(box, m); }
+        })();
+        return false;
+      } }] });
+  }
+
   /* ---------- the match page ---------- */
   function mountMatch(root, m, conv) {
-    const ab = $('#answersBox', root), cb = $('#carpoolBox', root);
+    const ab = $('#answersBox', root), cb = $('#carpoolBox', root), pb = $('#parentPhotos', root);
     if (cb) drawCarpool(cb, m, conv);
+    if (pb) drawPhotos(pb, m);
     if (!ab) return;
     drawAnswers(ab, m, conv);
     ab.onclick = async e => {
       const b = e.target.closest('button'); if (!b) return;
       if (b.dataset.parents) return shareDialog(b.dataset.parents);
+      if (b.hasAttribute('data-remind')) return remind(m, conv);
       if (b.dataset.ans) {
         const c = cache[m.id] = cache[m.id] || { at: 0, rows: {} }, cur = c.rows[b.dataset.ans], next = !cur ? 'oui' : cur.status === 'oui' ? 'non' : '';
         try {

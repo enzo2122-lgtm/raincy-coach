@@ -481,6 +481,8 @@ const Auth = (() => {
       <button class="btn soft" data-auth="mottoIdea">🎲<span>Une idée</span></button>
       <div class="row2" style="margin-top:12px"><label class="fld"><span>Mon téléphone (facultatif)</span><input id="myPhone" type="tel" inputmode="tel" autocomplete="tel" value="${esc(user.phone || '')}" placeholder="06 12 34 56 78"></label>
       <label class="fld"><span>Qui voit mon numéro ?</span><select id="myPhoneShow">${People.PHONE_SHOW.map(([v, l]) => `<option value="${v}" ${(user.phoneShow || 'club') === v ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label></div>
+      <div class="my-abs"><b>Mes absences</b> ${(user.absences || []).filter(a => (a.to || a.from) >= UI.today()).map(a => `<span class="chip">${esc(UI.fmtDate(a.from, { day: 'numeric', month: 'short' }))}${a.to && a.to !== a.from ? ' → ' + esc(UI.fmtDate(a.to, { day: 'numeric', month: 'short' })) : ''}</span>`).join(' ') || '<span class="muted small">aucune prévue</span>'}
+        <button class="btn soft" data-auth="absence">${I.plus}<span>Déclarer une absence</span></button> <a class="btn soft" href="#/encadrement">${I.whistle}<span>Qui encadre ?</span></a></div>
       <p class="muted small">Laisse vide pour ne pas donner ton numéro. Les responsables du club le voient toujours. « Les parents » : il s'affiche sur la page des parents de tes catégories, pour qu'ils puissent te joindre.</p>
       <p class="muted small">${sess() ? 'Ton compte est sur le serveur du club : connecte-toi sur n\'importe quel appareil avec ton nom, ton prénom et ton mot de passe.' : 'Ton compte est seulement sur cet appareil.'}</p>
       <div class="chips"><button class="btn" data-auth="pw">${I.edit}<span>Changer mon mot de passe</span></button>
@@ -516,6 +518,7 @@ const Auth = (() => {
     if (b.dataset.auth === 'mottoIdea') { const inp = document.getElementById('myMotto'); if (inp) { inp.value = UI.mottoIdea(inp.value); saveMotto(inp.value); } return; }
     if (b.dataset.auth === 'logout') { try { sessionStorage.removeItem(PREVIEW); } catch (e) {} return logout(); }
     if (b.dataset.auth === 'preview') return previewDialog();
+    if (b.dataset.auth === 'absence') return ClubAdmin.absenceDialog(user.id, () => { user = Store.get('staff', user.id) || user; rerender && rerender(); });
     if (b.dataset.auth === 'stopPreview') return stopPreview();
     if (b.dataset.auth === 'pw') return modal({ title: 'Changer mon mot de passe', body: `<label class="fld"><span>Mot de passe actuel</span><input id="old" type="password" autocomplete="current-password"></label>${pwFields('Nouveau mot de passe')}`,
       actions: [{ label: 'Annuler' }, { label: 'Changer', kind: 'primary', onClick: (c, r) => {

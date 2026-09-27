@@ -235,7 +235,7 @@ const Library = (() => {
 
   /* ---------- attach to a training or a match ---------- */
   function attach(rec) {
-    const trs = S().trainings.filter(x => Auth.sees(x.teamId)).sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 40);
+    const trs = S().trainings.filter(x => !x.model && Auth.sees(x.teamId)).sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 40);
     const ms = S().matches.filter(x => Auth.sees(x.teamId)).sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 40);
     modal({ title: 'Joindre à…', body: `<label class="fld"><span>Choisis un entraînement ou un match</span><select id="attTo"><option value="">Choisir…</option>
       <optgroup label="Entraînements">${trs.map(t => `<option value="trainings:${t.id}">${esc(UI.fmtDate(t.date))} · ${esc(t.title || 'Entraînement')}</option>`).join('')}</optgroup>

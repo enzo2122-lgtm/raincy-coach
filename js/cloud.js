@@ -31,6 +31,7 @@ const Cloud = (() => {
     HORAIRE: 'L\'heure de fin doit être après l\'heure de début.',
     LIEN_PARENTS: 'Ce lien n\'est plus valable : demande le nouveau lien au coach.',
     MATCH_PASSE: 'Ce match est passé : les réponses sont fermées.',
+    PHOTOS_MAX: '12 photos au plus par match pour les parents.',
   };
   function nice(msg) {
     const k = Object.keys(ERRORS).find(x => String(msg).includes(x));
@@ -282,6 +283,11 @@ create table if not exists answers (match_id text not null, player_id text not n
   seats int not null default 0, note text, by_coach boolean not null default false, updated_at timestamptz not null default now(), primary key (match_id, player_id));
 alter table parent_links enable row level security;
 alter table answers enable row level security;
+-- (3.10) Photos d'un match que le coach partage avec les parents : réduites (moins de 400 Ko), 12 par match au plus, effacées après 90 jours
+create table if not exists match_photos (id uuid primary key default gen_random_uuid(), created_at timestamptz not null default now(),
+  match_id text not null, src text, by_name text, data text not null check (length(data) < 600000));
+create index if not exists match_photos_match on match_photos (match_id);
+alter table match_photos enable row level security;
 -- Un coach récupère le lien de sa catégorie (toujours le même ; « nouveau lien » annule l'ancien)
 create or replace function club_parent_link(k text, p_team_key text, p_team_ids text[], p_team_name text, p_new boolean) returns jsonb language plpgsql security definer set search_path = public as $$
 declare t text;
@@ -316,6 +322,7 @@ begin
         'exempt', coalesce((i.data->>'exempt')::boolean, false), 'played', coalesce((i.data->>'played')::boolean, false), 'gf', i.data->'gf', 'ga', i.data->'ga',
         'team', (select t.data->>'name' from items t where t.col = 'teams' and t.id = i.data->>'teamId'),
         'open', not coalesce((i.data->>'played')::boolean, false) and i.data->>'date' >= today,
+        'photos', (select coalesce(jsonb_agg(ph.id order by ph.created_at), '[]'::jsonb) from match_photos ph where ph.match_id = i.id),
         'players', case when not coalesce((i.data->>'played')::boolean, false) and i.data->>'date' >= today then (
           select coalesce(jsonb_agg(jsonb_build_object('id', p.id, 'name', raincy_short(p.data), 'answer', a.status, 'seats', coalesce(a.seats, 0)) order by p.data->>'firstName'), '[]'::jsonb)
           from items p left join answers a on a.match_id = i.id and a.player_id = p.id
@@ -357,6 +364,29 @@ begin if not club_ok(k) then raise exception 'CLE_CLUB'; end if;
   return to_jsonb(true); end $$;
 grant execute on function club_parent_link(text, text, text[], text, boolean), parent_view(text), parent_answer(text, text, text, text, int, text),
   club_answers(text, text[]), club_set_answer(text, text, text, text) to anon, authenticated;
+create or replace function club_photo_add(k text, p_match text, p_src text, p_data text, p_by text) returns jsonb language plpgsql security definer set search_path = public as $$
+declare r uuid;
+begin if not club_ok(k) then raise exception 'CLE_CLUB'; end if;
+  if coalesce(p_data, '') not like 'data:image/jpeg;base64,%' or length(p_data) >= 600000 then raise exception 'DONNEES'; end if;
+  delete from match_photos where created_at < now() - interval '90 days';
+  if exists (select 1 from match_photos where match_id = p_match and src = p_src) then return to_jsonb((select id from match_photos where match_id = p_match and src = p_src limit 1)); end if;
+  if (select count(*) from match_photos where match_id = p_match) >= 12 then raise exception 'PHOTOS_MAX'; end if;
+  insert into match_photos (match_id, src, by_name, data) values (p_match, p_src, left(p_by, 80), p_data) returning id into r;
+  return to_jsonb(r); end $$;
+create or replace function club_photos(k text, p_match text) returns jsonb language plpgsql security definer set search_path = public as $$
+begin if not club_ok(k) then raise exception 'CLE_CLUB'; end if;
+  return (select coalesce(jsonb_agg(jsonb_build_object('id', id, 'src', src, 'by', by_name, 'at', created_at) order by created_at), '[]'::jsonb) from match_photos where match_id = p_match); end $$;
+create or replace function club_photo_get(k text, p_id uuid) returns text language plpgsql security definer set search_path = public as $$
+begin if not club_ok(k) then raise exception 'CLE_CLUB'; end if; return (select data from match_photos where id = p_id); end $$;
+create or replace function club_photo_del(k text, p_id uuid) returns boolean language plpgsql security definer set search_path = public as $$
+begin if not club_ok(k) then raise exception 'CLE_CLUB'; end if; delete from match_photos where id = p_id; return found; end $$;
+-- un parent ne voit que les photos des matchs de sa catégorie
+create or replace function parent_photo(p_token text, p_id uuid) returns text language plpgsql stable security definer set search_path = public as $$
+declare l parent_links;
+begin select * into l from parent_links where coalesce(p_token, '') <> '' and token = p_token;
+  if l.token is null then raise exception 'LIEN_PARENTS'; end if;
+  return (select ph.data from match_photos ph join items i on i.col = 'matches' and i.id = ph.match_id and not i.deleted where ph.id = p_id and i.data->>'teamId' = any(l.team_ids)); end $$;
+grant execute on function club_photo_add(text, text, text, text, text), club_photos(text, text), club_photo_get(text, uuid), club_photo_del(text, uuid), parent_photo(text, uuid) to anon, authenticated;
 
 -- Sauvegardes du club (version 3.8) : une copie de toutes les données chaque lundi à 3 h, les 8 dernières sont gardées.
 -- Elles restent sur le serveur (privé) ; seul un responsable peut les lister et les télécharger.
@@ -433,6 +463,10 @@ notify pgrst, 'reload schema';
     // parents (3.8)
     parentLink: (teamKey, teamIds, teamName, renew) => rpc('club_parent_link', { p_team_key: teamKey, p_team_ids: teamIds, p_team_name: teamName, p_new: !!renew }),
     answers: matchIds => rpc('club_answers', { p_matches: matchIds }),
+    photoAdd: (matchId, src, data) => rpc('club_photo_add', { p_match: matchId, p_src: src, p_data: data, p_by: Auth.current() ? Store.fullName(Auth.current()) : '' }),
+    photos: matchId => rpc('club_photos', { p_match: matchId }),
+    photoGet: id => rpc('club_photo_get', { p_id: id }),
+    photoDel: id => rpc('club_photo_del', { p_id: id }),
     setAnswer: (matchId, playerId, status) => rpc('club_set_answer', { p_match: matchId, p_player: playerId, p_status: status || '' }),
     // backups (3.8)
     backups: () => rpc('club_backups', { admin_k: adminKey() }),
