@@ -422,7 +422,7 @@ const Views = (() => {
       if (b.hasAttribute('data-draw')) return newSchema({ name: ex.title, teamId: tr.teamId, onCreate: s => { ex.schemaId = s.id; save(); } });
       if (b.hasAttribute('data-pick')) return pickSchema(s => { ex.schemaId = s.id; save(); render(); });
       switch (b.dataset.act) {
-        case 'addEx': tr.exercises.push({ id: Store.uid(), title: '', duration: 15, org: '', consignes: '', materiel: '', schemaId: null }); save(); render(); { const l = $$('.ex-title', root).pop(); if (l) l.focus(); } return;
+        case 'addEx': tr.exercises.push({ id: Store.uid(), title: '', duration: 15, org: '', consignes: '', materiel: '', schemaId: null }); save(); render(); { const l = $$('.ex-title', root).pop(); if (l && UI.finePointer()) l.focus(); } return; // no keyboard popping up on phones (the page jumped)
         case 'pdf': return runExport('Création du PDF…', () => Exporter.pdfTraining(tr, teamOf(tr.teamId), S().club, { homeBib: S().club.homeBib }));
         case 'share': return runExport('Préparation du fichier…', async () => Exporter.json(await Library.withBackgrounds(Store.exportTraining(tr)), tr.title || 'entrainement'));
         case 'dup': { const c = JSON.parse(JSON.stringify(tr)); c.id = Store.uid(); c.title += ' (copie)'; c.date = today(); c.presents = []; c.exercises.forEach(x => x.id = Store.uid()); Store.upsert('trainings', c); location.hash = '#/entrainement/' + c.id; return; }

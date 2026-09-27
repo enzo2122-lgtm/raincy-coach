@@ -314,7 +314,7 @@ a.hero-chip:hover { background: rgba(201,164,92,.22); }
 .roster .chip { min-height: 46px; }
 .pick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
 .pick { display: flex; flex-direction: column; gap: 5px; padding: 6px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); cursor: pointer; text-align: left; font-size: 14px; font-weight: 600; }
-.pick img { width: 100%; border-radius: 8px; }
+.pick img { width: 100%; aspect-ratio: 480/312; object-fit: cover; border-radius: 8px; }
 
 /* ---------- match ---------- */
 .lineup { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; }

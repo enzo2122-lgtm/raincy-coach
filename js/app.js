@@ -73,12 +73,27 @@ const App = (() => {
       bibliotheque: r => Library.page(r), joueurs: r => People.listPage(r, 'player'), dirigeants: r => People.listPage(r, 'staff'),
       joueur: (r, x) => People.playerPage(r, x), president: r => President.page(r) }[name] || Views.home;
     fn(root, id);
-    if (keep) { root.scrollTop = st; window.scrollTo(0, sy); } else { root.scrollTop = 0; window.scrollTo(0, 0); }
+    if (keep) { root.scrollTop = st; window.scrollTo(0, sy); } else { releaseHeight(); root.scrollTop = 0; window.scrollTo(0, 0); }
     Help.button();
   }
+  /* A page redrawn in place (a tap, or new data from the server) is first shorter than before: photos, documents, weather,
+     parents' answers or pitch slots arrive a moment later. On a phone scrolled down, the page then jumped up.
+     So while a page is redrawn, it keeps at least its previous height for a moment. */
+  let holdT = null;
+  function releaseHeight() { clearTimeout(holdT); view().style.minHeight = ''; }
+  (function holdHeight() {
+    const el = view(), d = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
+    Object.defineProperty(el, 'innerHTML', { configurable: true, get() { return d.get.call(this); }, set(v) {
+      if (!document.body.classList.contains('editing') && this.childElementCount) {
+        this.style.minHeight = Math.max(parseFloat(this.style.minHeight) || 0, this.offsetHeight) + 'px';
+        clearTimeout(holdT); holdT = setTimeout(releaseHeight, 1800);
+      } else releaseHeight();
+      d.set.call(this, v);
+    } });
+  })();
   /* Updates: version.json on the site says which build is online. When it is newer than this one,
      the app empties its offline copy and reloads (an iPhone can keep an old copy open for days). */
-  const BUILD = 45, UPD = 'raincy-update-tried';
+  const BUILD = 46, UPD = 'raincy-update-tried';
   async function onlineBuild() {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
     return (await r.json()).build || 0;

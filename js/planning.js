@@ -111,12 +111,19 @@ const Planning = (() => {
       <label class="day-select ${wk ? 'wk' : ''}"><span>Jour</span><select data-daysel aria-label="Jour">${days.map(d => `<option value="${d}" ${d === ui.planDay ? 'selected' : ''}>${DAYS[parse(d).getDay()]} ${parse(d).getDate()} ${parse(d).toLocaleDateString('fr-FR', { month: 'long' })}</option>`).join('')}</select></label>
       <div class="day-chips ${wk ? 'wk' : ''}">${days.map(d => `<button class="chip ${d === ui.planDay ? 'on' : ''}" data-day="${d}">${DAYS[parse(d).getDay()].slice(0, 3)} ${parse(d).getDate()}</button>`).join('')}</div>
       <div class="plan-wrap ${wk ? 'wk' : ''}" id="planGrid"><p class="muted">Chargement du planning…</p></div>`;
-    const onChip = $('.day-chips .chip.on', root); if (onChip) onChip.scrollIntoView({ inline: 'center', block: 'nearest' });
+    // the chosen day in the middle of its row, sideways only (scrollIntoView also moved the whole page up: a jump on phones)
+    const chipRow = $('.day-chips', root), onChip = $('.day-chips .chip.on', root);
+    if (chipRow && onChip) chipRow.scrollLeft = onChip.offsetLeft - (chipRow.clientWidth - onChip.offsetWidth) / 2;
+    // Same week already loaded (page redrawn after a sync): the grid is shown at once, then refreshed, so the page keeps its height
+    const gen = ++pageGen, cached = loaded === days[0];
+    if (cached) { renderGrid(root, days); bind(root); }
     try { await load(days[0], days[6]); }
-    catch (e) { $('#planGrid', root).innerHTML = `<div class="empty"><p>${esc(e.message)}</p><button class="btn" data-p="retry">Réessayer</button></div>`; bind(root); return; }
+    catch (e) { if (gen !== pageGen || cached || !$('#planGrid', root)) return; $('#planGrid', root).innerHTML = `<div class="empty"><p>${esc(e.message)}</p><button class="btn" data-p="retry">Réessayer</button></div>`; bind(root); return; }
+    if (gen !== pageGen || !$('#planGrid', root)) return; // another page (or week) was opened meanwhile
     renderGrid(root, days);
     bind(root);
   }
+  let pageGen = 0;
   function renderGrid(root, days) {
     const [lo, hi] = range(days), ui = S().ui, mine = new Set(myTeams());
     const ms = matchesOf(days), away = d => ms.filter(m => m.date === d && (!m.home || matchStart(m) === null));
