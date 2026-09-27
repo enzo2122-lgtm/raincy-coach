@@ -717,7 +717,8 @@ body:not(.editing) main#view { padding-bottom: 96px; }
 .mt-away .ic { font-style: normal; }
 .mt-away.notime { box-shadow: inset 0 0 0 2px rgba(255,255,255,.7); }
 .plan-wrap.wk .mt-away { font-size: 10px; padding: 0 1px; }
-@media (max-width: 760px) { .plan-wrap.wk .mt-away .ic { display: none; } }
+/* phone week: the 🚌 stays (away match), just smaller, glued to the category */
+.plan-wrap.wk .mt-away .ic { font-size: 9px; margin-right: 1px; }
 .mt-away.mine { outline: 2px solid var(--gold); outline-offset: -2px; }
 .bk.mt-home { background-color: color-mix(in srgb, var(--mc) 22%, var(--surface)) !important; color: var(--ink) !important; border: 2px dashed var(--mc); box-shadow: none; }
 .bk.mt-home b { color: var(--mc); }
