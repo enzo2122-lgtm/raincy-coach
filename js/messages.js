@@ -141,5 +141,5 @@ const Messages = (() => {
   }
   function leave() { fast = false; onNew = null; start(); }
 
-  return { page, start, badge, leave };
+  return { page, start, badge, leave, coachName };
 })();

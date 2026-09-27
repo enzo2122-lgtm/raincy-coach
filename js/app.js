@@ -23,9 +23,13 @@ const App = (() => {
     document.documentElement.style.setProperty('--accent', UI.accentFor(c.homeBib));
     document.getElementById('clubName').textContent = c.name;
     const u = Auth.current(), ru = document.getElementById('railUser');
-    ru.innerHTML = u ? `<span class="avatar" aria-hidden="true">${UI.esc(((u.firstName || '')[0] || '') + ((u.lastName || '')[0] || ''))}</span><span class="ru-name">${UI.esc(u.firstName || u.lastName)}</span><button class="ru-out" id="logoutBtn">Sortir</button>` : '';
+    // The connected coach: his initials with his favourite club's crest, and « Coach Prénom » (opens Mon compte)
+    const coach = u ? Messages.coachName(u) : '', first = coach.replace(/^Coach /, '');
+    ru.innerHTML = u ? `<a class="ru-me" href="#/reglages" title="Mon compte">
+        <span class="avatar" aria-hidden="true">${UI.esc((first[0] || '') + ((u.lastName || '')[0] || ''))}${u.club ? `<span class="avatar-club">${Clubs.crest(u.club, 18, () => refreshChrome())}</span>` : ''}</span>
+        <span class="ru-name">${UI.esc(coach)}</span></a><button class="ru-out" id="logoutBtn">Sortir</button>` : '';
     const lo = document.getElementById('logoutBtn'); if (lo) lo.onclick = () => Auth.logout();
-    document.title = c.name + ' · Coach';
+    document.title = (u ? coach + ' · ' : '') + c.name;
   }
   function renderNav(active) {
     const idx = NAV.findIndex(n => n[0] === active);

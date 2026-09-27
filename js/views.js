@@ -55,6 +55,31 @@ const Views = (() => {
     return `<section class="card setup-card"><h2>${I.check}Mise en route du club</h2><ol class="setup-steps">${steps.map(([ok, t, how, href]) =>
       `<li class="${ok ? 'ok' : ''}"><a href="${href}"><span class="tick">${ok ? '✓' : ''}</span><span><b>${esc(t)}</b><span class="muted small">${esc(how)}</span></span></a></li>`).join('')}</ol></section>`;
   }
+  // Top of the home page, made for the coach who is connected: his name, his sentence, his categories, his day
+  function hero(now) {
+    const me = Auth.current(), club = esc(S().club.name);
+    if (!me) return `<header class="hero"><img src="icons/crest.png" alt="" class="hero-crest"><div><p class="eyebrow">Espace éducateurs</p><h1>${club}</h1></div></header>`;
+    const h = new Date().getHours(), hello = h < 5 ? 'Bonsoir' : h < 12 ? 'Bonjour' : h < 18 ? 'Bon après-midi' : 'Bonsoir';
+    const coach = Messages.coachName(me), pv = Auth.preview();
+    const myIds = pv ? pv.teamIds : (me.teamIds || []), mine = myIds.map(id => Store.get('teams', id)).filter(Boolean);
+    const isMine = tid => !mine.length || myIds.includes(tid);
+    const todayItems = [
+      ...S().matches.filter(m => m.date === now && !m.exempt && isMine(m.teamId)).map(m => `⚽ Match${teamOf(m.teamId) ? ' ' + esc(teamOf(m.teamId).name) : ''} ${m.home ? 'contre' : 'chez'} ${esc(m.opponent || '?')}${m.time ? ' à ' + esc(m.time) : ''}`),
+      ...S().trainings.filter(t => t.date === now && isMine(t.teamId)).map(t => `🏃 Séance${teamOf(t.teamId) ? ' ' + esc(teamOf(t.teamId).name) : ''}${t.time ? ' à ' + esc(t.time) : ''}`),
+    ].slice(0, 2);
+    const redraw = () => { if (/^#?\/?$/.test(location.hash.replace('#/', '#'))) App.route(true); };
+    return `<header class="hero hero-me">
+      <img src="icons/crest.png" alt="" class="hero-crest">
+      <div class="hero-main">
+        <p class="eyebrow">Espace de ${esc(coach)}<span class="eb-club"> · ${club}</span></p>
+        <h1>${hello} ${esc(coach)} 👋</h1>
+        <p class="hero-line">${me.motto ? `« ${esc(me.motto)} »` : (Auth.isAdmin() ? 'Tout le club est entre tes mains aujourd\'hui.' : 'Prêt pour la prochaine séance ?')}</p>
+        <div class="hero-chips">${mine.length ? mine.map(t => `<a class="hero-chip" href="#/equipe/${t.id}">${esc(t.name)}</a>`).join('') : Auth.isAdmin() ? '<span class="hero-chip">Responsable du club</span>' : ''}</div>
+        ${todayItems.length ? `<p class="hero-today"><b>Aujourd'hui</b> · ${todayItems.join(' · ')}</p>` : ''}
+      </div>
+      ${me.club ? `<a class="hero-heart" href="#/reglages" title="Mon club de cœur : ${esc(Clubs.name(me.club))}">${Clubs.crest(me.club, 44, redraw)}<span>Mon club de cœur</span></a>` : ''}
+    </header>`;
+  }
   function home(root) {
     const now = today();
     const matches = byTeam(S().matches), trainings = byTeam(S().trainings);
@@ -62,7 +87,7 @@ const Views = (() => {
     const nextTr = trainings.filter(t => t.date >= now).sort((a, b) => a.date.localeCompare(b.date))[0];
     const last = matches.filter(m => m.played).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 4);
     const schemas = S().schemas.filter(s => Auth.sees(s.teamId)).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).slice(0, 4);
-    root.innerHTML = `<header class="hero"><img src="icons/crest.png" alt="" class="hero-crest"><div><p class="eyebrow">Espace éducateurs</p><h1>${esc(S().club.name)}</h1><p class="sub">Tableau tactique, effectifs, entraînements et matchs</p></div></header>
+    root.innerHTML = `${hero(now)}
       ${serverBanner()}
       ${teamSwitch()}
       ${setupCard()}
