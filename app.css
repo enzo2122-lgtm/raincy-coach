@@ -711,6 +711,17 @@ body:not(.editing) main#view { padding-bottom: 96px; }
 .plan-legend > span { white-space: nowrap; }
 .plan-legend .lg-match, .bk.k-match { background-image: repeating-linear-gradient(135deg, rgba(255,255,255,.28) 0 5px, transparent 5px 10px); }
 .plan-legend .lg-match { background-color: var(--muted); }
+/* matches in the planning: away badges on top of the day, home matches still to book dotted */
+.plan-away { display: flex; flex-direction: column; gap: 2px; padding: 1px 1px 3px; }
+.mt-away { display: block; width: 100%; height: 22px; border: 0; border-radius: 6px; color: #fff; font: 700 11.5px/22px var(--round); text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 4px; cursor: pointer; }
+.mt-away .ic { font-style: normal; }
+.mt-away.notime { box-shadow: inset 0 0 0 2px rgba(255,255,255,.7); }
+.plan-wrap.wk .mt-away { font-size: 10px; padding: 0 1px; }
+@media (max-width: 760px) { .plan-wrap.wk .mt-away .ic { display: none; } }
+.mt-away.mine { outline: 2px solid var(--gold); outline-offset: -2px; }
+.bk.mt-home { background-color: color-mix(in srgb, var(--mc) 22%, var(--surface)) !important; color: var(--ink) !important; border: 2px dashed var(--mc); box-shadow: none; }
+.bk.mt-home b { color: var(--mc); }
+.plan-legend .lg-todo { border: 2px dashed var(--muted); background: transparent; }
 button.plan-head { display: block; width: 100%; border: 0; background: none; font: inherit; padding: 0; cursor: pointer; }
 .k-entrainement { background: var(--navy); color: #fff; }
 .k-match { background: var(--bordeaux); color: #fff; }

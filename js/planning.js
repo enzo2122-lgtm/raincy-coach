@@ -33,6 +33,36 @@ const Planning = (() => {
   const catLabel = k => ({ SENIORS: 'Seniors', VETERANS: 'Vétérans', VETERANSLOISIRS: 'Vétérans loisirs', ECOLEDEFOOT: 'École de foot' })[k] || k;
   // Short name for the narrow week columns on a phone
   const shortOf = b => { const k = catOfBooking(b); return k ? ({ SENIORS: 'SEN', VETERANS: 'VÉT', VETERANSLOISIRS: 'LOIS', ECOLEDEFOOT: 'EDF' })[k] || k : String(b.team_name || KINDS[b.kind][0]).slice(0, 4); };
+  /* ---------- the club's matches in the planning ----------
+     Home: a block on the pitch (dotted until the pitch is booked for it). Away: a 🚌 badge on top of the day. */
+  const matchLen = m => { const f = (Store.get('teams', m.teamId) || {}).format; return f === '5' ? 60 : f === '8' ? 90 : 120; };
+  const matchStart = m => /^\d{1,2}:\d{2}/.test(m.time || '') ? toMin(m.time) : null;
+  const teamNameOf = m => (Store.get('teams', m.teamId) || {}).name || 'Match';
+  const matchesOf = days => S().matches.filter(m => m.date && days.includes(m.date) && !m.exempt);
+  // the booking that reserves the pitch for this home match (same day, same category, a match, overlapping)
+  function bookingFor(m) {
+    const s = matchStart(m); if (s === null) return null;
+    return bookings.find(b => b.date === m.date && b.kind === 'match' && (b.team_id === m.teamId || ckey(b.team_name) === ckey(teamNameOf(m))) && b.start_min < s + matchLen(m) && s < b.end_min) || null;
+  }
+  const matchFor = b => b.kind === 'match' ? S().matches.find(m => m.date === b.date && m.home && (m.teamId === b.team_id || ckey(teamNameOf(m)) === ckey(b.team_name)) && matchStart(m) !== null && matchStart(m) < b.end_min && b.start_min < matchStart(m) + matchLen(m)) : null;
+  const unbookedHome = days => matchesOf(days).filter(m => m.home && !m.played && matchStart(m) !== null && !bookingFor(m) && m.date >= iso(new Date()));
+  function bookMatch(m) {
+    const u = Auth.current(), s = matchStart(m), t = Store.get('teams', m.teamId);
+    return Cloud.book({ date: m.date, start_min: s, end_min: Math.min(24 * 60 - 15, s + matchLen(m)), field: 'T1', part: 'full', kind: 'match', team_id: m.teamId || null, team_name: t ? t.name : '', author_id: u.id, author_name: Store.fullName(u), note: 'contre ' + (m.opponent || '?') });
+  }
+  function matchDetail(m, done) {
+    const s = matchStart(m), bk = m.home ? bookingFor(m) : null, acts = [];
+    if (Auth.sees(m.teamId)) acts.push({ label: 'Ouvrir la fiche match', icon: I.match, onClick: () => { location.hash = '#/match/' + m.id; } });
+    if (m.home && !bk && s !== null && !m.played) acts.push({ label: 'Réserver le terrain', kind: 'primary', icon: I.calendar, onClick: () => { (async () => { const b = UI.busy('Réservation…'); try { await bookMatch(m); toast('Terrain réservé pour le match'); done && done(); } catch (e) { toast(e.message, 'err'); } finally { b.done(); } })(); } });
+    acts.push({ label: 'Fermer' });
+    modal({ title: `Match · ${teamNameOf(m)}`, noFocus: true, body: `
+      <dl class="bk-detail"><div><dt>Match</dt><dd>${m.home ? `<b>${esc(S().club.name)}</b> contre ${esc(m.opponent || '?')}` : `${esc(m.opponent || '?')} contre <b>${esc(S().club.name)}</b>`}</dd></div>
+      <div><dt>Quand</dt><dd>${esc(parse(m.date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }))}${s !== null ? ', ' + hm(s) : ' · heure à préciser'}</dd></div>
+      <div><dt>Où</dt><dd>${m.home ? esc(fieldName()) + ' (domicile)' : '🚌 À l\'extérieur' + (m.place ? ' · ' + esc(m.place) : '')}</dd></div>
+      ${m.competition ? `<div><dt>Compétition</dt><dd>${esc(m.competition)}</dd></div>` : ''}
+      ${m.home ? `<div><dt>Terrain</dt><dd>${bk ? `✓ Réservé ${hm(bk.start_min)}–${hm(bk.end_min)}` : s === null ? 'Heure du match à préciser avant de réserver' : '<b>Pas encore réservé</b> : le terrain peut être pris par une autre équipe'}</dd></div>` : ''}</dl>`, actions: acts });
+  }
+
   const canDelete = b => Auth.isAdmin() || (Auth.current() && b.author_id === Auth.current().id);
 
   function notReady(root) {
@@ -49,13 +79,13 @@ const Planning = (() => {
   function range(days) {
     // Phone, week view: only the hours that are used this week (at least 4 hours), so the whole week fits on the screen
     if (days && phone() && S().ui.planView !== 'day') {
-      const used = [...bookings.filter(b => days.includes(b.date)).map(b => [b.start_min, b.end_min]), ...(slots.length ? slots.map(s => [s.start_min, s.end_min]) : [[17 * 60, 21 * 60]])];
+      const used = [...bookings.filter(b => days.includes(b.date)).map(b => [b.start_min, b.end_min]), ...matchesOf(days).filter(m => m.home && matchStart(m) !== null).map(m => [matchStart(m), matchStart(m) + matchLen(m)]), ...(slots.length ? slots.map(s => [s.start_min, s.end_min]) : [[17 * 60, 21 * 60]])];
       let lo = Math.floor(Math.min(...used.map(x => x[0])) / 60) * 60, hi = Math.ceil(Math.max(...used.map(x => x[1])) / 60) * 60;
       if (hi - lo < 240) hi = lo + 240;
       return [lo, hi];
     }
     const all = slots.length ? slots : [{ start_min: 17 * 60, end_min: 22 * 60 }];
-    const bs = bookings.map(b => [b.start_min, b.end_min]);
+    const bs = [...bookings.map(b => [b.start_min, b.end_min]), ...matchesOf(days || []).filter(m => m.home && matchStart(m) !== null).map(m => [matchStart(m), matchStart(m) + matchLen(m)])];
     const lo = Math.min(...all.map(s => s.start_min), ...bs.map(x => x[0]), 9 * 60), hi = Math.max(...all.map(s => s.end_min), ...bs.map(x => x[1]), 20 * 60);
     return [Math.floor(lo / 60) * 60, Math.ceil(hi / 60) * 60];
   }
@@ -70,6 +100,7 @@ const Planning = (() => {
     if (!days.includes(ui.planDay)) ui.planDay = days[0];
     root.innerHTML = `<header class="page-head"><div><h1>Planning · ${esc(fieldName())}</h1><p class="sub">Grand terrain ou demi-terrain, sans chevauchement</p></div>
       <div class="head-actions plan-actions">${Auth.isAdmin() ? `<button class="btn" data-p="slots" aria-label="Créneaux disponibles">${I.clock}<span>Créneaux disponibles</span></button>` : ''}
+      <button class="btn" data-p="bookHome" id="bookHome" hidden aria-label="Réserver les matchs à domicile">${I.match}<span>Réserver les matchs à domicile</span></button>
       <button class="btn" data-p="recur" aria-label="Chaque semaine">${I.rotate}<span>Chaque semaine</span></button>
       <button class="btn primary" data-p="new">${I.plus}<span>Réserver</span></button></div></header>
       <div class="plan-nav"><button class="icon-btn" data-p="prev" aria-label="Semaine précédente">${I.back}</button>
@@ -88,32 +119,40 @@ const Planning = (() => {
   }
   function renderGrid(root, days) {
     const [lo, hi] = range(days), ui = S().ui, mine = new Set(myTeams());
+    const ms = matchesOf(days), away = d => ms.filter(m => m.date === d && (!m.home || matchStart(m) === null));
+    const awayRows = Math.max(0, ...days.map(d => away(d).length));
     if (phone() && ui.planView !== 'day') {
-      const top = $('#planGrid', root).getBoundingClientRect().top + window.scrollY, room = innerHeight - top - 175; // day names + bottom tab bar
+      const top = $('#planGrid', root).getBoundingClientRect().top + window.scrollY, room = innerHeight - top - 175 - awayRows * 24; // day names, away matches, bottom tab bar
       px = Math.max(0.35, Math.min(PX, room / (hi - lo)));
     } else px = PX;
     const H = (hi - lo) * px;
     const hours = []; for (let m = lo; m <= hi; m += 60) hours.push(m);
     const col = d => {
       const free = slotsOf(d), list = bookings.filter(b => b.date === d);
+      const ghosts = ms.filter(m => m.date === d && m.home && matchStart(m) !== null && !bookingFor(m));
       return `<div class="plan-day ${d === ui.planDay ? 'sel' : ''} ${d === iso(new Date()) ? 'today' : ''}" data-col="${d}">
         <button class="plan-head" data-openday="${d}">${DAYS[parse(d).getDay()].slice(0, 3)} <b>${parse(d).getDate()}</b></button>
+        ${awayRows ? `<div class="plan-away" style="height:${awayRows * 24}px">${away(d).map(m => `<button class="mt-away ${m.home ? 'notime' : ''} ${mine.has(m.teamId) ? 'mine' : ''}" data-mt="${m.id}" style="background:${colorOf({ team_id: m.teamId }) || '#0e1d45'}" title="${esc(teamNameOf(m))} ${m.home ? 'à domicile, heure à préciser' : 'à l\'extérieur'} contre ${esc(m.opponent || '?')}"><i class="ic">${m.home ? '⏱' : '🚌'} </i><b>${esc(shortOf({ team_id: m.teamId, team_name: teamNameOf(m), kind: 'match' }))}</b></button>`).join('')}</div>` : ''}
         <div class="plan-body" style="height:${H}px" data-date="${d}">
           ${hours.map(m => `<i class="hline" style="top:${(m - lo) * px}px"></i>`).join('')}
           ${(slots.length ? free : [{ start_min: lo, end_min: hi }]).map(s => `<div class="avail" style="top:${(s.start_min - lo) * px}px;height:${(s.end_min - s.start_min) * px}px"></div>`).join('')}
           ${list.map(b => { const c = colorOf(b); return `<button class="bk k-${esc(b.kind)} part-${b.part} ${mine.has(b.team_id) ? 'mine' : ''}" data-bk="${b.id}" style="top:${(b.start_min - lo) * px}px;height:${Math.max(phone() ? 16 : 22, (b.end_min - b.start_min) * px - 2)}px${c ? ';background-color:' + c + ';color:#fff' : ''}">
             <b>${esc(b.team_name || KINDS[b.kind][0])}</b><i class="bk-s">${esc(b.part === 'full' ? shortOf(b) : shortOf(b).replace(/^U(?=\d)/, '').replace(/^SEN$/, 'S').replace(/^VÉT$/, 'V'))}</i><span>${b.kind === 'match' ? 'Match · ' : ''}${hm(b.start_min)}–${hm(b.end_min)}${b.part === 'full' ? '' : ' · ½ ' + b.part}</span></button>`; }).join('')}
+          ${ghosts.map(m => { const s = matchStart(m), c = colorOf({ team_id: m.teamId }) || '#0e1d45'; return `<button class="bk k-match mt-home part-full ${mine.has(m.teamId) ? 'mine' : ''}" data-mt="${m.id}" style="top:${(s - lo) * px}px;height:${Math.max(phone() ? 16 : 22, matchLen(m) * px - 2)}px;--mc:${c}" title="Match à domicile, terrain pas encore réservé">
+            <b>${esc(teamNameOf(m))}</b><i class="bk-s">${esc(shortOf({ team_id: m.teamId, team_name: teamNameOf(m), kind: 'match' }))}</i><span>Match · ${hm(s)} · à réserver</span></button>`; }).join('')}
         </div></div>`;
     };
     $('#planGrid', root).innerHTML = `<div class="plan-grid">
-      <div class="plan-hours"><div class="plan-head">&nbsp;</div><div style="position:relative;height:${H}px">${hours.map(m => `<span style="top:${(m - lo) * px}px">${hm(m)}</span>`).join('')}</div></div>
+      <div class="plan-hours"><div class="plan-head">&nbsp;</div>${awayRows ? `<div class="plan-away" style="height:${awayRows * 24}px"></div>` : ''}<div style="position:relative;height:${H}px">${hours.map(m => `<span style="top:${(m - lo) * px}px">${hm(m)}</span>`).join('')}</div></div>
       ${days.map(col).join('')}</div>
       ${!slots.length ? '<p class="tip">Aucun créneau défini : le terrain est réservable à toute heure. Le responsable peut fixer les créneaux disponibles.</p>' : ''}`;
     $('#planGrid', root).dataset.lo = lo;
     // Legend: the categories on the pitch this week, then how a match looks
-    const cats = [...new Set(bookings.filter(b => days.includes(b.date)).map(catOfBooking).filter(Boolean))].sort((a, b) => Object.keys(CAT_COLORS).indexOf(a) - Object.keys(CAT_COLORS).indexOf(b));
+    const cats = [...new Set([...bookings.filter(b => days.includes(b.date)), ...ms.map(m => ({ team_id: m.teamId, team_name: teamNameOf(m) }))].map(catOfBooking).filter(Boolean))].sort((a, b) => Object.keys(CAT_COLORS).indexOf(a) - Object.keys(CAT_COLORS).indexOf(b));
     const lg = $('#planLegend', root);
-    if (lg) lg.innerHTML = cats.map(k => `<span><i style="background:${CAT_COLORS[k]}"></i>${esc(catLabel(k))}</span>`).join('') + `<span><i class="lg-match"></i>Match (rayé)</span>`;
+    if (lg) lg.innerHTML = cats.map(k => `<span><i style="background:${CAT_COLORS[k]}"></i>${esc(catLabel(k))}</span>`).join('') + `<span><i class="lg-match"></i>Match (rayé)</span>` + (ms.some(m => m.home && !bookingFor(m)) ? `<span><i class="lg-todo"></i>Match à réserver</span>` : '') + (ms.some(m => !m.home) ? `<span>🚌 Extérieur</span>` : '');
+    const todo = unbookedHome(days).filter(m => Auth.sees(m.teamId)), bb = $('#bookHome', root);
+    if (bb) { bb.hidden = !todo.length; bb.querySelector('span').textContent = `Réserver ${todo.length > 1 ? 'les ' + todo.length + ' matchs' : 'le match'} à domicile`; }
   }
   function bind(root) {
     const ds = $('[data-daysel]', root);
@@ -130,9 +169,20 @@ const Planning = (() => {
         if (p === 'new') return bookForm({ date: ui.planDay, start: 18 * 60 }, () => page(root));
         if (p === 'slots') return slotsForm(() => page(root));
         if (p === 'recur') return recurForm(() => page(root));
+        if (p === 'bookHome') {
+          const days = Array.from({ length: 7 }, (_, i) => addDays(ui.planWeek, i)), todo = unbookedHome(days).filter(m => Auth.sees(m.teamId));
+          if (!todo.length) return;
+          const bz = UI.busy('Réservation des matchs…'), ko = [];
+          for (const m of todo) { try { await bookMatch(m); } catch (e) { ko.push(`${teamNameOf(m)} (${parse(m.date).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric' })}) : ${e.message.replace(/ Choisis.*$/, '')}`); } }
+          bz.done();
+          if (ko.length) UI.modal({ title: 'Matchs non réservés', body: `<ul class="help-list">${ko.map(x => `<li>${esc(x)}</li>`).join('')}</ul>`, actions: [{ label: 'OK', kind: 'primary' }] });
+          else toast(`${todo.length} match${todo.length > 1 ? 's' : ''} réservé${todo.length > 1 ? 's' : ''} sur le terrain`);
+          return page(root);
+        }
       }
       if (b && b.dataset.day) { ui.planDay = b.dataset.day; $$('.day-chips .chip', root).forEach(x => x.classList.toggle('on', x === b)); $$('.plan-day', root).forEach(c => c.classList.toggle('sel', c.dataset.col === ui.planDay)); return; }
       if (b && b.dataset.openday) { ui.planDay = b.dataset.openday; ui.planView = 'day'; Store.save(); return page(root); }
+      if (b && b.dataset.mt) return matchDetail(Store.get('matches', b.dataset.mt), () => page(root));
       if (b && b.dataset.bk) return detail(bookings.find(x => x.id === b.dataset.bk), () => page(root));
       const body = e.target.closest('.plan-body');
       if (body) {
@@ -203,7 +253,9 @@ const Planning = (() => {
     if (b.series && canDelete(b)) acts.push({ label: 'Libérer toute la série', kind: 'danger', icon: I.rotate, onClick: () => { setTimeout(async () => { if (!(await confirmBox('Libérer ce créneau et tous les suivants de la série (jusqu\'au 30 juin) ?', 'Libérer la série'))) return; try { const n = await Cloud.unbookSeries(b.series); toast(`${n} créneau${n > 1 ? 'x' : ''} libéré${n > 1 ? 's' : ''}`); done && done(); } catch (e) { toast(e.message, 'err'); } }, 60); } });
     if (canDelete(b)) acts.push({ label: 'Libérer le créneau', kind: 'danger', icon: I.trash, onClick: () => { setTimeout(async () => { if (!(await confirmBox('Libérer ce créneau ?', 'Libérer'))) return; try { await Cloud.unbook(b.id); toast('Créneau libéré'); done && done(); } catch (e) { toast(e.message, 'err'); } }, 60); } });
     if (b.kind === 'entrainement') acts.push({ label: 'Préparer la séance', icon: I.training, onClick: () => { const tr = Store.upsert('trainings', { id: Store.uid(), title: b.note || 'Entraînement', date: b.date, time: hm(b.start_min), teamId: b.team_id || null, goal: '', exercises: [], presents: [] }); location.hash = '#/entrainement/' + tr.id; } });
-    if (b.kind === 'match') acts.push({ label: 'Créer la fiche match', icon: I.match, onClick: () => { const m = Store.upsert('matches', { id: Store.uid(), teamId: b.team_id || (S().teams[0] || {}).id, opponent: '', date: b.date, time: hm(b.start_min), home: true, competition: 'Championnat', place: fieldName(), rdv: '', played: false, gf: 0, ga: 0, convoked: [], stats: {}, notes: b.note || '' }); location.hash = '#/match/' + m.id; } });
+    const mt = matchFor(b);
+    if (mt && Auth.sees(mt.teamId)) acts.push({ label: 'Ouvrir la fiche match', icon: I.match, onClick: () => { location.hash = '#/match/' + mt.id; } });
+    else if (b.kind === 'match' && !mt) acts.push({ label: 'Créer la fiche match', icon: I.match, onClick: () => { const m = Store.upsert('matches', { id: Store.uid(), teamId: b.team_id || (S().teams[0] || {}).id, opponent: '', date: b.date, time: hm(b.start_min), home: true, competition: 'Championnat', place: fieldName(), rdv: '', played: false, gf: 0, ga: 0, convoked: [], stats: {}, notes: b.note || '' }); location.hash = '#/match/' + m.id; } });
     acts.push({ label: 'Fermer', kind: 'primary' });
     modal({ title: `${k[0]} · ${b.team_name || 'sans catégorie'}`, noFocus: true, body: `
       <dl class="bk-detail"><div><dt>Quand</dt><dd>${esc(parse(b.date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }))}, ${hm(b.start_min)}–${hm(b.end_min)}</dd></div>
