@@ -165,11 +165,20 @@ const Board = (() => {
   // Backgrounds (a photo, a PDF page or a video frame) are kept decoded in memory, keyed by media id
   const BG = new Map();
   async function ensureBg(sc) {
-    const f = sc && sc.field; if (!f || f.format !== 'bg' || !f.bgId || BG.has(f.bgId)) return;
-    try {
-      const m = await Media.get(f.bgId); if (!m || !m.blob) return;
-      const img = await Media.loadImage(URL.createObjectURL(m.blob)); BG.set(f.bgId, img);
-    } catch (e) {}
+    const f = sc && sc.field, ids = [f && f.format === 'bg' && f.bgId, sc && sc.trace && sc.trace.bgId].filter(id => id && !BG.has(id));
+    for (const id of ids) {
+      try {
+        const m = await Media.get(id); if (!m || !m.blob) continue;
+        const img = await Media.loadImage(URL.createObjectURL(m.blob)); BG.set(id, img);
+      } catch (e) {}
+    }
+  }
+  // « Mettre au propre »: the photo of a hand-drawn exercise, see-through over a clean pitch, to redraw it with the tools
+  function drawTrace(ctx, cam, sc) {
+    const tr = sc.trace, img = tr && tr.on !== false && BG.get(tr.bgId); if (!img) return;
+    const { L, W: FW } = dims(sc.field);
+    // « multiply »: the white paper disappears, only the pen strokes stay on the grass
+    ctx.save(); ctx.globalCompositeOperation = 'multiply'; ctx.globalAlpha = tr.opacity == null ? .7 : tr.opacity; ctx.drawImage(img, ...cam.rect(0, 0, L, FW)); ctx.restore();
   }
   const preloadBackgrounds = list => Promise.all((list || []).map(ensureBg));
   function drawPitch(ctx, cam, sc, W, H) {
@@ -306,6 +315,7 @@ const Board = (() => {
   function drawFrame(ctx, W, H, sc, k, u, opts = {}) {
     const cam = camera(sc, W, H, { vertical: opts.vertical }), r = cam.r, st = sc.steps[k], ov = sc.overlays || {};
     drawPitch(ctx, cam, sc, W, H);
+    drawTrace(ctx, cam, sc);
     drawZones(ctx, cam, sc, opts.editor && opts.editor.sel);
     if (ov.bloc) drawBloc(ctx, cam, sc, k, u, opts.homeBib || 'bleu');
     const ed = opts.editor;

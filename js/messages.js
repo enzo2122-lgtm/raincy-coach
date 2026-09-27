@@ -31,6 +31,15 @@ const Messages = (() => {
     const n = String(m.author_name || '').trim(), first = n.split(/\s+/).find(w => w !== w.toUpperCase());
     return first ? 'Coach ' + first : n || '?';
   }
+  // Documents sent from the library: [[fichier:id,id]] = pictures travelling as schemas (with their image) to every device
+  const bgAsked = new Set();
+  function filesOf(m) {
+    const ids = ((String(m.body).match(/\[\[fichier:([\w,-]+)\]\]/) || [])[1] || '').split(',').filter(Boolean); if (!ids.length) return '';
+    const missing = ids.map(id => Store.get('schemas', id)).filter(s => s && s.field && s.field.bgId && !Board.BG.has(s.field.bgId) && !bgAsked.has(s.id));
+    if (missing.length) { missing.forEach(s => bgAsked.add(s.id)); Board.preloadBackgrounds(missing).then(() => { if (location.hash.startsWith('#/messages')) App.route(true); }); }
+    return `<div class="msg-files">${ids.map(id => { const s = Store.get('schemas', id);
+      return s ? `<a class="msg-file" href="#/schema/${id}"><img alt="" src="${UI.thumb(s, 320, 208)}"><span>${esc(s.name)}</span></a>` : '<span class="msg-file wait">Document en cours de réception…</span>'; }).join('')}</div>`;
+  }
   function channelName(ch) {
     if (ch === 'general') return 'Tout le club · tous les coachs';
     if (ch.startsWith('team:')) { const t = Store.get('teams', ch.slice(5)); return t ? t.name : 'Catégorie'; }
@@ -136,7 +145,7 @@ const Messages = (() => {
         const d = new Date(m.created_at), ds = d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
         const sep = ds !== day ? `<div class="day-sep">${esc(ds)}</div>` : ''; day = ds;
         const mine = m.author_id === me().id;
-        return `${sep}<div class="bubble ${mine ? 'mine' : ''}" data-m="${m.id}">${mine ? '' : `<span class="author-line"><b class="author">${crestOf(staffOf(m))}${esc(authorName(m))}</b>${UI.motto(staffOf(m))}</span>`}<p>${esc(String(m.body).replace(/\n?#rappel-[\w-]+\s*$/, '')).replace(/\n/g, '<br>')}</p>
+        return `${sep}<div class="bubble ${mine ? 'mine' : ''}" data-m="${m.id}">${mine ? '' : `<span class="author-line"><b class="author">${crestOf(staffOf(m))}${esc(authorName(m))}</b>${UI.motto(staffOf(m))}</span>`}<p>${esc(String(m.body).replace(/\n?#rappel-[\w-]+\s*$/, '').replace(/\n?\[\[fichier:[\w,-]+\]\]/, '')).replace(/\n/g, '<br>')}</p>${filesOf(m)}
           <span class="time">${d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}${mine || Auth.isAdmin() ? ` · <button class="linkish" data-delm="${m.id}">supprimer</button>` : ''}</span></div>`;
       }).join('') : '<p class="muted conv-hint">Pas encore de message. Écris le premier !</p>';
       body.scrollTop = body.scrollHeight;

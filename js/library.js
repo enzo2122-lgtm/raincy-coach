@@ -136,6 +136,69 @@ const Library = (() => {
   }
   const cleanName = n => String(n || 'Document').replace(/\.[a-z0-9]{2,4}$/i, '');
 
+  /* ---------- « Mettre au propre »: a hand-drawn exercise (photo, PDF page) redrawn on a clean pitch ---------- */
+  function cleanCopy(blob, w, h, name) {
+    modal({ title: 'Mettre au propre', body: `<p class="tip">Ton dessin s'affiche en transparence sur un vrai terrain. Redessine-le avec les joueurs, les flèches et les zones, puis retire le calque : il reste un schéma propre, animable et imprimable.</p>
+      <div class="lbl">Sur quel terrain ?</div><div class="chips" id="ccFmt">${[['11', 'Foot à 11'], ['8', 'Foot à 8'], ['5', 'Foot à 5'], ['zone', 'Zone libre']].map(([v, l], i) => `<button class="chip ${i ? '' : 'on'}" data-v="${v}">${l}</button>`).join('')}</div>
+      <label class="fld" style="margin-top:12px"><span>Nom du schéma</span><input id="ccName" value="${esc(cleanName(name))} · au propre"></label>`,
+      onOpen: r => $$('#ccFmt .chip', r).forEach(b => b.onclick = () => { $$('#ccFmt .chip', r).forEach(x => x.classList.remove('on')); b.classList.add('on'); }),
+      actions: [{ label: 'Annuler' }, { label: 'Commencer', kind: 'primary', icon: I.board, onClick: (c, r) => {
+        const format = $('#ccFmt .on', r).dataset.v, nm = $('#ccName', r).value.trim() || cleanName(name);
+        (async () => {
+          const bgId = Store.uid();
+          await Media.put({ id: bgId, ref: 'bg', kind: 'image', name: nm, blob, mime: 'image/jpeg', createdAt: Date.now() });
+          Board.BG.set(bgId, await Media.loadImage(URL.createObjectURL(blob)));
+          const field = format === 'zone' ? { format, view: 'full', w: 40, h: Math.round(40 * h / w) } : { format, view: 'full' };
+          const sc = Store.upsert('schemas', { id: Store.uid(), name: nm, teamId: S().ui.teamId || null, field, overlays: {}, objects: [], zones: [], trace: { bgId, on: true, opacity: .7 },
+            steps: [{ pos: {}, arrows: [], moves: {}, note: '', dur: 2 }] });
+          location.hash = '#/schema/' + sc.id;
+        })();
+      } }] });
+  }
+
+  /* ---------- print (the picture or every PDF page, one per sheet) ---------- */
+  function printRec(rec) {
+    const blobs = rec.kind === 'pdf' ? rec.pages.map(p => p.blob) : rec.kind === 'image' ? [rec.blob] : [];
+    if (!blobs.length) return toast('Ce fichier ne s\'imprime pas depuis l\'appli', 'err');
+    const old = document.getElementById('printArea'); if (old) old.remove();
+    const area = document.createElement('div'); area.id = 'printArea';
+    const urls = blobs.map(b => URL.createObjectURL(b));
+    area.innerHTML = urls.map(u => `<img src="${u}" alt="">`).join('');
+    document.body.appendChild(area);
+    const done = () => { area.remove(); urls.forEach(u => URL.revokeObjectURL(u)); window.removeEventListener('afterprint', done); };
+    window.addEventListener('afterprint', done);
+    Promise.all([...area.querySelectorAll('img')].map(im => im.decode ? im.decode().catch(() => {}) : null)).then(() => setTimeout(() => window.print(), 100));
+  }
+
+  /* ---------- send to the club messaging: each page travels as a picture (like a schema background) ---------- */
+  function sendToChat(rec) {
+    const pages = rec.kind === 'pdf' ? rec.pages.slice(0, 8) : rec.kind === 'image' ? [{ blob: rec.blob, w: rec.w || 1600, h: rec.h || 1000 }] : [];
+    if (!pages.length) return toast('Seuls les images et les PDF s\'envoient dans la messagerie', 'err');
+    if (!Cloud.ready()) return toast('La messagerie passe par le serveur du club, pas encore connecté ici', 'err');
+    const chans = [['general', 'Tout le club · tous les coachs'], ...S().teams.map(t => ['team:' + t.id, t.name])];
+    modal({ title: 'Envoyer dans la messagerie', body: `<label class="fld"><span>Où ?</span><select id="chTo">${chans.map(([v, l]) => `<option value="${v}" ${v === 'team:' + (Auth.teams()[0] || {}).id && !Auth.isAdmin() ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
+      <label class="fld"><span>Message (facultatif)</span><input id="chTxt" placeholder="Ex : la séance de mercredi"></label>
+      ${rec.kind === 'pdf' && rec.pages.length > 8 ? '<p class="muted small">Les 8 premières pages sont envoyées.</p>' : ''}`,
+      actions: [{ label: 'Annuler' }, { label: 'Envoyer', kind: 'primary', icon: I.share, onClick: (c, r) => {
+        const ch = $('#chTo', r).value, txt = $('#chTxt', r).value.trim();
+        (async () => {
+          const b = busy('Envoi du document…');
+          try {
+            const ids = [];
+            for (let i = 0; i < pages.length; i++) {
+              const p = pages[i]; let w = p.w, h = p.h;
+              if (!w || !h) { const img = await Media.loadImage(URL.createObjectURL(p.blob)); w = img.naturalWidth; h = img.naturalHeight; }
+              const sc = await drawOn(p.blob, w, h, `${cleanName(rec.name)}${pages.length > 1 ? ' · page ' + (i + 1) : ''}`, null);
+              sc.shared = true; Store.upsert('schemas', sc); ids.push(sc.id);
+            }
+            await Sync.run();
+            await Cloud.post(ch, `📎 ${cleanName(rec.name)}${txt ? '\n' + txt : ''}\n[[fichier:${ids.join(',')}]]`);
+            toast('Document envoyé dans la messagerie');
+          } catch (e) { toast(e.message || 'Envoi impossible', 'err'); } finally { b.done(); }
+        })();
+      } }] });
+  }
+
   /* ---------- turn a PDF into a training ---------- */
   function toTraining(rec) {
     modal({ title: 'Créer une séance avec ce PDF', body: `
@@ -195,7 +258,7 @@ const Library = (() => {
     if (rec.kind === 'video') body += `<div class="viewer"><video id="docVideo" src="${url(rec.blob)}" controls playsinline></video></div>
       <p class="tip">Mets la vidéo sur pause au bon moment, puis touche « Dessiner sur cette image » pour analyser l'action avec les flèches et les joueurs.</p>`;
     if (rec.kind === 'pdf') body += `<p class="muted small">${rec.pages.length} page${rec.pages.length > 1 ? 's' : ''}</p><div class="pdf-pages">${rec.pages.map((p, i) => `
-      <figure><img alt="Page ${i + 1}" src="${url(p.blob)}"><figcaption><span>Page ${i + 1}</span><button class="btn soft" data-page="${i}">${I.edit}<span>Dessiner sur cette page</span></button></figcaption></figure>`).join('')}</div>`;
+      <figure><img alt="Page ${i + 1}" src="${url(p.blob)}"><figcaption><span>Page ${i + 1}</span><button class="btn soft" data-page="${i}">${I.edit}<span>Dessiner dessus</span></button><button class="btn soft" data-clean="${i}">${I.board}<span>Mettre au propre</span></button></figcaption></figure>`).join('')}</div>`;
     const actions = [];
     if (rec.kind === 'image') actions.push({ label: 'Dessiner dessus', kind: 'primary', icon: I.board, onClick: () => { (async () => { const img = await Media.loadImage(URL.createObjectURL(rec.blob)); const c = await canvasBlob(img, img.naturalWidth, img.naturalHeight); const sc = await drawOn(c.blob, c.w, c.h, cleanName(rec.name)); location.hash = '#/schema/' + sc.id; })(); } });
     if (rec.kind === 'video') actions.push({ label: 'Dessiner sur cette image', kind: 'primary', icon: I.board, onClick: (close, r) => {
@@ -204,6 +267,11 @@ const Library = (() => {
         const sc = await drawOn(c.blob, c.w, c.h, `${cleanName(rec.name)} · ${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`); location.hash = '#/schema/' + sc.id; })();
       return false; } });
     if (rec.kind === 'pdf') actions.push({ label: 'Créer une séance', kind: 'primary', icon: I.training, onClick: () => { setTimeout(() => toTraining(rec), 60); } });
+    if (rec.kind === 'image') actions.push({ label: 'Mettre au propre', icon: I.board, onClick: () => { (async () => { const img = await Media.loadImage(URL.createObjectURL(rec.blob)); const cb = await canvasBlob(img, img.naturalWidth, img.naturalHeight); setTimeout(() => cleanCopy(cb.blob, cb.w, cb.h, rec.name), 60); })(); } });
+    if (rec.kind === 'pdf' || rec.kind === 'image') {
+      actions.push({ label: 'Imprimer', icon: I.pdf, onClick: () => { printRec(rec); return false; } });
+      actions.push({ label: 'Envoyer dans la messagerie', icon: I.chat, onClick: () => { setTimeout(() => sendToChat(rec), 60); } });
+    }
     if (rec.kind === 'link') actions.push({ label: 'Ouvrir', kind: 'primary', icon: I.share, onClick: () => { window.open(rec.url, '_blank', 'noopener'); return false; } });
     actions.push({ label: 'Joindre…', icon: I.layers, onClick: () => { setTimeout(() => attach(rec), 60); } });
     if (rec.blob) actions.push({ label: 'Partager', icon: I.share, onClick: () => { Exporter.deliver(rec.blob, rec.name || 'document'); return false; } });
@@ -211,6 +279,7 @@ const Library = (() => {
     modal({ title: KIND[rec.kind][0], noFocus: true, body, actions,
       onOpen: (r, close) => {
         $('#docName', r).onchange = async e => { rec.name = e.target.value.trim() || rec.name; await Media.put(rec); after && after(); };
+        $$('[data-clean]', r).forEach(b => b.onclick = () => { const p = rec.pages[+b.dataset.clean]; close(); setTimeout(() => cleanCopy(p.blob, p.w, p.h, `${rec.name} · page ${+b.dataset.clean + 1}`), 60); });
         $$('[data-page]', r).forEach(b => b.onclick = async () => { const p = rec.pages[+b.dataset.page]; close(); const sc = await drawOn(p.blob, p.w, p.h, `${cleanName(rec.name)} · page ${+b.dataset.page + 1}`); location.hash = '#/schema/' + sc.id; });
       } });
     const mo = new MutationObserver(() => { if (document.getElementById('modal').hidden) { urls.forEach(u => URL.revokeObjectURL(u)); mo.disconnect(); } });

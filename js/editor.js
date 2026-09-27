@@ -309,6 +309,11 @@ const Editor = (() => {
       if (E.tool === 'cone') h += `<div class="lbl">Couleur du plot</div>${chipRow([['orange', 'Orange'], ['jaune', 'Jaune'], ['bleu', 'Bleu'], ['rouge', 'Rouge']], 'tcone', E.coneColor)}`;
       const ov = sc.overlays, f = sc.field;
       const tg = (id, lab) => `<label class="switch"><input type="checkbox" data-ov="${id}" ${ov[id] ? 'checked' : ''}><span>${lab}</span></label>`;
+      if (sc.trace) h += `<h3>Calque : ton dessin d'origine</h3>
+        <p class="tip">Redessine par-dessus avec les joueurs, flèches et zones. Quand c'est fini, retire le calque : il reste le schéma propre.</p>
+        <label class="switch"><input type="checkbox" data-trace="on" ${sc.trace.on !== false ? 'checked' : ''}><span>Voir le calque</span></label>
+        <label class="fld"><span>Transparence du calque</span><input type="range" id="traceOp" min="10" max="90" step="5" value="${Math.round((sc.trace.opacity == null ? .7 : sc.trace.opacity) * 100)}"></label>
+        <button class="btn primary wide" data-act="dropTrace">${I.check}<span>Retirer le calque (version propre)</span></button>`;
       h += `<h3>Afficher</h3>
         ${tg('lanes', 'Couloirs et demi-espaces')}${tg('phases', 'Zones de jeu : conservation, progression, déséquilibre, finition')}${tg('bloc', 'Bloc adverse')}${tg('names', 'Prénoms des joueurs')}
         <h3>Terrain</h3>
@@ -458,11 +463,13 @@ const Editor = (() => {
         case 'delSel': snapshot(); removeThing(sel); E.sel = null; commit(); return renderPanel();
         case 'rotGoal': return setSel(() => { const o = findObj(sel.id); o.rot = ((o.rot || 0) + 90) % 360; });
         case 'formation': return formationModal();
+        case 'dropTrace': snapshot(); delete E.sc.trace; commit(); renderPanel(); return UI.toast('Calque retiré : ton schéma est au propre');
       }
     });
     r.addEventListener('input', e => {
       if (!E) return;
       const t = e.target, sel = E.sel;
+      if (t.id === 'traceOp' && E.sc.trace) { E.sc.trace.opacity = +t.value / 100; draw(); }
       if (t.id === 'pLabel') { findObj(sel.id).label = t.value.trim(); draw(); }
       if (t.id === 'pName') { findObj(sel.id).name = t.value.trim(); draw(); }
       if (t.id === 'zLabel') { findZone(sel.id).label = t.value; draw(); }
@@ -474,6 +481,8 @@ const Editor = (() => {
       if (['pLabel', 'pName', 'zLabel', 'stepNote'].includes(t.id)) { commit(); return; }
       if (t.id === 'pGk') { snapshot(); const o = findObj(E.sel.id); o.gk = t.checked; if (t.checked) { o.color = 'jaune'; o.label = o.label || 'G'; } commit(); return renderPanel(); }
       if (t.dataset.ov) { sc.overlays[t.dataset.ov] = t.checked; return commit(); }
+      if (t.dataset.trace && sc.trace) { sc.trace.on = t.checked; return commit(); }
+      if (t.id === 'traceOp' && sc.trace) { sc.trace.opacity = +t.value / 100; return commit(); }
       if (t.id === 'fW' || t.id === 'fH') { snapshot(); sc.field.w = Board.clamp(+document.getElementById('fW').value || 30, 5, 110); sc.field.h = Board.clamp(+document.getElementById('fH').value || 20, 5, 75); return commit(); }
       if (t.id === 'scTeam') { sc.teamId = t.value || null; commit(); return renderPanel(); }
       if (t.id === 'addWho' && t.value) { placePlayer(Store.get('players', t.value)); return; }
