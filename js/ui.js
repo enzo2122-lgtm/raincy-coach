@@ -28,7 +28,7 @@ const UI = (() => {
       if (b) { const a = o.actions[+b.dataset.i]; if (!a.onClick || a.onClick(close, root) !== false) close(); }
     };
     if (o.onOpen) o.onOpen(root, close);
-    const first = root.querySelector('input,select,textarea'); if (first && !o.noFocus) setTimeout(() => first.focus(), 60);
+    const first = root.querySelector('input,select,textarea'); if (first && !o.noFocus && finePointer()) setTimeout(() => first.focus(), 60);
     return close;
   }
   function confirmBox(text, okLabel = 'Supprimer') {
@@ -108,5 +108,7 @@ const UI = (() => {
     });
   }
 
-  return { esc, $, $$, toast, modal, confirmBox, busy, thumb, fmtDate, today, accentFor, pickFiles, chooseFiles, motto, mottoIdea, MOTTO_MAX };
+  // mouse/trackpad (computer): fields can take the focus; touch screens: no keyboard popping up on its own
+  const finePointer = () => matchMedia('(pointer: fine)').matches;
+  return { finePointer, esc, $, $$, toast, modal, confirmBox, busy, thumb, fmtDate, today, accentFor, pickFiles, chooseFiles, motto, mottoIdea, MOTTO_MAX };
 })();

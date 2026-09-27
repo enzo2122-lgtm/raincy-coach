@@ -200,6 +200,7 @@ const Views = (() => {
         <section class="card">
           <div class="row-head"><label class="fld inline"><span>Catégorie</span><input id="tCat" value="${esc(t.category || '')}" maxlength="20"></label>
           <div class="chips">${FORMATS.map(([v, l]) => `<button class="chip ${t.format === v ? 'on' : ''}" data-fmt="${v}">${l}</button>`).join('')}</div></div>
+          ${Auth.isAdmin() && Importer.letterNo(t) ? `<label class="fld" style="margin-top:12px"><span>Nom au District (pour ranger les matchs importés)</span><select id="tDistrict">${[1, 2, 3, 4].map(n => `<option value="${n}" ${Importer.districtNo(t) === n ? 'selected' : ''}>${esc(S().club.name)}${n > 1 ? ' ' + n : ''}</option>`).join('')}</select></label>` : ''}
         </section>
         <div id="teamPeople"></div>
         ${Auth.isAdmin() ? `<div class="danger-zone"><button class="btn danger" data-act="delete">${I.trash}<span>Supprimer la catégorie</span></button></div>` : ''}`;
@@ -208,6 +209,15 @@ const Views = (() => {
       people(); People.bindTeamSections(box, t, people);
     };
     render();
+    root.onchange = e => {
+      if (e.target.id !== 'tDistrict') return;
+      t.districtNo = +e.target.value; save();
+      // the other team of the category takes the other number, then the imported matches are put back in the right team
+      const others = S().teams.filter(x => x.id !== t.id && Importer.letterNo(x) && (x.category || '') === (t.category || ''));
+      const clash = others.find(x => Importer.districtNo(x) === t.districtNo); if (clash) { const free = [1, 2, 3, 4].find(n => ![t, ...others].some(x => x !== clash && Importer.districtNo(x) === n)); clash.districtNo = free; Store.upsert('teams', clash); }
+      const n = Importer.reassignImported(t.category || t.name);
+      toast(n ? `${n} match${n > 1 ? 's' : ''} rangé${n > 1 ? 's' : ''} dans la bonne équipe` : 'Numéro enregistré');
+    };
     root.oninput = e => {
       if (e.target.id === 'tName') { t.name = e.target.value; save(); }
       if (e.target.id === 'tCat') { t.category = e.target.value; save(); }
@@ -417,6 +427,27 @@ const Views = (() => {
         location.hash = '#/match/' + m.id;
       } }] });
   }
+  /* ---------- convocation to send on WhatsApp (to the parents' group) ---------- */
+  function convocationText(m) {
+    const t = teamOf(m.teamId), conv = (t ? Store.playersOf(t.id) : []).filter(p => (m.convoked || []).includes(p.id)), club = S().club.name || 'FA Le Raincy';
+    const hh = x => String(x || '').replace(':', 'h'), me = Auth.current();
+    return [`⚽ *${club}${t ? ' · ' + t.name : ''}*`, `*Convocation – ${fmtDate(m.date, { weekday: 'long', day: 'numeric', month: 'long' })}*`, '',
+      `Match ${m.home ? 'à domicile' : 'à l\'extérieur'} contre *${m.opponent || '?'}*${m.competition ? ' (' + m.competition + ')' : ''}`,
+      m.place || m.home ? `📍 ${m.place || S().club.fieldName || 'Stade du club'}` : '',
+      m.rdv || m.time ? `🕘 ${m.rdv ? 'Rendez-vous ' + hh(m.rdv) : ''}${m.rdv && m.time ? ' · ' : ''}${m.time ? 'coup d\'envoi ' + hh(m.time) : ''}` : '🕘 Horaire à confirmer', '',
+      `*Joueurs convoqués (${conv.length}) :*`, ...conv.map((p, i) => `${i + 1}. ${p.firstName || ''} ${p.lastName || ''}`.trim()), '',
+      '🎒 Prévoir : tenue du club, protège-tibias, gourde.', 'Merci de confirmer la présence de votre enfant en répondant à ce message.',
+      me ? `${Messages.coachName(me)}` : ''].filter((l, i, a) => l !== '' || (a[i - 1] !== '' && i > 0)).join('\n').replace(/\n+$/, '');
+  }
+  function sendConvocation(m) {
+    const text = convocationText(m);
+    modal({ title: 'Envoyer la convocation', noFocus: true, body: `<p class="muted small">Le message est prêt : choisis où l'envoyer (le groupe WhatsApp des parents, par exemple).</p><textarea id="convTxt" rows="12">${esc(text)}</textarea>`,
+      actions: [
+        { label: 'WhatsApp', kind: 'primary', icon: I.share, onClick: (c, r) => { window.open('https://wa.me/?text=' + encodeURIComponent($('#convTxt', r).value), '_blank'); return false; } },
+        ...(navigator.share ? [{ label: 'Autre appli', icon: I.share, onClick: (c, r) => { navigator.share({ title: 'Convocation', text: $('#convTxt', r).value }).catch(() => {}); return false; } }] : []),
+        ...(Cloud.ready() ? [{ label: 'Messagerie du club', icon: I.chat, onClick: (c, r) => { Cloud.post('team:' + m.teamId, $('#convTxt', r).value).then(() => toast('Convocation publiée dans le canal ' + ((teamOf(m.teamId) || {}).name || ''))).catch(e => toast(e.message, 'err')); } }] : []),
+        { label: 'Copier', icon: I.copy, onClick: (c, r) => { navigator.clipboard.writeText($('#convTxt', r).value).then(() => toast('Convocation copiée')).catch(() => toast('Sélectionne le texte et copie-le')); return false; } }] });
+  }
   function match(root, id) {
     const m = Store.get('matches', id); if (!m) return (location.hash = '#/matchs');
     if (!Auth.sees(m.teamId)) return matchView(root, m);
@@ -429,6 +460,7 @@ const Views = (() => {
         `<button class="btn primary" data-act="pdf">${I.pdf}<span>Feuille de match</span></button>`)}
         <section class="card">
           <div class="row3">
+            <label class="fld"><span>Équipe</span><select data-f="teamId">${Auth.teams().map(x => `<option value="${x.id}" ${x.id === m.teamId ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label>
             <label class="fld"><span>Adversaire</span><input data-f="opponent" value="${esc(m.opponent)}"></label>
             <label class="fld"><span>Date</span><input type="date" data-f="date" value="${esc(m.date)}"></label>
             <label class="fld"><span>Coup d'envoi</span><input type="time" data-f="time" value="${esc(m.time || '')}"></label>
@@ -438,7 +470,7 @@ const Views = (() => {
           </div>
           <div class="chips"><button class="chip ${m.home ? 'on' : ''}" data-home="1">Domicile</button><button class="chip ${!m.home ? 'on' : ''}" data-home="0">Extérieur</button></div>
         </section>
-        <h2 class="section">Convoqués (${conv.length})</h2>
+        <div class="row-head"><h2 class="section">Convoqués (${conv.length})</h2>${conv.length ? `<button class="btn primary" data-act="convoc">${I.share}<span>Envoyer la convocation</span></button>` : ''}</div>
         ${t ? `<div class="chips roster">${roster.map(p => `<button class="chip ${(m.convoked || []).includes(p.id) ? 'on' : ''}" data-conv="${p.id}">${esc(pLabel(p))}</button>`).join('')}</div>` : '<p class="muted">Choisis une équipe.</p>'}
         <h2 class="section">Encadrants</h2><div class="staff-pick">${People.staffPicker(m.teamId, m.staffIds)}</div>
         <h2 class="section">Composition</h2>
@@ -465,14 +497,16 @@ const Views = (() => {
     };
     const cheer = before => { if (Ratings.result(m) === 'V' && before !== 'V') Ratings.celebrate(); };
     render();
-    root.oninput = e => { const f = e.target.dataset.f; if (f) { m[f] = e.target.value; save(); } };
+    root.oninput = e => { const f = e.target.dataset.f; if (f) { m[f] = e.target.value; if (f === 'teamId') m.teamManual = true; save(); } };
     root.onchange = e => {
+      if (e.target.dataset.f === 'teamId') { m.teamId = e.target.value; m.teamManual = true; save(); toast('Match rangé dans ' + (teamOf(m.teamId) || {}).name); return render(); }
       if (e.target.id === 'mPlayed') { const before = Ratings.result(m); m.played = e.target.checked; save(); render(); return cheer(before); }
       if (e.target.hasAttribute('data-staffpick') && e.target.value) { m.staffIds = [...new Set([...(m.staffIds || []), e.target.value])]; save(); return render(); }
       root.oninput(e);
     };
     root.onclick = async e => {
       const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.act === 'convoc') return sendConvocation(m);
       if (b.dataset.cheer) { ClubLife.cheer(b.dataset.cheer); return render(); }
       if (b.dataset.home) { m.home = b.dataset.home === '1'; save(); return render(); }
       if (b.dataset.unstaff) { m.staffIds = (m.staffIds || []).filter(x => x !== b.dataset.unstaff); save(); return render(); }

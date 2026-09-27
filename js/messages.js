@@ -31,6 +31,15 @@ const Messages = (() => {
     const n = String(m.author_name || '').trim(), first = n.split(/\s+/).find(w => w !== w.toUpperCase());
     return first ? 'Coach ' + first : n || '?';
   }
+  // Documents sent from the library: [[fichier:id,id]] = pictures travelling as schemas (with their image) to every device
+  const bgAsked = new Set();
+  function filesOf(m) {
+    const ids = ((String(m.body).match(/\[\[fichier:([\w,-]+)\]\]/) || [])[1] || '').split(',').filter(Boolean); if (!ids.length) return '';
+    const missing = ids.map(id => Store.get('schemas', id)).filter(s => s && s.field && s.field.bgId && !Board.BG.has(s.field.bgId) && !bgAsked.has(s.id));
+    if (missing.length) { missing.forEach(s => bgAsked.add(s.id)); Board.preloadBackgrounds(missing).then(() => { if (location.hash.startsWith('#/messages')) App.route(true); }); }
+    return `<div class="msg-files">${ids.map(id => { const s = Store.get('schemas', id);
+      return s ? `<a class="msg-file" href="#/schema/${id}"><img alt="" src="${UI.thumb(s, 320, 208)}"><span>${esc(s.name)}</span></a>` : '<span class="msg-file wait">Document en cours de réception…</span>'; }).join('')}</div>`;
+  }
   function channelName(ch) {
     if (ch === 'general') return 'Tout le club · tous les coachs';
     if (ch.startsWith('team:')) { const t = Store.get('teams', ch.slice(5)); return t ? t.name : 'Catégorie'; }
@@ -61,9 +70,37 @@ const Messages = (() => {
     let b = a.querySelector('.nav-badge'); if (!b) { b = document.createElement('i'); b.className = 'nav-badge'; a.appendChild(b); }
     b.textContent = n > 9 ? '9+' : n; b.hidden = !n;
   }
+  /* ---------- automatic reminder the day before a match ----------
+     No server runs on its own, so the first device of a coach of the category (or of a responsable) opened the day before
+     posts it in the category's channel. The match keeps « reminded » and the message carries a tag: it is posted once. */
+  const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const TAG = id => `#rappel-${id}`;
+  let reminding = false;
+  async function matchReminders() {
+    if (reminding || !Cloud.ready() || !me()) return;
+    const now = new Date(), today = iso(now), tomorrow = iso(new Date(now.getTime() + 864e5)), mine = new Set(me().teamIds || []);
+    const due = S().matches.filter(m => !m.exempt && !m.played && !m.reminded && (m.date === tomorrow || (m.date === today && (!m.time || m.time > now.toTimeString().slice(0, 5))))
+      && m.teamId && (mine.has(m.teamId) || Auth.realAdmin()));
+    if (!due.length) return;
+    reminding = true;
+    try {
+      for (const m of due) {
+        const ch = 'team:' + m.teamId;
+        if (msgs.some(x => x.channel === ch && (x.body || '').includes(TAG(m.id)))) { m.reminded = m.date; Store.upsert('matches', m); continue; }
+        const t = Store.get('teams', m.teamId) || {}, club = S().club.name || 'FA Le Raincy', d = new Date(m.date + 'T12:00');
+        const when = m.date === today ? 'aujourd\'hui' : 'demain ' + d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+        const body = [`📣 Rappel : match ${when}`, `⚽ ${t.name || ''} · ${m.home ? club + ' – ' + (m.opponent || '?') : (m.opponent || '?') + ' – ' + club}`,
+          m.rdv || m.time ? `🕘 ${m.rdv ? 'Rendez-vous ' + m.rdv : ''}${m.rdv && m.time ? ' · ' : ''}${m.time ? 'coup d\'envoi ' + m.time : ''}` : '🕘 Heure à confirmer',
+          m.home ? `🏟️ À domicile${S().club.fieldName ? ' · ' + S().club.fieldName : ''}` : `🚌 À l'extérieur${m.place ? ' · ' + m.place : ''}`,
+          (m.convoked || []).length ? `👥 ${(m.convoked || []).length} joueur${m.convoked.length > 1 ? 's' : ''} convoqué${m.convoked.length > 1 ? 's' : ''}` : '',
+          TAG(m.id)].filter(Boolean).join('\n');
+        try { const r = await Cloud.post(ch, body); if (r) msgs.push(r); m.reminded = m.date; Store.upsert('matches', m); } catch (e) { break; }
+      }
+    } finally { reminding = false; }
+  }
   function start() {
     clearInterval(timer);
-    const tick = async () => { const changed = await fetchNew(); badge(); if (changed && fast && onNew) onNew(); };
+    const tick = async () => { const changed = await fetchNew(); await matchReminders(); badge(); if (changed && fast && onNew) onNew(); };
     tick(); timer = setInterval(tick, fast ? 6000 : 45000);
   }
   let onNew = null;
@@ -108,7 +145,7 @@ const Messages = (() => {
         const d = new Date(m.created_at), ds = d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
         const sep = ds !== day ? `<div class="day-sep">${esc(ds)}</div>` : ''; day = ds;
         const mine = m.author_id === me().id;
-        return `${sep}<div class="bubble ${mine ? 'mine' : ''}" data-m="${m.id}">${mine ? '' : `<span class="author-line"><b class="author">${crestOf(staffOf(m))}${esc(authorName(m))}</b>${UI.motto(staffOf(m))}</span>`}<p>${esc(m.body).replace(/\n/g, '<br>')}</p>
+        return `${sep}<div class="bubble ${mine ? 'mine' : ''}" data-m="${m.id}">${mine ? '' : `<span class="author-line"><b class="author">${crestOf(staffOf(m))}${esc(authorName(m))}</b>${UI.motto(staffOf(m))}</span>`}<p>${esc(String(m.body).replace(/\n?#rappel-[\w-]+\s*$/, '').replace(/\n?\[\[fichier:[\w,-]+\]\]/, '')).replace(/\n/g, '<br>')}</p>${filesOf(m)}
           <span class="time">${d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}${mine || Auth.isAdmin() ? ` · <button class="linkish" data-delm="${m.id}">supprimer</button>` : ''}</span></div>`;
       }).join('') : '<p class="muted conv-hint">Pas encore de message. Écris le premier !</p>';
       body.scrollTop = body.scrollHeight;
@@ -131,7 +168,7 @@ const Messages = (() => {
       catch (err) { toast(err.message, 'err'); }
     };
     fast = true; onNew = () => { if (location.hash.startsWith('#/messages/')) { markRead(ch); draw(); badge(); } }; start();
-    setTimeout(() => ta.focus(), 100);
+    if (UI.finePointer()) setTimeout(() => ta.focus(), 100);
   }
   function pickCoach() {
     const others = S().staff.filter(s => s.id !== me().id).sort(Store.byName);

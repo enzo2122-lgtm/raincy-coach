@@ -37,6 +37,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 main#view { padding: calc(env(safe-area-inset-top) + 22px) 28px 48px; max-width: 1240px; width: 100%; min-width: 0; outline: none; }
 body.editing .shell { grid-template-columns: minmax(0, 1fr); }
 body.editing .rail { display: none; }
+/* while drawing, the page itself never scrolls or bounces (the board stays still under the finger) */
+html:has(body.editing), body.editing { overflow: hidden; overscroll-behavior: none; height: 100%; }
 body.editing main#view { padding: 0; max-width: none; height: 100dvh; }
 
 @media (max-width: 760px) {
@@ -812,6 +814,20 @@ body.previewing .shell { padding-top: var(--pvh, 52px); }
 .crest-fallback { display: inline-flex; flex: none; }
 .crest-svg { display: block; }
 .imp-list .crest-img, .imp-list .crest-svg { display: inline-block; vertical-align: -3px; }
+/* documents in the messaging */
+.msg-files { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.msg-file { display: flex; flex-direction: column; gap: 3px; width: 150px; color: inherit; text-decoration: none; font-size: 12.5px; font-weight: 700; }
+.msg-file img { width: 150px; height: 98px; object-fit: cover; border-radius: 8px; background: #10182e; }
+.msg-file span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.msg-file.wait { width: auto; font-weight: 600; opacity: .7; }
+/* printing a library document: only its pages, one per sheet */
+#printArea { display: none; }
+@media print {
+  body > *:not(#printArea) { display: none !important; }
+  #printArea { display: block; }
+  #printArea img { display: block; width: 100%; height: auto; break-after: page; page-break-after: always; }
+  #printArea img:last-child { break-after: auto; page-break-after: auto; }
+}
 .plan-mini a { grid-template-columns: 70px minmax(0, 1fr) auto; }
 @media (max-width: 760px) {
   .day-select { display: flex; }
