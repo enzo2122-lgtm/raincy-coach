@@ -47,7 +47,8 @@ const Clubs = (() => {
   const KEY = 'raincy-crests';
   const cache = (() => { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { return {}; } })();
   const saveCache = () => { try { localStorage.setItem(KEY, JSON.stringify(cache)); } catch (e) {} };
-  const asking = new Set(), waiting = new Set();
+  const asking = new Set(), inFlight = new Set(), waiting = new Set();
+  let timer = null, pausedUntil = 0;
 
   // Shield in the club's colours (fallback, and while the crest loads)
   function shield(key, size) {
@@ -62,15 +63,30 @@ const Clubs = (() => {
       <rect x="3" y="12.5" width="26" height="10" rx="2" fill="rgba(255,255,255,.92)"/>
       <text x="16" y="20.3" text-anchor="middle" font-family="system-ui,sans-serif" font-weight="900" font-size="${txt.length > 3 ? 6.3 : 7.8}" fill="#0e1d45">${txt}</text></svg>`;
   }
-  // The club's crest from Wikipedia (the picture of its article), asked once per device and remembered
-  async function fetchCrest(key) {
-    const c = LIST[key]; if (!c || !c[1] || asking.has(key) || !navigator.onLine) return;
+  // The clubs' crests from Wikipedia (the picture of each article), remembered on the device.
+  // All the crests a page needs go in ONE request: Wikipedia refuses many separate requests in a row.
+  function fetchCrest(key) {
+    const c = LIST[key]; if (!c || !c[1] || cache[key] || inFlight.has(key) || !navigator.onLine || Date.now() < pausedUntil) return;
     asking.add(key);
+    clearTimeout(timer); timer = setTimeout(fetchAll, 80);
+  }
+  async function fetchAll() {
+    const keys = [...asking].slice(0, 50); asking.clear(); if (!keys.length) return;
+    keys.forEach(k => inFlight.add(k));
     try {
-      const url = 'https://en.wikipedia.org/w/api.php?action=query&format=json&origin=*&redirects=1&prop=pageimages&pilicense=any&pithumbsize=96&titles=' + encodeURIComponent(c[1]);
-      const j = await (await fetch(url)).json(), page = Object.values((j.query || {}).pages || {})[0] || {};
-      if (page.thumbnail && page.thumbnail.source) { cache[key] = page.thumbnail.source; saveCache(); waiting.forEach(f => f()); waiting.clear(); }
-    } catch (e) {} finally { asking.delete(key); }
+      const url = 'https://en.wikipedia.org/w/api.php?action=query&format=json&origin=*&redirects=1&prop=pageimages&pilicense=any&pithumbsize=96&pilimit=50&titles=' + encodeURIComponent(keys.map(k => LIST[k][1]).join('|'));
+      const r = await fetch(url); if (!r.ok) throw new Error('HTTP ' + r.status);
+      const q = (await r.json()).query || {}, to = {}, pages = {};
+      (q.normalized || []).concat(q.redirects || []).forEach(x => to[x.from] = x.to);
+      Object.values(q.pages || {}).forEach(p => pages[p.title] = p);
+      let got = false;
+      keys.forEach(k => {
+        let t = LIST[k][1]; for (let i = 0; i < 5 && to[t]; i++) t = to[t];
+        const p = pages[t]; if (p && p.thumbnail && p.thumbnail.source) { cache[k] = p.thumbnail.source; got = true; }
+      });
+      if (got) { saveCache(); const w = [...waiting]; waiting.clear(); w.forEach(f => f()); }
+    } catch (e) { pausedUntil = Date.now() + 10 * 60000; } // refused or no network: shields for now, try again in 10 minutes
+    finally { keys.forEach(k => inFlight.delete(k)); if (asking.size) timer = setTimeout(fetchAll, 80); }
   }
   // HTML for a crest; onReady is called once a missing crest has arrived (to redraw)
   function crest(key, size = 22, onReady) {
