@@ -55,30 +55,55 @@ const Views = (() => {
     return `<section class="card setup-card"><h2>${I.check}Mise en route du club</h2><ol class="setup-steps">${steps.map(([ok, t, how, href]) =>
       `<li class="${ok ? 'ok' : ''}"><a href="${href}"><span class="tick">${ok ? '✓' : ''}</span><span><b>${esc(t)}</b><span class="muted small">${esc(how)}</span></span></a></li>`).join('')}</ol></section>`;
   }
+  // The connected coach's categories (all of them for a responsable without categories)
+  function myScope() {
+    const me = Auth.current(), pv = Auth.preview();
+    const myIds = pv ? pv.teamIds : ((me && me.teamIds) || []), mine = myIds.map(id => Store.get('teams', id)).filter(Boolean);
+    return { mine, isMine: tid => !mine.length || myIds.includes(tid) };
+  }
+  const addDays = (d, n) => { const x = new Date(d + 'T12:00'); x.setDate(x.getDate() + n); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`; };
+  const tName = id => teamOf(id) ? ' ' + teamOf(id).name : '';
+  const matchLabel = m => `Match${tName(m.teamId)} ${m.home ? 'contre' : 'chez'} ${m.opponent || '?'}`;
   // Top of the home page, made for the coach who is connected: his name, his sentence, his categories, his day
   function hero(now) {
     const me = Auth.current(), club = esc(S().club.name);
     if (!me) return `<header class="hero"><img src="icons/crest.png" alt="" class="hero-crest"><div><p class="eyebrow">Espace éducateurs</p><h1>${club}</h1></div></header>`;
     const h = new Date().getHours(), hello = h < 5 ? 'Bonsoir' : h < 12 ? 'Bonjour' : h < 18 ? 'Bon après-midi' : 'Bonsoir';
-    const coach = Messages.coachName(me), pv = Auth.preview();
-    const myIds = pv ? pv.teamIds : (me.teamIds || []), mine = myIds.map(id => Store.get('teams', id)).filter(Boolean);
-    const isMine = tid => !mine.length || myIds.includes(tid);
-    const todayItems = [
-      ...S().matches.filter(m => m.date === now && !m.exempt && isMine(m.teamId)).map(m => `⚽ Match${teamOf(m.teamId) ? ' ' + esc(teamOf(m.teamId).name) : ''} ${m.home ? 'contre' : 'chez'} ${esc(m.opponent || '?')}${m.time ? ' à ' + esc(m.time) : ''}`),
-      ...S().trainings.filter(t => t.date === now && isMine(t.teamId)).map(t => `🏃 Séance${teamOf(t.teamId) ? ' ' + esc(teamOf(t.teamId).name) : ''}${t.time ? ' à ' + esc(t.time) : ''}`),
-    ].slice(0, 2);
+    const coach = Messages.coachName(me), { mine, isMine } = myScope();
+    const matchesOn = d => S().matches.filter(m => m.date === d && !m.exempt && isMine(m.teamId)).sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+    const todayM = matchesOn(now), todayT = S().trainings.filter(t => t.date === now && isMine(t.teamId)).sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+    const tomorrowM = matchesOn(addDays(now, 1));
+    // The greeting follows the coach's day: match, session, eve of a match, or an ordinary day
+    let title = `${hello} ${esc(coach)} 👋`, box = '';
+    const items = [...todayM.map(m => `⚽ ${esc(matchLabel(m))}${m.time ? ' à ' + esc(m.time) : ''}`), ...todayT.map(t => `🏃 Séance${esc(tName(t.teamId))}${t.time ? ' à ' + esc(t.time) : ''}`)].slice(0, 2);
+    const firstTime = (todayM[0] || todayT[0] || {}).time || '';
+    if (todayM.length) { title = `Bon match, ${esc(coach)} ⚽`; box = `<b>Aujourd'hui</b> · ${items.join(' · ')}<span class="hero-wx" id="heroWx"></span><i class="hero-wish">Tout le club est derrière vous. Allez Raincy !</i>`; }
+    else if (todayT.length) { title = `Bonne séance, ${esc(coach)} 💪`; box = `<b>Aujourd'hui</b> · ${items.join(' · ')}<span class="hero-wx" id="heroWx"></span><i class="hero-wish">En espérant un entraînement bénéfique pour tes joueurs !</i>`; }
+    else if (tomorrowM.length) box = `<b>Demain</b> · ⚽ ${esc(matchLabel(tomorrowM[0]))}${tomorrowM[0].time ? ' à ' + esc(tomorrowM[0].time) : ''}<i class="hero-wish">Bonne préparation, et repose bien tes troupes !</i>`;
     const redraw = () => { if (/^#?\/?$/.test(location.hash.replace('#/', '#'))) App.route(true); };
-    return `<header class="hero hero-me">
+    return `<header class="hero hero-me" data-wx-time="${esc(firstTime)}">
       <img src="icons/crest.png" alt="" class="hero-crest">
       <div class="hero-main">
         <p class="eyebrow">Espace de ${esc(coach)}<span class="eb-club"> · ${club}</span></p>
-        <h1>${hello} ${esc(coach)} 👋</h1>
+        <h1>${title}</h1>
         <p class="hero-line">${me.motto ? `« ${esc(me.motto)} »` : (Auth.isAdmin() ? 'Tout le club est entre tes mains aujourd\'hui.' : 'Prêt pour la prochaine séance ?')}</p>
         <div class="hero-chips">${mine.length ? mine.map(t => `<a class="hero-chip" href="#/equipe/${t.id}">${esc(t.name)}</a>`).join('') : Auth.isAdmin() ? '<span class="hero-chip">Responsable du club</span>' : ''}</div>
-        ${todayItems.length ? `<p class="hero-today"><b>Aujourd'hui</b> · ${todayItems.join(' · ')}</p>` : ''}
+        ${box ? `<p class="hero-today">${box}</p>` : ''}
       </div>
       ${me.club ? `<a class="hero-heart" href="#/reglages" title="Mon club de cœur : ${esc(Clubs.name(me.club))}">${Clubs.crest(me.club, 44, redraw)}<span>Mon club de cœur</span></a>` : ''}
     </header>`;
+  }
+  // Weather of the coach's week (sessions and matches in Le Raincy) and of his next away match
+  function homeWeather(root, now) {
+    const { isMine } = myScope(), end = addDays(now, 6);
+    const events = [
+      ...S().matches.filter(m => !m.exempt && m.date >= now && m.date <= end && isMine(m.teamId)).map(m => ({ date: m.date, time: m.time, kind: 'match', label: matchLabel(m), away: !m.home })),
+      ...S().trainings.filter(t => t.date >= now && t.date <= end && isMine(t.teamId)).map(t => ({ date: t.date, time: t.time, kind: 'training', label: 'Séance' + tName(t.teamId) })),
+    ];
+    const trip = S().matches.filter(m => !m.home && !m.exempt && !m.played && m.date >= now && isMine(m.teamId)).sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')))[0];
+    Weather.mount(root, events, trip);
+    const hw = $('#heroWx', root);
+    if (hw) Weather.todayShort($('.hero-me', root).dataset.wxTime).then(t => { if (t && hw.isConnected) hw.textContent = ' · ' + t; });
   }
   function home(root) {
     const now = today();
@@ -91,6 +116,7 @@ const Views = (() => {
       ${serverBanner()}
       ${teamSwitch()}
       ${setupCard()}
+      ${Weather.placeholder()}
       <div class="quick">
         <button class="quick-btn" data-go="new-schema">${I.board}<b>Dessiner un exercice</b><span>Joueurs, flèches, zones</span></button>
         <button class="quick-btn" data-go="new-training">${I.training}<b>Préparer un entraînement</b><span>Exercices et PDF</span></button>
@@ -123,6 +149,7 @@ const Views = (() => {
       </div>`;
     bindTeamSwitch(root, () => home(root));
     Planning.upcoming($('#planMini', root));
+    homeWeather(root, now);
     const cb = $('[data-connect]', root); if (cb) cb.onclick = () => Auth.connectServer();
     $$('[data-go]', root).forEach(b => b.onclick = () => ({ 'new-schema': newSchema, 'new-training': newTraining, 'new-match': newMatch })[b.dataset.go]());
   }

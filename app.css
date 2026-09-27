@@ -163,6 +163,30 @@ a.hero-chip:hover { background: rgba(201,164,92,.22); }
   .hero-today { margin-top: 8px; padding: 6px 10px; font-size: 13.5px; }
   .hero-line { font-size: 14px; }
 }
+.hero-wish { display: block; margin-top: 3px; color: rgba(255,255,255,.85); font-size: 13.5px; }
+.hero-wx { white-space: nowrap; }
+/* weather of the week: 7 days that fit the phone's width, nothing to swipe */
+.wx-card { margin-bottom: 14px; }
+.wx-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; margin-top: 6px; }
+.wx-day { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 2px 6px; border-radius: 12px; background: var(--surface2); text-align: center; min-width: 0; }
+.wx-day.has-ev { background: color-mix(in srgb, var(--gold) 22%, var(--surface)); box-shadow: inset 0 0 0 2px var(--gold); }
+.wx-d { font-size: 12px; font-weight: 800; color: var(--muted); text-transform: capitalize; }
+.wx-ic { font-size: 24px; line-height: 1.1; }
+.wx-t { display: flex; flex-direction: column; line-height: 1.15; }
+.wx-t b { font-size: 15px; }
+.wx-t i { font-style: normal; font-size: 12px; color: var(--muted); }
+.wx-r { font-size: 11px; font-weight: 700; color: #1565c0; min-height: 13px; white-space: nowrap; }
+.wx-ev { position: absolute; top: -7px; right: -3px; font-size: 13px; }
+.wx-alerts { margin: 10px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.wx-alerts li { padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, var(--bad) 9%, var(--surface)); font-size: 14px; }
+.wx-ok { margin: 10px 0 0; font-size: 14px; color: var(--good); font-weight: 600; }
+.wx-trip { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+.wx-trip h3 { font-size: 16px; margin: 0 0 4px; }
+.wx-trip p { margin: 2px 0; }
+.wx-trip-line { display: flex; align-items: center; gap: 8px; }
+.wx-trip-line .wx-ic { font-size: 28px; }
+.wx-warn { padding: 6px 10px; border-radius: 10px; background: color-mix(in srgb, var(--bad) 9%, var(--surface)); font-size: 14px; }
+@media (max-width: 400px) { .wx-day { padding: 7px 0 5px; } .wx-ic { font-size: 20px; } .wx-t b { font-size: 14px; } .wx-d { font-size: 11px; } .wx-r { font-size: 10px; } }
 .ru-me { display: flex; flex-direction: column; align-items: center; gap: 4px; color: inherit; }
 .avatar { position: relative; }
 .avatar-club { position: absolute; right: -6px; bottom: -6px; width: 22px; height: 22px; border-radius: 50%; background: #fff; display: grid; place-items: center; box-shadow: 0 1px 3px rgba(0,0,0,.4); }
