@@ -53,6 +53,18 @@ const UI = (() => {
 
   const fmtDate = (d, opts = { weekday: 'short', day: 'numeric', month: 'short' }) => d ? new Date(d + 'T12:00').toLocaleDateString('fr-FR', opts) : '';
   const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+  // A coach's little sentence, shown next to his name (messages, list of dirigeants)
+  const MOTTO_MAX = 80;
+  const motto = s => s && s.motto ? `<i class="motto">« ${esc(String(s.motto).slice(0, MOTTO_MAX))} »</i>` : '';
+  const MOTTO_IDEAS = [
+    'Le ballon, lui, ne se plaint jamais.', 'Gagner, c\'est bien. Progresser, c\'est mieux.', 'On perd ensemble, on gagne ensemble.',
+    'Un bon contrôle vaut mieux que deux dribbles ratés.', 'Le terrain dit toujours la vérité.', 'Pas de talent sans travail.',
+    'Mon sifflet et moi, on se comprend.', 'La passe, c\'est le plus beau des cadeaux.', 'Tomber sept fois, se relever huit.',
+    'Le plus important, c\'est le prochain match.', 'Plots rangés, coach heureux.', 'Le mental fait la différence.',
+    'Jouer simple, c\'est le plus difficile.', 'Un vestiaire uni vaut tous les trophées.', 'Les chaussures propres, les idées claires.',
+    'Le foot, c\'est 90 minutes de bonheur (et 3 heures de lessive).', 'Le jeu avant l\'enjeu.', 'Qui ne tente rien ne marque rien.',
+  ];
+  const mottoIdea = cur => { const l = MOTTO_IDEAS.filter(x => x !== cur); return l[Math.floor(Math.random() * l.length)]; };
   const accentFor = bib => ({ jaune: '#a16207', blanc: '#13245a', vert: '#3f7d0a', orange: '#c2410c' }[bib] || (Board.BIBS[bib] || Board.BIBS.bleu)[0]);
 
   // File picker that works on iPhone/iPad: the input must be in the page, and no unknown extensions in "accept"
@@ -96,5 +108,5 @@ const UI = (() => {
     });
   }
 
-  return { esc, $, $$, toast, modal, confirmBox, busy, thumb, fmtDate, today, accentFor, pickFiles, chooseFiles };
+  return { esc, $, $$, toast, modal, confirmBox, busy, thumb, fmtDate, today, accentFor, pickFiles, chooseFiles, motto, mottoIdea, MOTTO_MAX };
 })();

@@ -92,7 +92,7 @@ const Messages = (() => {
         <button class="btn soft wide" id="newDm">${I.plus}<span>Écrire à un éducateur</span></button>
       </aside>
       <section class="conv">${ch ? `
-        <header class="conv-head"><a class="icon-btn conv-back" href="#/messages" aria-label="Retour">${I.back}</a><b>${esc(channelName(ch))}</b></header>
+        <header class="conv-head"><a class="icon-btn conv-back" href="#/messages" aria-label="Retour">${I.back}</a><span class="conv-title"><b>${esc(channelName(ch))}</b>${ch.startsWith('dm:') ? UI.motto(Store.get('staff', ch.split(':').slice(1).find(id => id !== (me() || {}).id))) : ''}</span></header>
         <div class="conv-body" id="convBody"></div>
         <form class="composer" id="composer"><textarea id="msgText" rows="1" maxlength="2000" placeholder="Écris ton message…" aria-label="Message"></textarea>
           <button class="btn primary" type="submit" aria-label="Envoyer">${I.upload}</button></form>`
@@ -108,7 +108,7 @@ const Messages = (() => {
         const d = new Date(m.created_at), ds = d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
         const sep = ds !== day ? `<div class="day-sep">${esc(ds)}</div>` : ''; day = ds;
         const mine = m.author_id === me().id;
-        return `${sep}<div class="bubble ${mine ? 'mine' : ''}" data-m="${m.id}">${mine ? '' : `<b class="author">${crestOf(staffOf(m))}${esc(authorName(m))}</b>`}<p>${esc(m.body).replace(/\n/g, '<br>')}</p>
+        return `${sep}<div class="bubble ${mine ? 'mine' : ''}" data-m="${m.id}">${mine ? '' : `<span class="author-line"><b class="author">${crestOf(staffOf(m))}${esc(authorName(m))}</b>${UI.motto(staffOf(m))}</span>`}<p>${esc(m.body).replace(/\n/g, '<br>')}</p>
           <span class="time">${d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}${mine || Auth.isAdmin() ? ` · <button class="linkish" data-delm="${m.id}">supprimer</button>` : ''}</span></div>`;
       }).join('') : '<p class="muted conv-hint">Pas encore de message. Écris le premier !</p>';
       body.scrollTop = body.scrollHeight;
@@ -136,7 +136,7 @@ const Messages = (() => {
   function pickCoach() {
     const others = S().staff.filter(s => s.id !== me().id).sort(Store.byName);
     const close = UI.modal({ title: 'Écrire à un éducateur', noFocus: true,
-      body: others.length ? `<div class="people">${others.map(s => `<button class="person-main" data-to="${s.id}"><span class="pnum role">${I.whistle}</span><span class="pmain"><b class="author">${crestOf(s)}${esc(coachName(s))}</b><span class="muted">${esc([s.role, (s.teamIds || []).map(id => (Store.get('teams', id) || {}).name).filter(Boolean).join(', '), s.club ? 'club de cœur : ' + Clubs.name(s.club) : ''].filter(Boolean).join(' · '))}</span></span></button>`).join('')}</div>` : '<p class="muted">Aucun autre dirigeant dans l\'appli.</p>',
+      body: others.length ? `<div class="people">${others.map(s => `<button class="person-main" data-to="${s.id}"><span class="pnum role">${I.whistle}</span><span class="pmain"><b class="author">${crestOf(s)}${esc(coachName(s))}</b>${UI.motto(s)}<span class="muted">${esc([s.role, (s.teamIds || []).map(id => (Store.get('teams', id) || {}).name).filter(Boolean).join(', '), s.club ? 'club de cœur : ' + Clubs.name(s.club) : ''].filter(Boolean).join(' · '))}</span></span></button>`).join('')}</div>` : '<p class="muted">Aucun autre dirigeant dans l\'appli.</p>',
       onOpen: r => $$('[data-to]', r).forEach(b => b.onclick = () => { close(); location.hash = '#/messages/' + encodeURIComponent(dmKey(me().id, b.dataset.to)); }) });
   }
   function leave() { fast = false; onNew = null; start(); }

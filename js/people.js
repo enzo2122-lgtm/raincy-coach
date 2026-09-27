@@ -41,7 +41,7 @@ const People = (() => {
     return `<div class="person">
       <button class="person-main" data-person="${p.id}" data-kind="staff">
         <span class="pnum role">${I.whistle}</span>
-        <span class="pmain"><b>${esc(name(p))}</b><span class="muted">${esc(p.role || '')}${teamId ? '' : ' · ' + esc(teamNames(p.teamIds) || 'aucune catégorie')}${p.playerId && Store.get('players', p.playerId) ? ' · aussi joueur (' + esc(teamNames(Store.get('players', p.playerId).teamIds)) + ')' : ''}</span></span>
+        <span class="pmain"><b>${esc(name(p))}</b>${UI.motto(p)}<span class="muted">${esc(p.role || '')}${teamId ? '' : ' · ' + esc(teamNames(p.teamIds) || 'aucune catégorie')}${p.playerId && Store.get('players', p.playerId) ? ' · aussi joueur (' + esc(teamNames(Store.get('players', p.playerId).teamIds)) + ')' : ''}</span></span>
       </button>
       ${p.phone ? `<a class="icon-btn" href="${telHref(p.phone)}" aria-label="Appeler ${esc(name(p))}">${I.phone}</a>` : ''}
       ${teamId ? `<button class="icon-btn" data-unlink="${p.id}" data-kind="staff" aria-label="Retirer ${esc(name(p))} de la catégorie">${I.x}</button>` : ''}
@@ -121,6 +121,7 @@ const People = (() => {
         <label class="fld"><span>Prénom</span><input id="sFirst" value="${esc(p.firstName)}"></label></div>
         <div class="row2"><label class="fld"><span>Rôle</span><select id="sRole">${opt(ROLES, p.role)}</select></label>
         <label class="fld"><span>Club de cœur (son blason s'affiche dans les messages)</span><select id="sClub">${Clubs.options(p.club)}</select></label></div>
+        <label class="fld"><span>Petite phrase (drôle ou philosophique, à côté de son nom)</span><input id="sMotto" value="${esc(p.motto || '')}" maxlength="${UI.MOTTO_MAX}"></label>
         <div class="lbl">Catégories (plusieurs possibles)</div>${Auth.isAdmin() || isNew ? teamChips(p.teamIds) : `<p class="tip">🔒 ${esc(teamNames(p.teamIds) || 'Aucune catégorie')} · seul un responsable peut changer les catégories d'un dirigeant.</p>`}
         <div class="row2"><label class="fld"><span>Téléphone</span><input id="sTel" type="tel" inputmode="tel" value="${esc(p.phone || '')}"></label>
         <label class="fld"><span>E-mail</span><input id="sMail" type="email" inputmode="email" value="${esc(p.email || '')}"></label></div>
@@ -135,7 +136,7 @@ const People = (() => {
         { label: 'Enregistrer', kind: 'primary', onClick: (c, r) => {
           const v = id => $('#' + id, r).value.trim();
           if (!v('sLast') && !v('sFirst')) { toast('Écris au moins le nom ou le prénom', 'err'); return false; }
-          Object.assign(p, { lastName: v('sLast').toUpperCase(), firstName: v('sFirst'), role: v('sRole'), club: v('sClub'), phone: v('sTel'), email: v('sMail'), notes: $('#sNotes', r).value });
+          Object.assign(p, { lastName: v('sLast').toUpperCase(), firstName: v('sFirst'), role: v('sRole'), club: v('sClub'), motto: v('sMotto').replace(/\s+/g, ' '), phone: v('sTel'), email: v('sMail'), notes: $('#sNotes', r).value });
           if (Auth.isAdmin() || isNew) p.teamIds = pickedTeams(r, p.teamIds || []);
           const sp = $('#sPlayer', r); if (sp) { if (sp.value) p.playerId = sp.value; else delete p.playerId; }
           Store.upsert('staff', p); toast('Enregistré'); opts.onSave && opts.onSave(p);

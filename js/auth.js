@@ -471,6 +471,8 @@ const Auth = (() => {
     const me = `<section class="card"><h2>${I.whistle}Mon compte</h2>
       <p>Connecté : <b>${esc(Store.fullName(user))}</b>${user.role ? ' · ' + esc(user.role) : ''}${isAdmin() ? ' · <span class="badge">Responsable</span>' : ''}</p>
       <label class="fld"><span>Mon club de cœur (son blason s'affiche devant mon nom dans les messages)</span><select id="myClub">${Clubs.options(user.club)}</select></label>
+      <label class="fld"><span>Ma petite phrase (drôle ou philosophique, à côté de mon nom)</span><input id="myMotto" value="${esc(user.motto || '')}" maxlength="${UI.MOTTO_MAX}" placeholder="Ex : Le jeu avant l'enjeu."></label>
+      <button class="btn soft" data-auth="mottoIdea">🎲<span>Une idée</span></button>
       <p class="muted small">${sess() ? 'Ton compte est sur le serveur du club : connecte-toi sur n\'importe quel appareil avec ton nom, ton prénom et ton mot de passe.' : 'Ton compte est seulement sur cet appareil.'}</p>
       <div class="chips"><button class="btn" data-auth="pw">${I.edit}<span>Changer mon mot de passe</span></button>
       <button class="btn" data-auth="logout">${I.back}<span>Se déconnecter</span></button>
@@ -502,6 +504,7 @@ const Auth = (() => {
   }
   const accOf = id => (serverAcc || []).find(a => a.staff_id === id) || {};
   async function onSettingsClick(b, rerender) {
+    if (b.dataset.auth === 'mottoIdea') { const inp = document.getElementById('myMotto'); if (inp) { inp.value = UI.mottoIdea(inp.value); saveMotto(inp.value); } return; }
     if (b.dataset.auth === 'logout') { try { sessionStorage.removeItem(PREVIEW); } catch (e) {} return logout(); }
     if (b.dataset.auth === 'preview') return previewDialog();
     if (b.dataset.auth === 'stopPreview') return stopPreview();
@@ -547,7 +550,13 @@ const Auth = (() => {
       }
     }
   }
+  function saveMotto(v) {
+    const s = Store.get('staff', user.id); if (!s) return;
+    s.motto = String(v || '').replace(/\s+/g, ' ').trim().slice(0, UI.MOTTO_MAX); Store.upsert('staff', s); user = s;
+    toast(s.motto ? 'Phrase enregistrée' : 'Phrase retirée');
+  }
   function onSettingsChange(t) {
+    if (t.id === 'myMotto') { saveMotto(t.value); return; }
     if (t.id === 'myClub') { const s = Store.get('staff', user.id); if (s) { s.club = t.value; Store.upsert('staff', s); user = s; toast(t.value ? 'Club de cœur : ' + Clubs.name(t.value) : 'Club de cœur retiré'); } return; }
     if (!t.dataset.admin) return;
     const id = t.dataset.admin; A().users[id] = Object.assign(U(id) || {}, { admin: t.checked }); Store.save();
