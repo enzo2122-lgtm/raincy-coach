@@ -337,6 +337,11 @@ const Board = (() => {
         const A = st.pos[o.id], B = nx.pos[o.id], mv = (nx.moves || {})[o.id] || {};
         const big = o.type === 'player';
         drawArrow(ctx, cam, A, B, mv.c || 0, ty, big ? r * 1.05 : r * .4, big ? r * 1.1 : r * .5, ed ? .9 : 1);
+        if (ed && ed.sel && ed.sel.kind === 'move' && ed.sel.id === o.id) {
+          // where it goes: a see-through copy with a handle to drag the end
+          ctx.save(); ctx.globalAlpha = .45; drawObject(ctx, cam, o, B, opts); ctx.restore();
+          handle(ctx, ...cam.toS(B), cam);
+        }
       });
     }
     (st.arrows || []).forEach(a => {
@@ -364,6 +369,12 @@ const Board = (() => {
       const p = st.pos[o.id]; if (!p) continue;
       const rad = o.type === 'player' ? r * 1.15 : o.type === 'goal' ? r * 1.5 : r * .8;
       if (dist(p, w) < rad) return { kind: 'obj', id: o.id };
+    }
+    // a movement towards the next step: touch its arrow
+    if (k < sc.steps.length - 1) for (const o of objs) {
+      if (moveType(sc, k, o.id) === 'none') continue;
+      const A = st.pos[o.id], B = sc.steps[k + 1].pos[o.id], c = ((sc.steps[k + 1].moves || {})[o.id] || {}).c || 0;
+      for (let j = 4; j <= 20; j++) if (dist(bez(A, B, c, j / 20), w) < r * .7) return { kind: 'move', id: o.id };
     }
     for (const a of st.arrows || []) {
       for (let j = 0; j <= 20; j++) if (dist(bez(a.a, a.b, a.c || 0, j / 20), w) < r * .6) return { kind: 'arrow', id: a.id };

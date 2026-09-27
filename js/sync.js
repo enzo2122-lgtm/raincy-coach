@@ -78,7 +78,9 @@ const Sync = (() => {
     for (const [k, [col, x]] of Object.entries(cur)) {
       if (fp(x) === H[k]) continue;
       if (col !== 'club') x.updatedAt = Math.max(now, (x.updatedAt || 0) + 1);
-      out.push({ k, col, id: col === 'club' ? 'club' : x.id, x, u: col === 'club' ? now : x.updatedAt });
+      // a copy taken now: what is typed or drawn while it travels stays "to send" (otherwise the server's echo would erase it)
+      const snap = JSON.parse(JSON.stringify(x));
+      out.push({ k, col, id: col === 'club' ? 'club' : x.id, x: snap, f: fp(snap), u: col === 'club' ? now : x.updatedAt });
     }
     Object.keys(H).forEach(k => { if (!cur[k]) out.push({ k, col: k.slice(0, k.indexOf('/')), id: k.slice(k.indexOf('/') + 1), del: true, u: now }); });
     if (!out.length) return 0;
@@ -86,7 +88,7 @@ const Sync = (() => {
     const send = async () => {
       if (!batch.length) return;
       await Cloud.push(batch.map(b => ({ col: b.col, id: b.id, data: b.del ? null : b.data, u: b.u, del: !!b.del })));
-      batch.forEach(b => { if (b.del) delete H[b.k]; else H[b.k] = fp(b.x); });
+      batch.forEach(b => { if (b.del) delete H[b.k]; else H[b.k] = b.f; });
       batch = []; size = 0;
     };
     for (const o of out) {

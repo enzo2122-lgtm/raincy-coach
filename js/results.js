@@ -45,7 +45,7 @@ const Results = (() => {
     // Every coach opens every match (the other categories' ones to follow and cheer them)
     const row = m => {
       const r = result(m), [h, a] = sides(m);
-      return `<a class="rs-row" href="#/match/${m.id}">
+      return `<a class="rs-row ${m.exempt ? '' : m.home ? 'side-home' : 'side-away'}" href="#/match/${m.id}" title="${m.home ? 'À domicile' : 'À l\'extérieur'}">
         <span class="rs-cat" style="background:${Planning.teamColor(m.teamId)}">${esc(teamName(m))}</span>
         <span class="rs-teams"><b class="${m.home ? 'us' : ''}">${esc(h)}</b><span class="rs-score">${m.played ? esc(score(m)) : esc(m.time || '–')}</span><b class="${m.home ? '' : 'us'}">${esc(a)}</b></span>
         ${r ? `<span class="res res-${r}">${RES[r][0]}</span>` : `<span class="muted small">${esc(fmtDate(m.date))}</span>`}
@@ -66,6 +66,7 @@ const Results = (() => {
           <div class="tile"><b>${bp} – ${bc}</b><span>buts pour – contre</span></div>
         </div>
       </section>
+      <div class="side-legend"><span class="side-home">🏠 Domicile</span><span class="side-away">🚌 Extérieur</span></div>
       ${nextList.length ? `<section class="card"><h2>${I.calendar}À venir · ${esc(weekendName(nextMon))}</h2><div class="rs-list">${nextList.map(row).join('')}</div></section>` : ''}
       ${weekKeys.length ? weekKeys.map(k => { const list = weeks.get(k).sort((a, b) => rank(a) - rank(b) || a.date.localeCompare(b.date));
         return `<section class="card"><div class="row-head"><h2>${I.medal}${esc(weekendName(k))}</h2><div class="rs-tally">${tally(list)}</div></div><div class="rs-list">${list.map(row).join('')}</div></section>`; }).join('')
@@ -93,7 +94,7 @@ const Results = (() => {
     if (!played.length) return '';
     const last = played.map(m => monday(m.date)).sort().reverse()[0], list = played.filter(m => monday(m.date) === last).sort((a, b) => rank(a) - rank(b));
     return `<section class="card"><h2>${I.medal}Résultats du club · ${esc(weekendName(last).replace('Week-end du ', ''))}</h2>
-      <div class="rs-mini">${list.slice(0, 6).map(m => { const r = result(m); return `<span class="rs-chip"><i style="background:${Planning.teamColor(m.teamId)}">${esc(teamName(m))}</i>${esc(score(m))}<span class="res res-${r}">${RES[r][0]}</span></span>`; }).join('')}</div>
+      <div class="rs-mini">${list.slice(0, 6).map(m => { const r = result(m); return `<span class="rs-chip ${m.home ? 'side-home' : 'side-away'}"><i style="background:${Planning.teamColor(m.teamId)}">${esc(teamName(m))}</i>${esc(score(m))}<span class="res res-${r}">${RES[r][0]}</span></span>`; }).join('')}</div>
       <a class="btn soft" href="#/resultats" style="margin-top:8px">${I.medal}<span>Tous les résultats de la saison</span></a></section>`;
   }
 

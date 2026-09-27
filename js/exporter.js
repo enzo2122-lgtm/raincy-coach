@@ -208,6 +208,7 @@ const Exporter = (() => {
     const P = Doc(club);
     P.header(sc.name, fieldLabel(sc.field));
     P.facts([['Terrain', fieldLabel(sc.field)], ['Étapes', String(sc.steps.length)]]);
+    if (sc.notes) { P.label('Notes'); P.para(sc.notes); }
     schemaImages(P, sc, o);
     return deliver(P.blob(), safeName(sc.name) + '.pdf');
   }

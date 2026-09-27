@@ -246,6 +246,17 @@ a.hero-chip:hover { background: rgba(201,164,92,.22); }
 .quick-btn svg { grid-row: span 2; width: 34px; height: 34px; }
 .quick-btn b { font-family: var(--round); font-size: 18px; }
 .quick-btn span { font-size: 14px; opacity: .85; }
+/* Home / away: a green or blue tint and a stripe on the left, everywhere a match is shown */
+:root { --home-c: #15803d; --away-c: #2563eb; }
+.side-home { background: color-mix(in srgb, var(--home-c) 11%, var(--surface)) !important; box-shadow: inset 5px 0 0 var(--home-c); }
+.side-away { background: color-mix(in srgb, var(--away-c) 11%, var(--surface)) !important; box-shadow: inset 5px 0 0 var(--away-c); }
+.res-list a.side-home, .res-list a.side-away { padding-left: 12px; padding-right: 8px; border-radius: 10px; margin-bottom: 4px; border-bottom: 0; }
+.side-tag { white-space: nowrap; display: inline-block; font-style: normal; font-weight: 700; font-size: 13px; padding: 1px 7px; border-radius: 7px; color: #fff; }
+.side-home .side-tag { background: var(--home-c); }
+.side-away .side-tag { background: var(--away-c); }
+.side-tag.big { font-size: 15px; padding: 3px 10px; margin-right: 4px; }
+.side-legend { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 12px; }
+.side-legend span { font-size: 13px; font-weight: 700; padding: 3px 10px 3px 12px; border-radius: 8px; }
 .rowlink { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; margin: 0 -6px; border-radius: 12px; background: var(--surface2); }
 .rowlink div { display: flex; flex-direction: column; }
 .rowlink b i { font-style: normal; color: var(--muted); font-weight: 500; }
@@ -380,6 +391,12 @@ a.hero-chip:hover { background: rgba(201,164,92,.22); }
 .ed-stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
 .ed-hint { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); background: rgba(8, 22, 14, .8); color: #fff; font-size: 14px; font-weight: 600; padding: 6px 14px; border-radius: 999px; pointer-events: none; max-width: calc(100% - 20px); text-align: center; transition: opacity .4s; }
 .ed-hint.gone { opacity: 0; }
+.ed-sub { position: absolute; top: 6px; left: 6px; right: 6px; display: flex; justify-content: center; pointer-events: none; }
+.ed-sub[hidden] { display: none; }
+.ed-sub .chips { pointer-events: auto; flex-wrap: nowrap; overflow-x: auto; max-width: 100%; gap: 4px; padding: 4px; margin: 0; border-radius: 999px; background: rgba(8, 22, 14, .78); scrollbar-width: none; }
+.ed-sub .chip { min-height: 34px; padding: 0 10px; font-size: 13.5px; background: transparent; color: #fff; border-color: transparent; flex: none; }
+.ed-sub .chip.on { background: var(--accent); color: var(--accent-ink); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .ed-side { grid-area: side; overflow-y: auto; padding: 14px 14px 24px; border-left: 1px solid var(--line); }
 .ed-side h3 { font-size: 16px; font-weight: 800; margin: 18px 0 8px; }
 .ed-side h3:first-child { margin-top: 0; }
@@ -726,6 +743,12 @@ body:not(.editing) main#view { padding-bottom: 96px; }
 /* phone week: the 🚌 stays (away match), just smaller, glued to the category */
 .plan-wrap.wk .mt-away .ic { font-size: 9px; margin-right: 1px; }
 .mt-away.mine { outline: 2px solid var(--gold); outline-offset: -2px; }
+/* same home / away code as the rest of the app: green stripe on a home match, blue on an away match */
+.bk.k-match { box-shadow: inset 4px 0 0 var(--home-c); }
+.mt-away:not(.notime) { box-shadow: inset 4px 0 0 var(--away-c), inset 0 -3px 0 var(--away-c); }
+.plan-legend .lg-home, .plan-legend .lg-away { width: 14px; height: 14px; border-radius: 4px; display: inline-block; }
+.plan-legend .lg-home { background: var(--home-c); }
+.plan-legend .lg-away { background: var(--away-c); }
 .bk.mt-home { background-color: color-mix(in srgb, var(--mc) 22%, var(--surface)) !important; color: var(--ink) !important; border: 2px dashed var(--mc); box-shadow: none; }
 .bk.mt-home b { color: var(--mc); }
 .plan-legend .lg-todo { border: 2px dashed var(--muted); background: transparent; }
@@ -787,6 +810,9 @@ button.plan-head { display: block; width: 100%; border: 0; background: none; fon
 .rs-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px 4px 4px; border-radius: 10px; background: var(--surface2); font-weight: 800; font-variant-numeric: tabular-nums; }
 .rs-chip i { font-style: normal; color: #fff; padding: 3px 7px; border-radius: 7px; font-size: 12.5px; }
 .rs-chip .res { font-size: 11px; padding: 2px 7px; }
+.rs-chip.side-home, .rs-chip.side-away { padding-left: 10px; }
+.chip.ch-home.on { --accent: var(--home-c); background: var(--home-c); border-color: var(--home-c); color: #fff; }
+.chip.ch-away.on { --accent: var(--away-c); background: var(--away-c); border-color: var(--away-c); color: #fff; }
 @media (max-width: 760px) {
   .rs-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .rs-tiles .tile:first-child { grid-column: 1 / -1; }
