@@ -49,7 +49,7 @@ const Store = (() => {
     mergeStaffDuplicates();
     sortTeams();
   }
-  // Category order everywhere: Seniors, Vétérans, École de foot, then U6, U7 … U20 (a team like « U13 A » comes right after U13)
+  // Category order everywhere: Seniors, Vétérans, École de foot, then U6, U7 … U18 (a team like « U13 A » comes right after U13)
   const catKey = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/\s+/g, '');
   function teamRank(t) {
     const base = k => { if (/^SENIOR/.test(k)) return 0; if (/^VET/.test(k)) return 1; if (/^ECOLE/.test(k)) return 2; const m = /^U(\d+)/.exec(k); return m ? 10 + +m[1] : null; };

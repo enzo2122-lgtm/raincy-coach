@@ -78,7 +78,7 @@ const Messages = (() => {
     }
     const ch = chParam && visible(decodeURIComponent(chParam)) ? decodeURIComponent(chParam) : '';
     const mineTeams = new Set((me().teamIds || []));
-    const teams = S().teams.slice(); // club order: Seniors, Vétérans, U6 … U20
+    const teams = S().teams.slice(); // club order: Seniors, Vétérans, École de foot, U6 … U18
     const dms = [...new Set(msgs.map(m => m.channel).filter(isMineDm))];
     const item = c => `<a class="ch ${c === ch ? 'on' : ''}" href="#/messages/${encodeURIComponent(c)}"><span class="ch-ic">${c === 'general' ? I.team : c.startsWith('team:') ? I.whistle : (crestOf(Store.get('staff', c.split(':').slice(1).find(id => id !== (me() || {}).id))) || I.edit)}</span>
       <span class="ch-name">${esc(channelName(c))}</span>${unread(c) ? `<i class="ch-badge">${unread(c)}</i>` : ''}</a>`;

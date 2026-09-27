@@ -7,7 +7,8 @@ const People = (() => {
   const ROLES = ['Éducateur', 'Éducateur adjoint', 'Responsable de catégorie', 'Dirigeant', 'Accompagnateur', 'Entraîneur des gardiens', 'Arbitre bénévole', 'Président', 'Vice-président', 'Secrétaire', 'Trésorier', 'Autre'];
   const RELS = ['Mère', 'Père', 'Tuteur', 'Autre'];
   // Which category (team) gathers each licence sub-category
-  const TEAM_OF_SUB = { 'Vétéran': 'Vétérans', 'Senior': 'Seniors', 'Senior U20': 'Seniors', U19: 'U19', U18: 'U19', U17: 'U17', U16: 'U17', U15: 'U15', U14: 'U15', U13: 'U13', U12: 'U13', U11: 'U11', U10: 'U11', U9: 'U9', U8: 'U9', U7: 'U7', U6: 'U7' };
+  // Footclubs sub-category → category of the club (no U19 / U20 at the club: those players are in Seniors)
+  const TEAM_OF_SUB = { 'Vétéran': 'Vétérans', 'Senior': 'Seniors', 'Senior U20': 'Seniors', U19: 'Seniors', U18: 'U18', U17: 'U17', U16: 'U16', U15: 'U15', U14: 'U14', U13: 'U13', U12: 'U12', U11: 'U11', U10: 'U10', U9: 'U9', U8: 'U8', U7: 'U7', U6: 'U6' };
   const FORMAT_OF_TEAM = { U7: '5', U9: '5', U11: '8', U13: '8' };
 
   const name = Store.fullName;
@@ -81,7 +82,7 @@ const People = (() => {
         ${isNew ? '' : notesHistory(p)}`,
       onOpen: r => {
         bindChips(r);
-        // A new date of birth selects the matching category (U6 … U20, Seniors, Vétérans)
+        // A new date of birth selects the matching category (U6 … U18, Seniors, Vétérans)
         $('#pBirth', r).onchange = e => {
           const cat = catOf({ birth: e.target.value, subcat: $('#pSub', r).value }); if (!cat) return;
           const t = findCat(cat); if (!t) return;
@@ -249,23 +250,24 @@ const People = (() => {
     return out;
   }
   /* ---------- categories by year of birth (FFF: a season starts on 1 July, U13 in 2026-2027 = born in 2014) ---------- */
-  const AGE_CATS = ['U6', 'U7', 'U8', 'U9', 'U10', 'U11', 'U12', 'U13', 'U14', 'U15', 'U16', 'U17', 'U18', 'U19', 'U20', 'Seniors', 'Vétérans'];
+  const AGE_CATS = ['U6', 'U7', 'U8', 'U9', 'U10', 'U11', 'U12', 'U13', 'U14', 'U15', 'U16', 'U17', 'U18', 'Seniors', 'Vétérans'];
+  const REMOVED_CATS = ['U19', 'U20']; // the club has no U19 / U20: from 19 years old, players are in Seniors
   const seasonStart = (d = new Date()) => d.getMonth() >= 6 ? d.getFullYear() : d.getFullYear() - 1;
   const seasonLabel = () => `${seasonStart()}-${seasonStart() + 1}`;
   // From U9 to Seniors, each category also has two teams A and B: the coach picks their players among the category's licenci\u00e9s
-  const AB_FROM = ['U9', 'U10', 'U11', 'U12', 'U13', 'U14', 'U15', 'U16', 'U17', 'U18', 'U19', 'U20', 'Seniors'];
+  const AB_FROM = ['U9', 'U10', 'U11', 'U12', 'U13', 'U14', 'U15', 'U16', 'U17', 'U18', 'Seniors'];
   const EXTRA_CATS = ['\u00c9cole de foot']; // filled by hand
   const catKey = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/\s+/g, '');
   const isSubTeam = t => /\s[A-Z]$/.test(String(t.name || '').trim()); // \u00ab U13 A \u00bb, \u00ab Seniors B \u00bb
   const isAgeTeam = t => AGE_CATS.some(c => catKey(c) === catKey(t.name) || (!isSubTeam(t) && catKey(c) === catKey(t.category)));
   // The category itself (\u00ab U13 \u00bb), never one of its teams (\u00ab U13 A \u00bb)
   const findCat = cat => S().teams.find(x => catKey(x.name) === catKey(cat)) || S().teams.find(x => !isSubTeam(x) && catKey(x.category) === catKey(cat));
-  // Category of a player: U + age reached during the season; 21 and over: Seniors, or Vétérans with a vétéran licence
+  // Category of a player: U + age reached during the season; 19 and over: Seniors (no U19 / U20 at the club), or Vétérans with a vétéran licence
   function catOf(p) {
     const y = +(String(p.birth || '').slice(0, 4)); if (!y) return null;
     const age = seasonStart() + 1 - y;
     if (/v[ée]t/i.test(p.subcat || '') || age >= 36) return 'Vétérans';
-    if (age >= 21) return 'Seniors';
+    if (age >= 19) return 'Seniors';
     return 'U' + Math.max(6, age);
   }
   const formatOf = cat => { if (/^[ÉE]cole/i.test(cat)) return '5'; const n = +cat.slice(1); return cat[0] !== 'U' ? '11' : n <= 9 ? '5' : n <= 13 ? '8' : '11'; };
@@ -283,7 +285,20 @@ const People = (() => {
       if (!S().teams.some(x => catKey(x.name) === catKey(name))) Store.upsert('teams', { id: 'cat-' + catKey(name), name, category: base, format: formatOf(base) });
     }));
   }
-  const sortTeams = () => Store.sortTeams(); // Seniors, Vétérans, then U6 … U20
+  const sortTeams = () => Store.sortTeams(); // Seniors, Vétérans, École de foot, then U6 … U18
+  // U19 and U20 removed (done once): their players, dirigeants, sessions, matches and schemas go to Seniors,
+  // then the two categories and their teams A / B are deleted on every device
+  function removeOldCats() {
+    const gone = S().teams.filter(t => REMOVED_CATS.some(c => catKey(c) === catKey(t.name) || catKey(c) === catKey(t.category)));
+    if (!gone.length) return false;
+    const sen = ageTeam('Seniors'), ids = new Set(gone.map(t => t.id));
+    const swap = list => [...new Set((list || []).map(id => ids.has(id) ? sen.id : id))];
+    ['players', 'staff'].forEach(col => S()[col].slice().forEach(x => { const n = swap(x.teamIds); if (n.join() !== (x.teamIds || []).join()) { x.teamIds = n; Store.upsert(col, x); } }));
+    ['matches', 'trainings', 'schemas'].forEach(col => S()[col].slice().forEach(x => { if (ids.has(x.teamId)) { x.teamId = sen.id; Store.upsert(col, x); } }));
+    if (ids.has(S().ui.teamId)) S().ui.teamId = '';
+    gone.forEach(t => Store.remove('teams', t.id));
+    return true;
+  }
   // Creates every category and puts each player with a date of birth in his one (other teams, e.g. « U13 A », are kept)
   function sortByBirth() {
     AGE_CATS.forEach(ageTeam);
@@ -304,6 +319,7 @@ const People = (() => {
     if (!Auth.isAdmin() || !S().players.length) return false;
     const season = seasonLabel(), c = S().club;
     let changed = false;
+    if (!c.noU19U20) { removeOldCats(); c.noU19U20 = 1; changed = true; }
     if (!c.teamsAB) { AGE_CATS.forEach(ageTeam); extraTeams(); c.teamsAB = 1; changed = true; }
     if (c.catSeason === season && AGE_CATS.every(k => findCat(k))) { if (changed) { sortTeams(); Store.save(); } return changed; }
     if (c.catSeason === season) { AGE_CATS.forEach(ageTeam); sortTeams(); Store.save(); return true; }
@@ -311,7 +327,7 @@ const People = (() => {
   }
   function sortByBirthDialog(done) {
     const y = seasonStart() + 1;
-    UI.confirmBox(`Créer les catégories U6 à U20, Seniors et Vétérans, et ranger chaque joueur selon son année de naissance (saison ${seasonLabel()} : U13 = né en ${y - 13}, U20 = né en ${y - 20}, Seniors = né en ${y - 21} ou avant) ? Les autres équipes (ex : « U13 A ») et les dirigeants ne changent pas.`, 'Ranger').then(ok => {
+    UI.confirmBox(`Créer les catégories U6 à U18, Seniors et Vétérans, et ranger chaque joueur selon son année de naissance (saison ${seasonLabel()} : U13 = né en ${y - 13}, U18 = né en ${y - 18}, Seniors = né en ${y - 19} ou avant) ? Les autres équipes (ex : « U13 A ») et les dirigeants ne changent pas.`, 'Ranger').then(ok => {
       if (!ok) return;
       const r = sortByBirth(); S().club.catSeason = seasonLabel(); Store.save();
       toast(`${r.moved} joueur${r.moved > 1 ? 's' : ''} rangé${r.moved > 1 ? 's' : ''}${r.noBirth ? ` · ${r.noBirth} sans date de naissance` : ''}`);
@@ -326,7 +342,7 @@ const People = (() => {
   }
   function pasteList(done) {
     modal({ title: 'Coller une liste de joueurs',
-      body: `<p class="tip">Dans Footclubs, sélectionne les lignes de la liste des licenciés, copie-les puis colle-les ici. Il faut au minimum le nom, le prénom et la date de naissance sur chaque ligne. Les joueurs sont rangés dans leur catégorie selon leur année de naissance (U6 à U20, Seniors, Vétérans).</p>
+      body: `<p class="tip">Dans Footclubs, sélectionne les lignes de la liste des licenciés, copie-les puis colle-les ici. Il faut au minimum le nom, le prénom et la date de naissance sur chaque ligne. Les joueurs sont rangés dans leur catégorie selon leur année de naissance (U6 à U18, Seniors à partir de 19 ans, Vétérans).</p>
         <textarea id="pasteTxt" rows="9" placeholder="DUPONT Lucas   12/03/2014   Libre / U13 (- 13 ans)"></textarea><p class="muted small" id="pasteInfo"></p>`,
       onOpen: r => { $('#pasteTxt', r).oninput = e => { const n = parseLines(e.target.value).length; $('#pasteInfo', r).textContent = n ? `${n} joueur${n > 1 ? 's' : ''} reconnu${n > 1 ? 's' : ''}` : ''; }; },
       actions: [{ label: 'Annuler' }, { label: 'Ajouter', kind: 'primary', onClick: (c, r) => {
