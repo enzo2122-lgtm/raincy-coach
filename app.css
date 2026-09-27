@@ -253,6 +253,10 @@ a.hero-chip:hover { background: rgba(201,164,92,.22); }
 .res-list li:last-child a { border-bottom: 0; }
 .res-list .d { color: var(--muted); font-size: 14px; }
 .res-list .s { font-weight: 800; font-variant-numeric: tabular-nums; }
+.res-list .o { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 0; }
+.res-list .rl-cat { font-style: normal; color: #fff; font: 800 12px var(--round); padding: 2px 8px; border-radius: 7px; }
+.res-list .rl-teams { line-height: 1.25; overflow-wrap: anywhere; }
+.res-list .rl-teams .us { color: var(--bordeaux); }
 .res { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 13px; font-weight: 800; color: #fff; }
 .res-V { background: var(--good); } .res-N { background: var(--draw); } .res-D { background: var(--bad); }
 .mini-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
