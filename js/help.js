@@ -2,7 +2,7 @@
    Errors are caught and kept so a coach can attach them to a report. */
 const Help = (() => {
   const { esc, $, $$, toast, modal } = UI;
-  const VERSION = '3.1.1';
+  const VERSION = '3.2';
   const TOUR_KEY = 'raincy-tour-seen', ERR_KEY = 'raincy-errors';
 
   /* ---------- error log ---------- */
@@ -81,6 +81,7 @@ const Help = (() => {
     matchs: ['Matchs', ['« Importer » : colle le calendrier copié sur le site de la FFF ou du District 93 (mois par mois), ou choisis un fichier d\'agenda (.ics) ou un tableur (.csv). La catégorie est trouvée toute seule et le terrain peut être réservé pour les matchs à domicile.', '« Nouveau match » : adversaire, date, domicile ou extérieur.', 'Les résultats s\'affichent avec leur smiley.']],
     match: ['Un match', ['Coche les convoqués et choisis les encadrants.', '« Faire la composition » place les joueurs sur le terrain.', 'Coche « Le match est joué », règle le score, les buteurs et les passeurs, puis note les joueurs.', '« Feuille de match » fait le PDF à imprimer.']],
     stats: ['Statistiques', ['Bilan de l\'équipe : victoires, nuls, défaites, buts et points.', 'Tableau des joueurs : touche un titre de colonne pour trier (buts, passes, présences, notes).']],
+    club: ['Vie du club', ['Événements : organise une réunion, un tournoi ou un déjeuner. Chaque coach répond « Je viens » ou « Je ne viens pas » ; touche l\'événement pour voir qui vient.', 'Signalements : objet perdu, matériel cassé ou souci d\'organisation, avec jusqu\'à 3 photos. Tout le monde peut commenter ; celui qui a signalé (ou un responsable) passe le statut à « En cours » puis « Résolu ».', 'En cochant « Prévenir tous les coachs », un message part aussi dans « Tout le club ».']],
     resultats: ['Résultats du club', ['Tous les matchs joués par toutes les catégories, rangés par week-end, pour toute la saison.', 'Un résultat apparaît ici dès qu\'un éducateur note le score dans Matchs → le match.', '« Partager le dernier week-end » envoie le récapitulatif sur WhatsApp.']],
     planning: ['Planning du terrain', ['« Chaque semaine » réserve ton créneau d\'entraînement toutes les semaines jusqu\'au 30 juin, en une fois. Les semaines déjà prises sont listées.', 'Touche une case vide du planning (ou « Réserver ») pour prendre un créneau : date, heure de début et de fin, grand terrain ou demi-terrain, entraînement ou match.', 'Pas besoin de connaître l\'adversaire : il suffit de l\'horaire.', 'Un grand terrain bloque tout le terrain. Deux demi-terrains peuvent être utilisés en même temps (A et B).', 'L\'appli refuse tout chevauchement, même si deux coachs réservent en même temps.', 'Touche une réservation pour la libérer ou préparer la séance ou la fiche match.', 'Le responsable fixe les créneaux disponibles de la semaine.']],
     messages: ['Messages', ['« Tout le club » : pour tous les éducateurs.', 'Chaque catégorie a sa conversation.', '« Écrire à un éducateur » ouvre une conversation privée.', 'Les nouveaux messages arrivent tout seuls ; le chiffre rouge dans le menu indique ceux que tu n\'as pas lus.']],
@@ -150,7 +151,7 @@ const Help = (() => {
 
   /* ---------- settings: report e-mail + received reports ---------- */
   function settingsSection() {
-    const c = Store.state.club, admin = Auth.isAdmin(), reps = Store.state.reports.slice().sort((a, b) => b.at - a.at);
+    const c = Store.state.club, admin = Auth.isAdmin(), reps = Store.state.reports.filter(x => !x.life).sort((a, b) => b.at - a.at); // (items with `life` belong to « Vie du club »)
     return `<section class="card"><h2>${I.help}Aide et signalements</h2>
       <div class="chips"><button class="btn" data-help="tour">${I.help}<span>Revoir le guide</span></button>
       <button class="btn" data-help="bug">🐞<span>Signaler un problème</span></button><button class="btn" data-help="idea">💡<span>Proposer une idée</span></button></div>

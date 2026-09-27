@@ -124,6 +124,7 @@ const Views = (() => {
         <a class="quick-btn" href="#/bibliotheque">${I.upload}<b>Importer vidéo ou PDF</b><span>Dessiner dessus, créer une séance</span></a>
       </div>
       <div class="cards2">
+        ${ClubLife.homeCard()}
         <section class="card">
           <h2>${I.match}Prochain match</h2>
           ${next ? `<a class="rowlink" href="#/match/${next.id}"><div><b>${matchTitle(next)}</b><span>${esc(fmtDate(next.date, { weekday: 'long', day: 'numeric', month: 'long' }))} · ${esc(next.time || '')} · ${next.home ? 'Domicile' : 'Extérieur'}</span></div>${I.next}</a>` : `<p class="muted">Aucun match prévu.</p>`}

@@ -187,6 +187,41 @@ a.hero-chip:hover { background: rgba(201,164,92,.22); }
 .wx-trip-line .wx-ic { font-size: 28px; }
 .wx-warn { padding: 6px 10px; border-radius: 10px; background: color-mix(in srgb, var(--bad) 9%, var(--surface)); font-size: 14px; }
 @media (max-width: 400px) { .wx-day { padding: 7px 0 5px; } .wx-ic { font-size: 20px; } .wx-t b { font-size: 14px; } .wx-d { font-size: 11px; } .wx-r { font-size: 10px; } }
+/* Vie du club: events and reports, phone first */
+.seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; margin-bottom: 14px; border-radius: 14px; background: var(--surface2); }
+.seg-b { min-height: 44px; border: 0; border-radius: 11px; background: none; font: inherit; font-weight: 800; color: var(--muted); cursor: pointer; }
+.seg-b.on { background: var(--surface); color: var(--ink); box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+.seg-n { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 999px; background: var(--bordeaux); color: #fff; font-style: normal; font-size: 12px; }
+.life-list { display: flex; flex-direction: column; gap: 10px; }
+.life-card { display: flex; gap: 12px; align-items: flex-start; padding: 12px; border-radius: 16px; background: var(--surface); border: 1px solid var(--line); cursor: pointer; }
+.life-card.past { opacity: .72; }
+.life-ic { flex: none; width: 46px; height: 46px; border-radius: 12px; display: grid; place-items: center; font-size: 24px; background: var(--surface2); }
+.life-thumb { flex: none; width: 64px; height: 64px; border-radius: 12px; object-fit: cover; }
+.life-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.life-main b { font-size: 16px; overflow-wrap: anywhere; }
+.rsvp { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.rsvp .chip { min-height: 38px; }
+.rsvp .chip.on { background: var(--good); border-color: var(--good); color: #fff; }
+.rsvp .chip.on.no { background: var(--bad); border-color: var(--bad); }
+.life-past { margin-top: 6px; }
+.life-past summary { cursor: pointer; font-weight: 800; color: var(--muted); padding: 8px 0; }
+.life-past .life-card { margin-top: 8px; }
+.st-pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-style: normal; font-size: 12.5px; font-weight: 800; }
+.st-open { background: color-mix(in srgb, var(--bad) 14%, var(--surface)); color: var(--bad); }
+.st-doing { background: color-mix(in srgb, var(--gold) 26%, var(--surface)); color: #8a6100; }
+.st-done { background: color-mix(in srgb, var(--good) 16%, var(--surface)); color: var(--good); }
+.ph-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.ph { position: relative; width: 92px; height: 92px; }
+.ph img { width: 100%; height: 100%; object-fit: cover; border-radius: 12px; }
+.ph-rm { position: absolute; top: -8px; right: -8px; width: 30px; height: 30px; border-radius: 50%; border: 0; background: var(--ink); color: #fff; display: grid; place-items: center; cursor: pointer; }
+.ph-rm svg { width: 16px; height: 16px; }
+.ph-add { width: 92px; height: 92px; border-radius: 12px; border: 2px dashed var(--line); background: var(--surface2); color: var(--muted); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font: inherit; font-size: 11.5px; font-weight: 700; cursor: pointer; }
+.ph-add svg { width: 26px; height: 26px; }
+.life-photo { display: block; width: 100%; max-height: 60dvh; object-fit: contain; border-radius: 12px; background: #000; margin: 8px 0; }
+.life-text { white-space: normal; overflow-wrap: anywhere; }
+.com { padding: 8px 10px; border-radius: 10px; background: var(--surface2); margin-bottom: 6px; }
+.com p { margin: 2px 0 0; overflow-wrap: anywhere; }
+.life-composer { margin-top: 8px; padding: 0; border: 0; }
 .ru-me { display: flex; flex-direction: column; align-items: center; gap: 4px; color: inherit; }
 .avatar { position: relative; }
 .avatar-club { position: absolute; right: -6px; bottom: -6px; width: 22px; height: 22px; border-radius: 50%; background: #fff; display: grid; place-items: center; box-shadow: 0 1px 3px rgba(0,0,0,.4); }
