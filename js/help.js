@@ -2,7 +2,7 @@
    Errors are caught and kept so a coach can attach them to a report. */
 const Help = (() => {
   const { esc, $, $$, toast, modal } = UI;
-  const VERSION = '2.7.2';
+  const VERSION = '2.8';
   const TOUR_KEY = 'raincy-tour-seen', ERR_KEY = 'raincy-errors';
 
   /* ---------- error log ---------- */

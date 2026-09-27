@@ -45,7 +45,8 @@ const Importer = (() => {
   // Guess which category a match belongs to from its competition name
   function guessTeam(comp, ourName) {
     const c = norm(comp) + ' ' + norm(ourName), T = S().teams;
-    const by = name => T.find(t => norm(t.category || t.name) === name || norm(t.name) === name);
+    // the category itself (« U13 ») before its teams (« U13 A », which share its category)
+    const by = name => T.find(t => norm(t.name) === name) || T.find(t => norm(t.category || t.name) === name);
     if (/ANCIEN|VETERAN|CDM|\b\+35|\b\+45/.test(c)) return by('VETERANS');
     for (const u of ['U19', 'U18', 'U17', 'U16', 'U15', 'U14', 'U13', 'U12', 'U11', 'U10', 'U9', 'U8', 'U7']) if (c.includes(u)) {
       const map = { U18: 'U19', U16: 'U17', U14: 'U15', U12: 'U13', U10: 'U11', U8: 'U9' };

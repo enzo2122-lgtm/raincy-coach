@@ -49,13 +49,13 @@ const Store = (() => {
     mergeStaffDuplicates();
     sortTeams();
   }
-  // Category order everywhere: Seniors, Vétérans, then U6, U7 … U20 (a team like « U13 A » comes right after U13)
+  // Category order everywhere: Seniors, Vétérans, École de foot, then U6, U7 … U20 (a team like « U13 A » comes right after U13)
   const catKey = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/\s+/g, '');
   function teamRank(t) {
-    const base = k => { if (/^SENIOR/.test(k)) return 0; if (/^VET/.test(k)) return 1; const m = /^U(\d+)/.exec(k); return m ? 10 + +m[1] : null; };
+    const base = k => { if (/^SENIOR/.test(k)) return 0; if (/^VET/.test(k)) return 1; if (/^ECOLE/.test(k)) return 2; const m = /^U(\d+)/.exec(k); return m ? 10 + +m[1] : null; };
     const kn = catKey(t.name);
     let b = base(catKey(t.category)); if (b === null) b = base(kn); if (b === null) return 999;
-    return b + (['SENIORS', 'VETERANS', 'U' + (b - 10)].includes(kn) ? 0 : 0.5);
+    return b + (['SENIORS', 'VETERANS', 'ECOLEDEFOOT', 'U' + (b - 10)].includes(kn) ? 0 : 0.5);
   }
   function sortTeams() {
     if (state && state.teams) state.teams.sort((a, b) => teamRank(a) - teamRank(b) || String(a.name || '').localeCompare(String(b.name || ''), 'fr', { numeric: true }));

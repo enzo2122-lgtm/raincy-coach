@@ -84,7 +84,7 @@ const People = (() => {
         // A new date of birth selects the matching category (U6 … U20, Seniors, Vétérans)
         $('#pBirth', r).onchange = e => {
           const cat = catOf({ birth: e.target.value, subcat: $('#pSub', r).value }); if (!cat) return;
-          const t = S().teams.find(x => catKey(x.category) === catKey(cat)) || S().teams.find(x => catKey(x.name) === catKey(cat)); if (!t) return;
+          const t = findCat(cat); if (!t) return;
           $$('#pTeams .chip', r).forEach(b => { const tm = Store.get('teams', b.dataset.t); if (tm && isAgeTeam(tm)) b.classList.toggle('on', b.dataset.t === t.id); });
         };
       },
@@ -251,8 +251,14 @@ const People = (() => {
   const AGE_CATS = ['U6', 'U7', 'U8', 'U9', 'U10', 'U11', 'U12', 'U13', 'U14', 'U15', 'U16', 'U17', 'U18', 'U19', 'U20', 'Seniors', 'Vétérans'];
   const seasonStart = (d = new Date()) => d.getMonth() >= 6 ? d.getFullYear() : d.getFullYear() - 1;
   const seasonLabel = () => `${seasonStart()}-${seasonStart() + 1}`;
+  // From U9 to Seniors, each category also has two teams A and B: the coach picks their players among the category's licenci\u00e9s
+  const AB_FROM = ['U9', 'U10', 'U11', 'U12', 'U13', 'U14', 'U15', 'U16', 'U17', 'U18', 'U19', 'U20', 'Seniors'];
+  const EXTRA_CATS = ['\u00c9cole de foot']; // filled by hand
   const catKey = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/\s+/g, '');
-  const isAgeTeam = t => AGE_CATS.some(c => catKey(c) === catKey(t.category) || catKey(c) === catKey(t.name));
+  const isSubTeam = t => /\s[A-Z]$/.test(String(t.name || '').trim()); // \u00ab U13 A \u00bb, \u00ab Seniors B \u00bb
+  const isAgeTeam = t => AGE_CATS.some(c => catKey(c) === catKey(t.name) || (!isSubTeam(t) && catKey(c) === catKey(t.category)));
+  // The category itself (\u00ab U13 \u00bb), never one of its teams (\u00ab U13 A \u00bb)
+  const findCat = cat => S().teams.find(x => catKey(x.name) === catKey(cat)) || S().teams.find(x => !isSubTeam(x) && catKey(x.category) === catKey(cat));
   // Category of a player: U + age reached during the season; 21 and over: Seniors, or Vétérans with a vétéran licence
   function catOf(p) {
     const y = +(String(p.birth || '').slice(0, 4)); if (!y) return null;
@@ -261,12 +267,20 @@ const People = (() => {
     if (age >= 21) return 'Seniors';
     return 'U' + Math.max(6, age);
   }
-  const formatOf = cat => { const n = +cat.slice(1); return cat[0] !== 'U' ? '11' : n <= 9 ? '5' : n <= 13 ? '8' : '11'; };
+  const formatOf = cat => { if (/^[ÉE]cole/i.test(cat)) return '5'; const n = +cat.slice(1); return cat[0] !== 'U' ? '11' : n <= 9 ? '5' : n <= 13 ? '8' : '11'; };
   function ageTeam(cat) {
-    let t = S().teams.find(x => catKey(x.category) === catKey(cat)) || S().teams.find(x => catKey(x.name) === catKey(cat));
+    let t = findCat(cat);
     // Same id on every device, so two devices creating « U8 » at the same time give one category after the sync
     if (!t) t = Store.upsert('teams', { id: 'cat-' + catKey(cat), name: cat, category: cat, format: formatOf(cat) });
     return t;
+  }
+  // École de foot, and teams A and B from U9 to Seniors (made once: a team the club deletes is not made again)
+  function extraTeams() {
+    EXTRA_CATS.forEach(ageTeam);
+    AB_FROM.forEach(base => ['A', 'B'].forEach(l => {
+      const name = base + ' ' + l;
+      if (!S().teams.some(x => catKey(x.name) === catKey(name))) Store.upsert('teams', { id: 'cat-' + catKey(name), name, category: base, format: formatOf(base) });
+    }));
   }
   const sortTeams = () => Store.sortTeams(); // Seniors, Vétérans, then U6 … U20
   // Creates every category and puts each player with a date of birth in his one (other teams, e.g. « U13 A », are kept)
@@ -288,7 +302,9 @@ const People = (() => {
   function autoCategories() {
     if (!Auth.isAdmin() || !S().players.length) return false;
     const season = seasonLabel(), c = S().club;
-    if (c.catSeason === season && AGE_CATS.every(k => S().teams.some(t => catKey(t.category) === catKey(k) || catKey(t.name) === catKey(k)))) return false;
+    let changed = false;
+    if (!c.teamsAB) { AGE_CATS.forEach(ageTeam); extraTeams(); c.teamsAB = 1; changed = true; }
+    if (c.catSeason === season && AGE_CATS.every(k => findCat(k))) { if (changed) { sortTeams(); Store.save(); } return changed; }
     if (c.catSeason === season) { AGE_CATS.forEach(ageTeam); sortTeams(); Store.save(); return true; }
     sortByBirth(); c.catSeason = season; Store.save(); return true;
   }
@@ -303,7 +319,7 @@ const People = (() => {
   }
   function teamForSub(sub) {
     const tn = TEAM_OF_SUB[sub]; if (!tn) return null;
-    let t = S().teams.find(x => x.category === tn || x.name === tn);
+    let t = findCat(tn);
     if (!t) t = Store.upsert('teams', { id: Store.uid(), name: tn, category: tn, format: FORMAT_OF_TEAM[tn] || '11' });
     return t.id;
   }
@@ -372,7 +388,7 @@ const People = (() => {
   function addStaff(rows) {
         let added = 0, updated = 0;
         rows.forEach(x => {
-          const teamIds = x.cats.map(cat => (S().teams.find(t => normCat(t.category) === cat || normCat(t.name) === cat) || {}).id).filter(Boolean);
+          const teamIds = x.cats.map(cat => (S().teams.find(t => normCat(t.name) === cat) || S().teams.find(t => !isSubTeam(t) && normCat(t.category) === cat) || {}).id).filter(Boolean);
           // same person: same nom and a common prénom (« Giova (Christian) » = « Christian »)
           const ex = S().staff.find(p => nk(p.lastName) === nk(x.lastName) && firstsOf(p.firstName).some(f => firstsOf(x.firstName).includes(f)));
           if (ex) { Object.assign(ex, { firstName: x.firstName.length > (ex.firstName || '').length ? x.firstName : ex.firstName, role: x.role || ex.role, phone: x.phone || ex.phone, email: x.email || ex.email, club: x.club || ex.club, teamIds: [...new Set([...(ex.teamIds || []), ...teamIds])] }); linkPlayer(ex); Store.upsert('staff', ex); updated++; }
