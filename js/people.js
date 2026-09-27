@@ -27,14 +27,16 @@ const People = (() => {
   const linkPlayer = p => { if (!p.playerId || !Store.get('players', p.playerId)) { const x = playerLike(p); if (x) p.playerId = x.id; } };
 
   /* ---------- rows ---------- */
-  function playerRow(p, teamId) {
+  function playerRow(p, teamId, groups) {
     const sub = [p.subcat, p.birth ? `${age(p.birth)} ans` : '', teamId ? '' : teamNames(p.teamIds), S().staff.some(x => x.playerId === p.id) ? 'aussi dirigeant' : ''].filter(Boolean).join(' · ');
+    // Groups A / B of the category: one touch puts the player in A or in B (touch his group again: no group)
+    const ab = groups ? `<span class="ab" role="group" aria-label="Groupe de ${esc(name(p))}">${groups.subs.map(g => `<button type="button" class="ab-b ${(p.teamIds || []).includes(g.id) ? 'on' : ''}" data-ab="${g.id}" data-p="${p.id}" aria-label="Mettre ${esc(name(p))} en ${esc(g.name)}">${esc(g.name.trim().slice(-1))}</button>`).join('')}</span>` : '';
     return `<div class="person">
       <button class="person-main" data-person="${p.id}" data-kind="player">
         <span class="pnum">${esc(p.number || '')}</span>
         <span class="pmain"><b>${esc(name(p))}</b><span class="muted">${esc(sub) || '&nbsp;'}</span></span>
         ${phonesOf(p).length ? `<span class="has-tel" title="Téléphone renseigné">${I.phone}</span>` : ''}
-      </button>
+      </button>${ab}
       ${teamId ? `<button class="icon-btn" data-unlink="${p.id}" data-kind="player" aria-label="Retirer ${esc(name(p))} de la catégorie">${I.x}</button>` : ''}
     </div>`;
   }
@@ -168,13 +170,28 @@ const People = (() => {
   }
 
   /* ---------- team sections (inside a category page) ---------- */
+  // A category (« U15 ») with its teams A and B, or one of these teams: the groups the players can be moved between
+  function groupsOf(t) {
+    const key = catKey(t.category || t.name), base = isSubTeam(t) ? findCat(t.category || '') : t;
+    const subs = S().teams.filter(x => isSubTeam(x) && catKey(x.category) === key).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+    return subs.length >= 2 ? { base: base && !isSubTeam(base) ? base : null, subs } : null;
+  }
+  function moveGroup(p, target, g) {
+    const had = (p.teamIds || []).includes(target);
+    p.teamIds = (p.teamIds || []).filter(id => !g.subs.some(s => s.id === id));
+    if (!had) { p.teamIds.push(target); if (g.base && !p.teamIds.includes(g.base.id)) p.teamIds.push(g.base.id); }
+    Store.upsert('players', p);
+    toast(had ? `${name(p)} n'est plus dans un groupe` : `${name(p)} → ${Store.get('teams', target).name}`);
+  }
   function teamSections(t) {
-    const ps = Store.playersOf(t.id), st = Store.staffOf(t.id);
+    const ps = Store.playersOf(t.id), st = Store.staffOf(t.id), g = groupsOf(t);
+    const count = g ? g.subs.map(s => `${esc(s.name)} : ${ps.filter(p => (p.teamIds || []).includes(s.id)).length}`).join(' · ') + (isSubTeam(t) ? '' : ` · sans groupe : ${ps.filter(p => !g.subs.some(s => (p.teamIds || []).includes(s.id))).length}`) : '';
     return `<section class="card">
         <div class="row-head"><h2>${I.team}Joueurs (${ps.length})</h2>
           <div class="chips"><button class="btn primary" data-newplayer>${I.plus}<span>Nouveau joueur</span></button></div></div>
+        ${g ? `<p class="tip">Groupes : touche ${g.subs.map(s => `<b>${esc(s.name.trim().slice(-1))}</b>`).join(' ou ')} à côté d'un joueur pour le changer de groupe (touche encore : plus de groupe).<br>${count}</p>` : ''}
         ${addSelect('player', t.id, 'Ajouter un joueur d\'une autre catégorie…')}
-        <div class="people">${ps.map(p => playerRow(p, t.id)).join('') || '<p class="muted">Aucun joueur dans cette catégorie.</p>'}</div>
+        <div class="people">${ps.map(p => playerRow(p, t.id, g)).join('') || '<p class="muted">Aucun joueur dans cette catégorie.</p>'}</div>
       </section>
       <section class="card">
         <div class="row-head"><h2>${I.whistle}Encadrement (${st.length})</h2>
@@ -186,6 +203,7 @@ const People = (() => {
   function bindTeamSections(root, t, rerender) {
     root.addEventListener('click', async e => {
       const b = e.target.closest('button'); if (!b || !root.contains(b)) return;
+      if (b.dataset.ab) { const g = groupsOf(t), p = Store.get('players', b.dataset.p); if (g && p) { moveGroup(p, b.dataset.ab, g); rerender(); } return; }
       if (b.hasAttribute('data-newplayer')) return editPlayer(null, { teamId: t.id, onSave: rerender });
       if (b.hasAttribute('data-newstaff')) return editStaff(null, { teamId: t.id, onSave: rerender });
       if (b.dataset.person) return (b.dataset.kind === 'player' ? editPlayer : editStaff)(Store.get(b.dataset.kind === 'player' ? 'players' : 'staff', b.dataset.person), { onSave: rerender });

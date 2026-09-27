@@ -42,13 +42,14 @@ const Results = (() => {
     played.forEach(m => { const k = monday(m.date); if (!weeks.has(k)) weeks.set(k, []); weeks.get(k).push(m); });
     const weekKeys = [...weeks.keys()].sort().reverse();
 
+    // Every coach opens every match (the other categories' ones to follow and cheer them)
     const row = m => {
-      const r = result(m), [h, a] = sides(m), open = Auth.sees(m.teamId), tag = open ? 'a' : 'div';
-      return `<${tag} class="rs-row" ${open ? `href="#/match/${m.id}"` : ''}>
+      const r = result(m), [h, a] = sides(m);
+      return `<a class="rs-row" href="#/match/${m.id}">
         <span class="rs-cat" style="background:${Planning.teamColor(m.teamId)}">${esc(teamName(m))}</span>
         <span class="rs-teams"><b class="${m.home ? 'us' : ''}">${esc(h)}</b><span class="rs-score">${m.played ? esc(score(m)) : esc(m.time || '–')}</span><b class="${m.home ? '' : 'us'}">${esc(a)}</b></span>
         ${r ? `<span class="res res-${r}">${RES[r][0]}</span>` : `<span class="muted small">${esc(fmtDate(m.date))}</span>`}
-      </${tag}>`;
+      </a>${m.played ? ClubLife.cheerBar(m) : ''}`;
     };
     const WORD = { V: 'victoire', N: 'nul', D: 'défaite' };
     const tally = list => ['V', 'N', 'D'].map(r => [r, list.filter(m => result(m) === r).length]).filter(x => x[1]).map(([r, n]) => `<span class="res res-${r}">${n} ${WORD[r]}${n > 1 ? 's' : ''}</span>`).join(' ');
@@ -72,6 +73,7 @@ const Results = (() => {
 
     root.onclick = e => {
       const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.cheer) { ClubLife.cheer(b.dataset.cheer); return page(root); }
       if (b.dataset.season) { ui.resSeason = +b.dataset.season; Store.save(); return page(root); }
       if (b.dataset.act === 'share') return share(weekKeys[0], weeks.get(weekKeys[0]));
     };

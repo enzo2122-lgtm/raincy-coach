@@ -107,6 +107,7 @@ h2.section { font-size: 21px; font-weight: 800; margin: 26px 0 10px; }
 @media (min-width: 761px) { .team-switch { flex-wrap: wrap; overflow: visible; } }
 /* Phones and tablets (touch screens): a drop-down list instead of a row of chips */
 .team-select, .day-select { display: none; align-items: center; gap: 10px; margin-bottom: 14px; }
+.team-select.all-sizes { display: flex; max-width: 520px; }
 .team-select span, .day-select span { font-weight: 800; color: var(--muted); font-size: 14px; flex: none; }
 .team-select select, .day-select select { flex: 1; font-weight: 700; }
 @media (pointer: coarse), (max-width: 760px) {
@@ -187,6 +188,19 @@ a.hero-chip:hover { background: rgba(201,164,92,.22); }
 .wx-trip-line .wx-ic { font-size: 28px; }
 .wx-warn { padding: 6px 10px; border-radius: 10px; background: color-mix(in srgb, var(--bad) 9%, var(--surface)); font-size: 14px; }
 @media (max-width: 400px) { .wx-day { padding: 7px 0 5px; } .wx-ic { font-size: 20px; } .wx-t b { font-size: 14px; } .wx-d { font-size: 11px; } .wx-r { font-size: 10px; } }
+/* groups A / B next to each player: big enough for a finger */
+.ab { display: flex; gap: 4px; flex: none; }
+.ab-b { width: 42px; height: 42px; border-radius: 12px; border: 2px solid var(--line); background: var(--surface); font: 800 16px var(--round); color: var(--muted); cursor: pointer; }
+.ab-b.on { background: var(--bordeaux); border-color: var(--bordeaux); color: #fff; }
+@media (max-width: 520px) { .ab { gap: 3px; } .ab-b { width: 38px; height: 40px; font-size: 15px; } .person:has(.ab) .pnum:empty { display: none; } }
+/* cheering a team after its match */
+.cheer { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 6px 0 10px; }
+.cheer-btn { min-height: 40px; }
+.cheer-who { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+.rs-list .cheer { margin: 2px 0 8px 4px; }
+.li-cat { display: inline-block; padding: 1px 7px; border-radius: 6px; color: #fff; font-style: normal; font-size: 12px; font-weight: 800; margin-right: 2px; }
+.match-view .mv-score { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; font-size: 18px; }
+.match-view .mv-score b { font: 800 34px var(--round); }
 /* Vie du club: events and reports, phone first */
 .seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; margin-bottom: 14px; border-radius: 14px; background: var(--surface2); }
 .seg-b { min-height: 44px; border: 0; border-radius: 11px; background: none; font: inherit; font-weight: 800; color: var(--muted); cursor: pointer; }

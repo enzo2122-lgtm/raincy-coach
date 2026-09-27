@@ -223,6 +223,29 @@ const ClubLife = (() => {
         { label: 'Fermer', kind: 'primary' }] });
   }
 
+  /* ---------- cheering a team after its match (every coach, every category) ---------- */
+  const resultOf = m => !m.played ? null : m.gf > m.ga ? 'V' : m.gf < m.ga ? 'D' : 'N';
+  // [emoji, button, button once done, verb for the message, reason]
+  const CHEER = { V: ['👏', 'Féliciter', 'Félicité', 'félicite', 'pour la victoire'], N: ['👍', 'Bravo', 'Bravo envoyé', 'salue', 'pour le match nul'], D: ['💪', 'Encourager', 'Encouragé', 'encourage', 'après la défaite'] };
+  const cheersOf = mid => life('cheer').filter(c => c.matchId === mid).sort((a, b) => a.at - b.at);
+  function cheerBar(m) {
+    const r = resultOf(m); if (!r || m.exempt || !me()) return '';
+    const [emo, verb, done] = CHEER[r], list = cheersOf(m.id), mine = list.some(c => c.by === me().id);
+    return `<div class="cheer"><button type="button" class="btn ${mine ? 'primary' : 'soft'} cheer-btn" data-cheer="${m.id}">${emo}<span>${mine ? done : verb}${list.length ? ' · ' + list.length : ''}</span></button>
+      ${list.length ? `<span class="cheer-who">${esc(list.map(c => who(c.by)).join(', '))}</span>` : `<span class="muted small">${r === 'D' ? 'Un mot d\'encouragement fait du bien !' : 'Sois le premier à féliciter l\'équipe !'}</span>`}</div>`;
+  }
+  // One per coach and per match; the team's channel gets a message the first time
+  function cheer(mid) {
+    const m = Store.get('matches', mid), u = me(); if (!m || !u || !resultOf(m)) return;
+    const id = 'cheer-' + mid + '-' + u.id;
+    if (Store.get('reports', id)) { Store.remove('reports', id); toast('Retiré'); return; }
+    Store.upsert('reports', { id, life: 'cheer', matchId: mid, by: u.id, at: Date.now() });
+    const r = resultOf(m), [emo, , , verb, why] = CHEER[r], t = Store.get('teams', m.teamId);
+    const text = `${emo} ${who(u.id)} ${verb} les ${t ? t.name : 'joueurs'} ${why} (${m.gf}-${m.ga}) ${m.home ? 'contre' : 'chez'} ${m.opponent || '?'} !${r === 'D' ? ' On se relève ensemble 💪' : ''}`;
+    if (Cloud.ready() && t) Cloud.post('team:' + t.id, text).catch(() => {});
+    toast(r === 'D' ? 'Encouragement envoyé 💪' : 'Message envoyé à l\'équipe 👏');
+  }
+
   /* ---------- home card ---------- */
   function homeCard() {
     const next = life('event').filter(x => x.date >= today()).sort(byDate).slice(0, 3), open = life('issue').filter(x => x.status !== 'done').length;
@@ -233,5 +256,5 @@ const ClubLife = (() => {
       <a class="btn soft" href="#/club/signalements">🛠️<span>${open ? `${open} signalement${open > 1 ? 's' : ''} en cours` : 'Signaler'}</span></a></div></section>`;
   }
 
-  return { page, homeCard };
+  return { page, homeCard, cheerBar, cheer };
 })();

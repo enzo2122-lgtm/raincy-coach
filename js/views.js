@@ -371,18 +371,28 @@ const Views = (() => {
   }
 
   /* ================= Matchs ================= */
+  // The agenda and results of the whole club are open to every coach (« Tout le club »), or only his teams (« Mes équipes »)
   function matches(root) {
-    const now = today(), list = byTeam(S().matches);
-    const up = list.filter(m => !m.played && m.date >= now).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+    // its own category filter (the home page's one follows the coach's category and would hide the rest of the club)
+    const now = today(), ui = S().ui, t = ui.matchTeam && teamOf(ui.matchTeam) ? ui.matchTeam : '', coach = !Auth.isAdmin();
+    const scope = coach && ui.matchScope === 'mine' ? 'mine' : 'club';
+    const list = t ? S().matches.filter(x => x.teamId === t) : scope === 'mine' ? byTeam(S().matches) : S().matches;
+    const up = list.filter(m => !m.played && m.date >= now).sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')));
     const done = list.filter(m => m.played || m.date < now).sort((a, b) => b.date.localeCompare(a.date));
-    const item = m => `<a class="list-item" href="#/match/${m.id}"><div class="date-box"><b>${new Date(m.date + 'T12:00').getDate()}</b><span>${esc(fmtDate(m.date, { month: 'short' }))}</span></div>
-      <div class="li-main"><b>${matchTitle(m)}</b><span class="muted">${esc(m.competition || '')} · ${m.home ? 'Domicile' : 'Extérieur'}${m.time ? ' · ' + esc(m.time) : ''}</span></div>
-      ${m.played ? `<span class="score">${scoreTxt(m)}</span>${resPill(m)}` : ''}${I.next}</a>`;
-    root.innerHTML = `${header('Matchs', 'Convocations, compositions et résultats', `<button class="btn" data-act="imp">${I.upload}<span>Importer (FFF, agenda…)</span></button><button class="btn primary" data-act="new">${I.plus}<span>Nouveau match</span></button>`)}
-      ${teamSwitch()}
-      <h2 class="section">À venir</h2>${up.length ? `<div class="list">${up.map(item).join('')}</div>` : '<p class="muted">Aucun match prévu.</p>'}
+    const shown = ui.matchMore ? up : up.slice(0, 20);
+    const item = m => { const tm = teamOf(m.teamId);
+      return `<a class="list-item" href="#/match/${m.id}"><div class="date-box"><b>${new Date(m.date + 'T12:00').getDate()}</b><span>${esc(fmtDate(m.date, { month: 'short' }))}</span></div>
+      <div class="li-main"><b>${matchTitle(m)}</b><span class="muted">${tm ? `<i class="li-cat" style="background:${Planning.teamColor(tm.id)}">${esc(tm.name)}</i> ` : ''}${m.exempt ? '' : (m.home ? 'Domicile' : 'Extérieur') + (m.time ? ' · ' + esc(m.time) : '')}</span></div>
+      ${m.played ? `<span class="score">${scoreTxt(m)}</span>${resPill(m)}` : ''}${I.next}</a>`; };
+    root.innerHTML = `${header('Matchs', 'Agenda et résultats de tout le club', `<button class="btn" data-act="imp">${I.upload}<span>Importer (FFF, agenda…)</span></button><button class="btn primary" data-act="new">${I.plus}<span>Nouveau match</span></button>`)}
+      ${coach && !t ? `<div class="seg"><button class="seg-b ${scope === 'club' ? 'on' : ''}" data-scope="club">🏟️ Tout le club</button><button class="seg-b ${scope === 'mine' ? 'on' : ''}" data-scope="mine">⭐ Mes équipes</button></div>` : ''}
+      <label class="team-select all-sizes"><span>Catégorie</span><select data-mteam aria-label="Catégorie"><option value="">Toutes les catégories</option>
+        ${S().teams.map(x => `<option value="${x.id}" ${x.id === t ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label>
+      <h2 class="section">À venir (${up.length})</h2>${up.length ? `<div class="list">${shown.map(item).join('')}</div>${up.length > shown.length ? `<button class="btn soft wide" data-act="more">Voir les ${up.length - shown.length} matchs suivants</button>` : ''}` : '<p class="muted">Aucun match prévu.</p>'}
       <h2 class="section">Résultats</h2>${done.length ? `<div class="list">${done.map(item).join('')}</div>` : '<p class="muted">Pas encore de résultat.</p>'}`;
-    bindTeamSwitch(root, () => matches(root));
+    $$('[data-mteam]', root).forEach(s => s.onchange = () => { ui.matchTeam = s.value; ui.matchMore = 0; Store.persistNow(); matches(root); });
+    $$('[data-scope]', root).forEach(b => b.onclick = () => { ui.matchScope = b.dataset.scope; Store.persistNow(); matches(root); });
+    const more = $('[data-act="more"]', root); if (more) more.onclick = () => { ui.matchMore = 1; matches(root); };
     $('[data-act="new"]', root).onclick = newMatch;
     $('[data-act="imp"]', root).onclick = () => Importer.matchesDialog(() => matches(root));
   }
@@ -402,7 +412,8 @@ const Views = (() => {
       } }] });
   }
   function match(root, id) {
-    const m = Store.get('matches', id); if (!m || !Auth.sees(m.teamId)) return (location.hash = '#/matchs');
+    const m = Store.get('matches', id); if (!m) return (location.hash = '#/matchs');
+    if (!Auth.sees(m.teamId)) return matchView(root, m);
     const save = () => Store.upsert('matches', m);
     const stepper = (key, val, lab) => `<div class="stepper"><span>${lab}</span><button class="icon-btn" data-sc="${key}" data-d="-1" aria-label="Moins">${I.minus}</button><b>${val}</b><button class="icon-btn" data-sc="${key}" data-d="1" aria-label="Plus">${I.plus}</button></div>`;
     const render = () => {
@@ -432,6 +443,7 @@ const Views = (() => {
           <label class="switch"><input type="checkbox" id="mPlayed" ${m.played ? 'checked' : ''}><span>Le match est joué</span></label>
           ${Ratings.smileyPicker(m)}
           ${m.played ? `<div class="score-board">${stepper('gf', m.gf, esc(S().club.name))}${stepper('ga', m.ga, esc(m.opponent))}</div>
+            ${ClubLife.cheerBar(m)}
             ${conv.length ? `<div class="lbl">Buteurs et passeurs</div><div class="scorers">${conv.map(p => { const st = (m.stats || {})[p.id] || {};
               return `<div class="scorer"><span class="nm">${esc(pLabel(p))}</span>
                 <span class="mini-step" title="Buts">${I.ball}<button data-pl="${p.id}" data-k="g" data-d="-1" aria-label="Moins de buts">−</button><b>${st.g || 0}</b><button data-pl="${p.id}" data-k="g" data-d="1" aria-label="Plus de buts">+</button></span>
@@ -455,6 +467,7 @@ const Views = (() => {
     };
     root.onclick = async e => {
       const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.cheer) { ClubLife.cheer(b.dataset.cheer); return render(); }
       if (b.dataset.home) { m.home = b.dataset.home === '1'; save(); return render(); }
       if (b.dataset.unstaff) { m.staffIds = (m.staffIds || []).filter(x => x !== b.dataset.unstaff); save(); return render(); }
       if (b.dataset.conv) { const c = m.convoked = m.convoked || [], i = c.indexOf(b.dataset.conv); i < 0 ? c.push(b.dataset.conv) : c.splice(i, 1); save(); return render(); }
@@ -467,6 +480,24 @@ const Views = (() => {
         case 'delete': if (await confirmBox('Supprimer ce match ?')) { Store.remove('matches', m.id); Media.removeRef('match:' + m.id); location.hash = '#/matchs'; } return;
       }
     };
+  }
+  // Another category's match: every coach can follow it and cheer the team; only its own coaches change it
+  function matchView(root, m) {
+    const t = teamOf(m.teamId);
+    const draw = () => {
+      root.innerHTML = `${header(matchTitle(m), `${esc(fmtDate(m.date, { weekday: 'long', day: 'numeric', month: 'long' }))}${t ? ' · ' + esc(t.name) : ''}`, `<a class="btn" href="#/matchs">${I.back}<span>Matchs</span></a>`)}
+        <section class="card match-view">
+          ${m.exempt ? '<p class="lead">Exempt : pas de match ce week-end.</p>' : `
+          <div class="mv-score">${m.played ? `<b>${esc(scoreTxt(m))}</b>${resPill(m)}` : `<span>${m.time ? 'Coup d\'envoi à ' + esc(m.time) : 'Horaire à venir'}</span>`}</div>
+          <p>${m.home ? '🏠 À domicile' : '🚌 À l\'extérieur'}${m.place ? ' · 📍 ' + esc(m.place) : ''}${m.rdv ? ' · rendez-vous ' + esc(m.rdv) : ''}</p>
+          <p class="muted small">${esc(m.competition || '')}${m.notes ? ' · ' + esc(String(m.notes).split('\n')[0]) : ''}</p>
+          ${ClubLife.cheerBar(m)}`}
+          <p class="tip">Match des ${esc(t ? t.name : 'autres catégories')} : tu peux le suivre et encourager l'équipe. Seuls ses coachs le modifient.</p>
+        </section>`;
+    };
+    draw();
+    root.oninput = root.onchange = null;
+    root.onclick = e => { const b = e.target.closest('[data-cheer]'); if (b) { ClubLife.cheer(b.dataset.cheer); draw(); } };
   }
   function makeLineup(m) {
     const t = teamOf(m.teamId); if (!t) return toast('Choisis une équipe', 'err');
