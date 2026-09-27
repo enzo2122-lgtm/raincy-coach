@@ -683,6 +683,12 @@ button.plan-head { display: block; width: 100%; border: 0; background: none; fon
 #previewBar .btn { flex: none; }
 @media (max-width: 760px) { #previewBar .lg { display: none; } }
 body.previewing .shell { padding-top: var(--pvh, 52px); }
+/* favourite club crests (messaging) */
+.author { display: inline-flex; align-items: center; gap: 6px; }
+.crest-img { width: 18px; height: 18px; object-fit: contain; flex: none; }
+.crest-fallback { display: inline-flex; flex: none; }
+.crest-svg { display: block; }
+.imp-list .crest-img, .imp-list .crest-svg { display: inline-block; vertical-align: -3px; }
 .plan-mini a { grid-template-columns: 70px minmax(0, 1fr) auto; }
 @media (max-width: 760px) {
   .day-select { display: flex; }

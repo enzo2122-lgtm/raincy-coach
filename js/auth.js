@@ -470,6 +470,7 @@ const Auth = (() => {
     if (!user) return '';
     const me = `<section class="card"><h2>${I.whistle}Mon compte</h2>
       <p>Connecté : <b>${esc(Store.fullName(user))}</b>${user.role ? ' · ' + esc(user.role) : ''}${isAdmin() ? ' · <span class="badge">Responsable</span>' : ''}</p>
+      <label class="fld"><span>Mon club de cœur (son blason s'affiche devant mon nom dans les messages)</span><select id="myClub">${Clubs.options(user.club)}</select></label>
       <p class="muted small">${sess() ? 'Ton compte est sur le serveur du club : connecte-toi sur n\'importe quel appareil avec ton nom, ton prénom et ton mot de passe.' : 'Ton compte est seulement sur cet appareil.'}</p>
       <div class="chips"><button class="btn" data-auth="pw">${I.edit}<span>Changer mon mot de passe</span></button>
       <button class="btn" data-auth="logout">${I.back}<span>Se déconnecter</span></button>
@@ -547,6 +548,7 @@ const Auth = (() => {
     }
   }
   function onSettingsChange(t) {
+    if (t.id === 'myClub') { const s = Store.get('staff', user.id); if (s) { s.club = t.value; Store.upsert('staff', s); user = s; toast(t.value ? 'Club de cœur : ' + Clubs.name(t.value) : 'Club de cœur retiré'); } return; }
     if (!t.dataset.admin) return;
     const id = t.dataset.admin; A().users[id] = Object.assign(U(id) || {}, { admin: t.checked }); Store.save();
     if (serverMode()) Cloud.accountSet({ staff_id: id, admin: t.checked }).then(() => toast(t.checked ? 'Droits de responsable donnés' : 'Droits de responsable retirés')).catch(e => { toast(e.message, 'err'); t.checked = !t.checked; });

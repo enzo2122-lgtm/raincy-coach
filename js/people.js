@@ -20,7 +20,9 @@ const People = (() => {
   // A dirigeant who is also a licensed player: same nom and same first prénom (without accents or capitals)
   const nk = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z ]/g, ' ').replace(/\s+/g, ' ').trim();
   const firstOf = s => nk(String(s || '').replace(/\(.*\)/, '')).split(' ')[0];
-  const playerLike = p => S().players.find(x => nk(x.lastName) === nk(p.lastName) && firstOf(x.firstName) === firstOf(p.firstName));
+  // « Giova (Christian) » also matches the licence « Christian »
+  const firstsOf = s => [firstOf(s), ...(String(s || '').match(/\(([^)]*)\)/g) || []).map(m => firstOf(m.slice(1, -1)))].filter(Boolean);
+  const playerLike = p => S().players.find(x => nk(x.lastName) === nk(p.lastName) && firstsOf(p.firstName).includes(firstOf(x.firstName)));
   const linkPlayer = p => { if (!p.playerId || !Store.get('players', p.playerId)) { const x = playerLike(p); if (x) p.playerId = x.id; } };
 
   /* ---------- rows ---------- */
@@ -117,7 +119,8 @@ const People = (() => {
       title: isNew ? 'Nouveau dirigeant' : name(p),
       body: `<div class="row2"><label class="fld"><span>Nom</span><input id="sLast" value="${esc(p.lastName)}" autocapitalize="characters"></label>
         <label class="fld"><span>Prénom</span><input id="sFirst" value="${esc(p.firstName)}"></label></div>
-        <label class="fld"><span>Rôle</span><select id="sRole">${opt(ROLES, p.role)}</select></label>
+        <div class="row2"><label class="fld"><span>Rôle</span><select id="sRole">${opt(ROLES, p.role)}</select></label>
+        <label class="fld"><span>Club de cœur (son blason s'affiche dans les messages)</span><select id="sClub">${Clubs.options(p.club)}</select></label></div>
         <div class="lbl">Catégories (plusieurs possibles)</div>${Auth.isAdmin() || isNew ? teamChips(p.teamIds) : `<p class="tip">🔒 ${esc(teamNames(p.teamIds) || 'Aucune catégorie')} · seul un responsable peut changer les catégories d'un dirigeant.</p>`}
         <div class="row2"><label class="fld"><span>Téléphone</span><input id="sTel" type="tel" inputmode="tel" value="${esc(p.phone || '')}"></label>
         <label class="fld"><span>E-mail</span><input id="sMail" type="email" inputmode="email" value="${esc(p.email || '')}"></label></div>
@@ -132,7 +135,7 @@ const People = (() => {
         { label: 'Enregistrer', kind: 'primary', onClick: (c, r) => {
           const v = id => $('#' + id, r).value.trim();
           if (!v('sLast') && !v('sFirst')) { toast('Écris au moins le nom ou le prénom', 'err'); return false; }
-          Object.assign(p, { lastName: v('sLast').toUpperCase(), firstName: v('sFirst'), role: v('sRole'), phone: v('sTel'), email: v('sMail'), notes: $('#sNotes', r).value });
+          Object.assign(p, { lastName: v('sLast').toUpperCase(), firstName: v('sFirst'), role: v('sRole'), club: v('sClub'), phone: v('sTel'), email: v('sMail'), notes: $('#sNotes', r).value });
           if (Auth.isAdmin() || isNew) p.teamIds = pickedTeams(r, p.teamIds || []);
           const sp = $('#sPlayer', r); if (sp) { if (sp.value) p.playerId = sp.value; else delete p.playerId; }
           Store.upsert('staff', p); toast('Enregistré'); opts.onSave && opts.onSave(p);
@@ -336,18 +339,23 @@ const People = (() => {
   const ROLE_RE = /(responsable de cat[ée]gorie|[ée]ducateur adjoint|entra[iî]neur des gardiens|[ée]ducat(?:eur|rice)|entra[iî]neu(?:r|se)|coach|dirigeant(?:e)?|accompagnat(?:eur|rice)|pr[ée]sident(?:e)?|vice-pr[ée]sident(?:e)?|secr[ée]taire|tr[ée]sori(?:er|[èe]re)|arbitre)/i;
   function parseStaff(txt) {
     return txt.split(/\r?\n/).map(line => {
-      const l = line.replace(/[\t|;]+/g, ' ').replace(/\s+/g, ' ').trim(); if (!l) return null;
+      let l = line.replace(/[\t|;]+/g, ' ').replace(/\s+/g, ' ').trim(); if (!l) return null;
+      // « club: Juventus » (or « équipe: … ») at the end of the line = favourite club
+      const clubM = l.match(/\b(?:club(?:\s+de\s+c(?:œ|oe)ur)?|[ée]quipe(?:\s+pr[ée]f[ée]r[ée]e)?)\s*:\s*(.+)$/i), club = clubM ? Clubs.find(clubM[1]) : '';
+      if (clubM) l = l.slice(0, clubM.index).trim();
       const phone = (l.match(/(?:\+33\s?|0)[1-9](?:[\s.-]?\d{2}){4}/) || [''])[0];
       const email = (l.match(/[\w.+-]+@[\w-]+\.[\w.]+/) || [''])[0];
       const roleM = l.match(ROLE_RE);
       const cats = (l.match(/\bU\s?\d{1,2}\b|\bS[ée]niors?\b|\bV[ée]t[ée]rans?\b/gi) || []).map(c => c.replace(/\s/g, '').toUpperCase().replace(/^S[ÉE]NIORS?$/, 'SENIORS').replace(/^V[ÉE]T[ÉE]RANS?$/, 'VETERANS'));
       let rest = l.replace(phone, ' ').replace(email, ' ').replace(roleM ? roleM[0] : '', ' ').replace(/\bU\s?\d{1,2}\b|\bS[ée]niors?\b|\bV[ée]t[ée]rans?\b/gi, ' ').replace(/\d{2}\/\d{2}\/\d{4}/g, ' ');
+      // a usual first name can keep the licence one in brackets: « MOTO Giova (Christian) »
+      const par = (rest.match(/\([^)]*\)/g) || []).join(' '); rest = rest.replace(/\([^)]*\)/g, ' ');
       const words = rest.split(/[\s,·/-]+/).filter(w => /^[A-Za-zÀ-ÿ'’]{2,}$/.test(w) && !/^(Libre|Dirigeant|Licence|Valid[ée]e)$/i.test(w));
       if (!words.length) return null;
       const upper = words.filter(w => w === w.toUpperCase()), other = words.filter(w => w !== w.toUpperCase());
-      const lastName = (upper.length ? upper : words.slice(0, 1)).join(' ').toUpperCase(), firstName = (upper.length ? other : words.slice(1)).join(' ');
-      const role = roleM ? roleM[0].replace(/^./, c => c.toUpperCase()).replace(/^Entra[iî]neur$/i, 'Éducateur').replace(/^Coach$/i, 'Éducateur').replace(/^Educateur/i, 'Éducateur') : 'Éducateur';
-      return { lastName, firstName, role, phone, email, cats };
+      const lastName = (upper.length ? upper : words.slice(0, 1)).join(' ').toUpperCase(), firstName = [(upper.length ? other : words.slice(1)).join(' '), par].filter(Boolean).join(' ');
+      const role = roleM ? roleM[0].replace(/^./, c => c.toUpperCase()).replace(/^Entra[iî]neur$/i, 'Éducateur').replace(/^Coach$/i, 'Éducateur').replace(/^Educateur/i, 'Éducateur') : '';
+      return { lastName, firstName, role, phone, email, cats, club };
     }).filter(Boolean);
   }
   const normCat = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
@@ -356,7 +364,7 @@ const People = (() => {
       body: `<p class="tip">Une personne par ligne : nom, prénom, et si tu les as le rôle, le téléphone et la ou les catégories. Par exemple : « DUPONT Karim Éducateur U13 06 12 34 56 78 ». Une liste copiée depuis Footclubs ou un tableur marche aussi.</p>
         <textarea id="stTxt" rows="8" placeholder="DUPONT Karim Éducateur U13 06 12 34 56 78&#10;MARTIN Sophie Dirigeante U11 U9"></textarea><div id="stPrev" class="imp-preview"></div>`,
       onOpen: r => { $('#stTxt', r).oninput = e => { const rows = parseStaff(e.target.value);
-        $('#stPrev', r).innerHTML = rows.length ? `<ul class="imp-list">${rows.map(x => `<li><b>${esc(x.lastName)} ${esc(x.firstName)}</b> · ${esc(x.role)}${x.cats.length ? ' · ' + esc(x.cats.join(', ')) : ''}${x.phone ? ' · ' + esc(x.phone) : ''}</li>`).join('')}</ul>` : ''; }; },
+        $('#stPrev', r).innerHTML = rows.length ? `<ul class="imp-list">${rows.map(x => `<li><b>${esc(x.lastName)} ${esc(x.firstName)}</b> · ${esc(x.role)}${x.cats.length ? ' · ' + esc(x.cats.join(', ')) : ''}${x.club ? ' · club de cœur : ' + Clubs.crest(x.club, 16) + ' ' + esc(Clubs.name(x.club)) : ''}${x.phone ? ' · ' + esc(x.phone) : ''}</li>`).join('')}</ul>` : ''; }; },
       actions: [{ label: 'Annuler' }, { label: 'Ajouter', kind: 'primary', onClick: (c, r) => {
         const rows = parseStaff($('#stTxt', r).value);
         if (!rows.length) { toast('Aucune ligne reconnue', 'err'); return false; }
@@ -368,9 +376,10 @@ const People = (() => {
         let added = 0, updated = 0;
         rows.forEach(x => {
           const teamIds = x.cats.map(cat => (S().teams.find(t => normCat(t.category) === cat || normCat(t.name) === cat) || {}).id).filter(Boolean);
-          const ex = S().staff.find(p => (p.lastName || '').toUpperCase() === x.lastName && (p.firstName || '').toLowerCase() === x.firstName.toLowerCase());
-          if (ex) { Object.assign(ex, { role: x.role || ex.role, phone: x.phone || ex.phone, email: x.email || ex.email, teamIds: [...new Set([...(ex.teamIds || []), ...teamIds])] }); linkPlayer(ex); Store.upsert('staff', ex); updated++; }
-          else { const n = { id: Store.uid(), lastName: x.lastName, firstName: x.firstName, role: x.role, phone: x.phone, email: x.email, notes: '', teamIds }; linkPlayer(n); Store.upsert('staff', n); added++; }
+          // same person: same nom and a common prénom (« Giova (Christian) » = « Christian »)
+          const ex = S().staff.find(p => nk(p.lastName) === nk(x.lastName) && firstsOf(p.firstName).some(f => firstsOf(x.firstName).includes(f)));
+          if (ex) { Object.assign(ex, { firstName: x.firstName.length > (ex.firstName || '').length ? x.firstName : ex.firstName, role: x.role || ex.role, phone: x.phone || ex.phone, email: x.email || ex.email, club: x.club || ex.club, teamIds: [...new Set([...(ex.teamIds || []), ...teamIds])] }); linkPlayer(ex); Store.upsert('staff', ex); updated++; }
+          else { const n = { id: Store.uid(), lastName: x.lastName, firstName: x.firstName, role: x.role || 'Éducateur', phone: x.phone, email: x.email, notes: '', teamIds, club: x.club || '' }; linkPlayer(n); Store.upsert('staff', n); added++; }
         });
         return { added, updated };
   }
