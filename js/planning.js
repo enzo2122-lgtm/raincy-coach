@@ -20,8 +20,9 @@ const Planning = (() => {
   const fieldName = () => S().club.fieldName || 'Terrain';
   const myTeams = () => { const u = Auth.current(); return u ? (u.teamIds || []) : []; };
   // One colour per category, close colours for close ages (U6-U9 greens, U10-U13 blues, U14-U17 purples/pinks, U18-U20 oranges)
-  const CAT_COLORS = { U6: '#2e7d32', U7: '#43a047', U8: '#00897b', U9: '#00838f', U10: '#1e88e5', U11: '#1565c0', U12: '#3949ab', U13: '#283593',
-    U14: '#8e24aa', U15: '#6a1b9a', U16: '#d81b60', U17: '#ad1457', U18: '#ef6c00', U19: '#e65100', U20: '#bf360c', SENIORS: '#7a1f2b', VETERANS: '#455a64' };
+  // (key order = legend order: Seniors and Vétérans first, then U6 … U20)
+  const CAT_COLORS = { SENIORS: '#7a1f2b', VETERANS: '#455a64', U6: '#2e7d32', U7: '#43a047', U8: '#00897b', U9: '#00838f', U10: '#1e88e5', U11: '#1565c0', U12: '#3949ab', U13: '#283593',
+    U14: '#8e24aa', U15: '#6a1b9a', U16: '#d81b60', U17: '#ad1457', U18: '#ef6c00', U19: '#e65100', U20: '#bf360c' };
   const ckey = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/\s+/g, '');
   function catOfBooking(b) {
     const t = b.team_id && Store.get('teams', b.team_id);

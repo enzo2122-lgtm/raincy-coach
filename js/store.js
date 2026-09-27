@@ -47,6 +47,18 @@ const Store = (() => {
     });
     state.version = 2;
     mergeStaffDuplicates();
+    sortTeams();
+  }
+  // Category order everywhere: Seniors, Vétérans, then U6, U7 … U20 (a team like « U13 A » comes right after U13)
+  const catKey = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/\s+/g, '');
+  function teamRank(t) {
+    const base = k => { if (/^SENIOR/.test(k)) return 0; if (/^VET/.test(k)) return 1; const m = /^U(\d+)/.exec(k); return m ? 10 + +m[1] : null; };
+    const kn = catKey(t.name);
+    let b = base(catKey(t.category)); if (b === null) b = base(kn); if (b === null) return 999;
+    return b + (['SENIORS', 'VETERANS', 'U' + (b - 10)].includes(kn) ? 0 : 0.5);
+  }
+  function sortTeams() {
+    if (state && state.teams) state.teams.sort((a, b) => teamRank(a) - teamRank(b) || String(a.name || '').localeCompare(String(b.name || ''), 'fr', { numeric: true }));
   }
   // Same dirigeant twice (an account made by hand + the card from the club file, e.g. « Enzo » and « Enzo (Adnane) »):
   // keep the card that has a password, take over the other card's details, and remember it so a new import doesn't bring it back.
@@ -91,6 +103,7 @@ const Store = (() => {
     item.updatedAt = Date.now();
     const i = state[col].findIndex(x => x.id === item.id);
     if (i < 0) state[col].push(item); else state[col][i] = item;
+    if (col === 'teams') sortTeams();
     save(); return item;
   }
   function remove(col, id) { state[col] = state[col].filter(x => x.id !== id); save(); }
@@ -145,7 +158,7 @@ const Store = (() => {
   const shortName = p => p ? (p.firstName ? p.firstName + (p.lastName ? ' ' + p.lastName[0].toUpperCase() + '.' : '') : fullName(p)) : '';
 
   return {
-    load, save, persistNow, get, upsert, remove, uid, exportAll, exportTraining, exportSchema, importText, reset, removeExamples,
+    load, save, persistNow, sortTeams, get, upsert, remove, uid, exportAll, exportTraining, exportSchema, importText, reset, removeExamples,
     playersOf, staffOf, fullName, shortName, byName,
     get state() { return state; }, on: f => listeners.add(f), off: f => listeners.delete(f),
   };

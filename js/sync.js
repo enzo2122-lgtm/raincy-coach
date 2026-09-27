@@ -68,6 +68,7 @@ const Sync = (() => {
       if (rows.length) meta().rev = Math.max(meta().rev, ...rows.map(r => +r.rev || 0));
       if (rows.length < 1000) break;
     }
+    if (changed) Store.sortTeams();
     return changed;
   }
 

@@ -3,7 +3,7 @@ const People = (() => {
   const { esc, $, $$, toast, modal, confirmBox } = UI;
   const S = () => Store.state;
   const POS = [['', '–'], ['GB', 'Gardien'], ['DEF', 'Défenseur'], ['MIL', 'Milieu'], ['ATT', 'Attaquant']];
-  const SUBCATS = ['U6', 'U7', 'U8', 'U9', 'U10', 'U11', 'U12', 'U13', 'U14', 'U15', 'U16', 'U17', 'U18', 'U19', 'Senior U20', 'Senior', 'Vétéran'];
+  const SUBCATS = ['Senior', 'Senior U20', 'Vétéran', 'U6', 'U7', 'U8', 'U9', 'U10', 'U11', 'U12', 'U13', 'U14', 'U15', 'U16', 'U17', 'U18', 'U19'];
   const ROLES = ['Éducateur', 'Éducateur adjoint', 'Responsable de catégorie', 'Dirigeant', 'Accompagnateur', 'Entraîneur des gardiens', 'Arbitre bénévole', 'Président', 'Vice-président', 'Secrétaire', 'Trésorier', 'Autre'];
   const RELS = ['Mère', 'Père', 'Tuteur', 'Autre'];
   // Which category (team) gathers each licence sub-category
@@ -268,10 +268,7 @@ const People = (() => {
     if (!t) t = Store.upsert('teams', { id: 'cat-' + catKey(cat), name: cat, category: cat, format: formatOf(cat) });
     return t;
   }
-  function sortTeams() {
-    const rank = t => { const i = AGE_CATS.findIndex(c => catKey(c) === catKey(t.category) || catKey(c) === catKey(t.name)); return i < 0 ? 99 : i; };
-    S().teams.sort((a, b) => rank(a) - rank(b) || String(a.name).localeCompare(String(b.name), 'fr'));
-  }
+  const sortTeams = () => Store.sortTeams(); // Seniors, Vétérans, then U6 … U20
   // Creates every category and puts each player with a date of birth in his one (other teams, e.g. « U13 A », are kept)
   function sortByBirth() {
     AGE_CATS.forEach(ageTeam);
