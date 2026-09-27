@@ -591,7 +591,11 @@ body:not(.editing) main#view { padding-bottom: 96px; }
 .plan-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; }
 .plan-nav b { font: 800 17px var(--round); }
 .plan-legend { display: flex; align-items: center; gap: 6px 12px; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
-.plan-legend i { display: inline-block; width: 14px; height: 14px; border-radius: 4px; margin-right: -6px; vertical-align: -2px; }
+.plan-legend i { display: inline-block; width: 14px; height: 14px; border-radius: 4px; margin-right: 4px; vertical-align: -2px; }
+.plan-legend > span { white-space: nowrap; }
+.plan-legend .lg-match, .bk.k-match { background-image: repeating-linear-gradient(135deg, rgba(255,255,255,.28) 0 5px, transparent 5px 10px); }
+.plan-legend .lg-match { background-color: var(--muted); }
+button.plan-head { display: block; width: 100%; border: 0; background: none; font: inherit; padding: 0; cursor: pointer; }
 .k-entrainement { background: var(--navy); color: #fff; }
 .k-match { background: var(--bordeaux); color: #fff; }
 .k-autre { background: var(--gold); color: var(--navy); }
@@ -615,6 +619,7 @@ body:not(.editing) main#view { padding-bottom: 96px; }
 .bk { position: absolute; left: 2px; right: 2px; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 3px 6px; border: 0; border-radius: 8px; text-align: left; overflow: hidden; cursor: pointer; box-shadow: 0 2px 6px -2px rgba(0,0,0,.35); font-size: 12px; line-height: 1.2; z-index: 1; }
 .bk b { font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .bk span { opacity: .85; white-space: nowrap; }
+.bk .bk-s { display: none; }
 .bk.part-A { right: calc(50% + 1px); }
 .bk.part-B { left: calc(50% + 1px); }
 .bk.mine { outline: 2px solid var(--gold); outline-offset: -2px; }
@@ -631,17 +636,6 @@ body:not(.editing) main#view { padding-bottom: 96px; }
 .server-banner p { margin: 0 0 10px; }
 .plan-view { display: none; gap: 6px; }
 .plan-view .chip { min-height: 36px; padding: 0 14px; }
-.plan-list { display: none; flex-direction: column; gap: 10px; }
-.pl-day { border-radius: 12px; background: var(--surface2); padding: 6px; display: flex; flex-direction: column; gap: 6px; }
-.pl-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; border: 0; background: none; padding: 4px 6px; font: inherit; color: inherit; text-align: left; cursor: pointer; }
-.pl-head b { font: 800 16px var(--round); }
-.pl-head span { font-size: 13px; color: var(--muted); }
-.pl-day.today .pl-head b { color: var(--bordeaux); }
-.pl-row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 10px; align-items: baseline; border: 0; border-radius: 10px; padding: 8px 10px; text-align: left; font: inherit; cursor: pointer; }
-.pl-row .pl-t { font-weight: 800; font-variant-numeric: tabular-nums; grid-row: span 2; }
-.pl-row b { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pl-row .pl-p { font-size: 12.5px; opacity: .85; }
-.pl-row.mine { outline: 2px solid var(--gold); outline-offset: -2px; }
 .plan-mini a { grid-template-columns: 70px minmax(0, 1fr) auto; }
 @media (max-width: 760px) {
   .day-chips { display: flex; }
@@ -652,9 +646,22 @@ body:not(.editing) main#view { padding-bottom: 96px; }
   .plan-day.sel { display: block; }
   .plan-view { display: flex; }
   .day-chips.wk { display: none; }
-  .plan-wrap.wk { padding: 0; background: none; border: 0; }
-  .plan-wrap.wk .plan-grid { display: none; }
-  .plan-wrap.wk .plan-list { display: flex; }
+  /* « Semaine » on a phone: the 7 days side by side, coloured blocks, name only */
+  .plan-wrap.wk { padding: 6px 4px; }
+  .plan-wrap.wk .plan-grid { grid-template-columns: 30px repeat(7, minmax(0, 1fr)); gap: 0 2px; }
+  .plan-wrap.wk .plan-day { display: block; }
+  .plan-wrap.wk .plan-head { font-size: 11px; height: 34px; line-height: 1.1; }
+  .plan-wrap.wk .plan-head b { display: block; font-size: 15px; }
+  .plan-wrap.wk .plan-day.today .plan-head { background: color-mix(in srgb, var(--bordeaux) 12%, transparent); border-radius: 8px; }
+  .plan-wrap.wk .plan-hours span { font-size: 9.5px; right: 2px; }
+  .plan-wrap.wk .plan-body { border-radius: 6px; }
+  .plan-wrap.wk .bk { left: 1px; right: 1px; padding: 2px 2px; border-radius: 5px; align-items: center; justify-content: center; text-align: center; }
+  .plan-wrap.wk .bk b { display: none; }
+  .plan-wrap.wk .bk .bk-s { display: block; font: 800 11px/1.1 var(--round); font-style: normal; white-space: nowrap; }
+  .plan-wrap.wk .bk.part-A .bk-s, .plan-wrap.wk .bk.part-B .bk-s { font-size: 9.5px; letter-spacing: -.02em; }
+  .plan-wrap.wk .bk span { display: none; }
+  .plan-wrap.wk .bk.part-A { right: calc(50% + 0.5px); }
+  .plan-wrap.wk .bk.part-B { left: calc(50% + 0.5px); }
   .bk { font-size: 13px; }
   .slot-row { grid-template-columns: 1fr 1fr 44px; }
   .slot-row span { display: none; }
