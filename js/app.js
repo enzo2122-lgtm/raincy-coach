@@ -10,6 +10,16 @@ const App = (() => {
 
   function refreshChrome() {
     const c = Store.state.club;
+    // Banner while a responsable looks at the app as a coach
+    let bar = document.getElementById('previewBar'); const pv = Auth.preview();
+    if (pv) {
+      if (!bar) { bar = document.createElement('div'); bar.id = 'previewBar'; document.body.appendChild(bar); }
+      const names = pv.teamIds.map(id => (Store.get('teams', id) || {}).name).filter(Boolean).join(', ');
+      bar.innerHTML = `<span>👀 Aperçu coach · ${UI.esc(names)}</span><button class="btn" id="stopPv">Revenir<span class="lg"> en responsable</span></button>`;
+      bar.querySelector('#stopPv').onclick = () => Auth.stopPreview();
+      document.body.classList.add('previewing');
+      document.body.style.setProperty('--pvh', bar.offsetHeight + 'px');
+    } else if (bar) { bar.remove(); document.body.classList.remove('previewing'); }
     document.documentElement.style.setProperty('--accent', UI.accentFor(c.homeBib));
     document.getElementById('clubName').textContent = c.name;
     const u = Auth.current(), ru = document.getElementById('railUser');
@@ -29,7 +39,10 @@ const App = (() => {
     };
     Messages.badge();
   }
-  function route() {
+  // keep = true: same page redrawn with new data from the server, stay where the user was in the page
+  function route(keep) {
+    keep = keep === true;
+    const sy = window.scrollY, st = view().scrollTop;
     const [, name = '', id] = (location.hash || '#/').split('/');
     const root = view();
     root.onclick = root.oninput = root.onchange = null;
@@ -51,12 +64,12 @@ const App = (() => {
       planning: r => Planning.page(r), resultats: r => Results.page(r), messages: (r, x) => Messages.page(r, x),
       bibliotheque: r => Library.page(r), joueurs: r => People.listPage(r, 'player'), dirigeants: r => People.listPage(r, 'staff') }[name] || Views.home;
     fn(root, id);
-    root.scrollTop = 0; window.scrollTo(0, 0);
+    if (keep) { root.scrollTop = st; window.scrollTo(0, sy); } else { root.scrollTop = 0; window.scrollTo(0, 0); }
     Help.button();
   }
   /* Updates: version.json on the site says which build is online. When it is newer than this one,
      the app empties its offline copy and reloads (an iPhone can keep an old copy open for days). */
-  const BUILD = 25, UPD = 'raincy-update-tried';
+  const BUILD = 26, UPD = 'raincy-update-tried';
   async function onlineBuild() {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
     return (await r.json()).build || 0;
@@ -91,7 +104,7 @@ const App = (() => {
     route();
     Sync.start();
     // After the first exchange with the server: categories U6 … Vétérans for the new season
-    Promise.resolve(Sync.run()).catch(() => {}).then(() => { if (People.autoCategories()) route(); });
+    Promise.resolve(Sync.run()).catch(() => {}).then(() => { if (People.autoCategories()) route(true); });
     Messages.start();
   }
   return { start, route, refreshChrome, checkUpdate };

@@ -124,17 +124,20 @@ const Sync = (() => {
   // Redraw the page with the new data, unless someone is typing, drawing or has a window open
   function refreshView() {
     const a = document.activeElement, typing = a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName);
+    // not while the finger is on the screen or the page is still moving (it would jump under the finger)
+    if (Date.now() - lastTouch < 1500) { pending = true; clearTimeout(retry); retry = setTimeout(refreshView, 1600); return; }
     if (document.body.classList.contains('editing') || !document.getElementById('modal').hidden || !document.getElementById('lock').hidden || typing) { pending = true; return; }
-    pending = false; App.refreshChrome(); App.route();
+    pending = false; App.refreshChrome(); App.route(true);
   }
-  let pending = false;
+  let pending = false, lastTouch = 0, retry = null;
+  ['touchstart', 'touchmove', 'scroll', 'wheel'].forEach(ev => window.addEventListener(ev, () => { lastTouch = Date.now(); }, { passive: true, capture: true }));
   const soon = () => { clearTimeout(timer); timer = setTimeout(run, 2500); };
   function start() {
     Store.on(soon);
     clearInterval(poll); poll = setInterval(() => { if (document.visibilityState === 'visible') run(); }, 30000);
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') run(); });
     window.addEventListener('online', () => run());
-    window.addEventListener('hashchange', () => { if (pending) setTimeout(refreshView, 50); });
+    window.addEventListener('hashchange', () => { if (pending) { pending = false; } });
     run();
   }
   // First connection on a device: everything from the server before showing the app

@@ -677,6 +677,12 @@ button.plan-head { display: block; width: 100%; border: 0; background: none; fon
   .rs-teams { font-size: 14px; gap: 6px; }
   .rs-score { font-size: 15px; padding: 2px 6px; }
 }
+#previewBar { position: fixed; top: 0; left: 0; right: 0; z-index: 45; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: nowrap; font-size: 14px; padding: calc(env(safe-area-inset-top) + 6px) 12px 6px; background: var(--gold); color: var(--navy); font-weight: 800; box-shadow: 0 4px 14px rgba(0,0,0,.25); }
+#previewBar .btn { min-height: 36px; padding: 0 14px; background: var(--navy); color: #fff; border: 0; }
+#previewBar > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#previewBar .btn { flex: none; }
+@media (max-width: 760px) { #previewBar .lg { display: none; } }
+body.previewing .shell { padding-top: var(--pvh, 52px); }
 .plan-mini a { grid-template-columns: 70px minmax(0, 1fr) auto; }
 @media (max-width: 760px) {
   .day-select { display: flex; }
