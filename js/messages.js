@@ -14,11 +14,11 @@ const Messages = (() => {
   const isMineDm = ch => ch.startsWith('dm:') && me() && ch.split(':').includes(me().id);
   function visible(ch) {
     if (ch === 'general') return true;
-    if (ch.startsWith('team:')) return Auth.sees(ch.slice(5));
+    if (ch.startsWith('team:')) return true; // every coach can talk in every category
     return isMineDm(ch);
   }
   function channelName(ch) {
-    if (ch === 'general') return 'Tout le club';
+    if (ch === 'general') return 'Tout le club · tous les coachs';
     if (ch.startsWith('team:')) { const t = Store.get('teams', ch.slice(5)); return t ? t.name : 'Catégorie'; }
     const other = ch.split(':').slice(1).find(id => id !== (me() || {}).id), s = Store.get('staff', other);
     return s ? Store.fullName(s) : 'Message privé';
@@ -64,7 +64,7 @@ const Messages = (() => {
     }
     const ch = chParam && visible(decodeURIComponent(chParam)) ? decodeURIComponent(chParam) : '';
     const mineTeams = new Set((me().teamIds || []));
-    const teams = Auth.teams().slice().sort((a, b) => (mineTeams.has(b.id) - mineTeams.has(a.id)) || a.name.localeCompare(b.name));
+    const teams = S().teams.slice(); // club order: U6 … Vétérans
     const dms = [...new Set(msgs.map(m => m.channel).filter(isMineDm))];
     const item = c => `<a class="ch ${c === ch ? 'on' : ''}" href="#/messages/${encodeURIComponent(c)}"><span class="ch-ic">${c === 'general' ? I.team : c.startsWith('team:') ? I.whistle : I.edit}</span>
       <span class="ch-name">${esc(channelName(c))}</span>${unread(c) ? `<i class="ch-badge">${unread(c)}</i>` : ''}</a>`;
@@ -72,7 +72,8 @@ const Messages = (() => {
       <aside class="ch-list">
         <header class="page-head"><div><h1>Messages</h1><p class="sub">Entre éducateurs du club</p></div></header>
         ${item('general')}
-        <div class="ch-sec">Catégories</div>${teams.map(t => item('team:' + t.id)).join('')}
+        ${mineTeams.size ? `<div class="ch-sec">Mes catégories</div>${teams.filter(t => mineTeams.has(t.id)).map(t => item('team:' + t.id)).join('')}` : ''}
+        <div class="ch-sec">${mineTeams.size ? 'Les autres catégories' : 'Catégories'}</div>${teams.filter(t => !mineTeams.has(t.id)).map(t => item('team:' + t.id)).join('')}
         <div class="ch-sec">Messages privés</div>${dms.map(item).join('')}
         <button class="btn soft wide" id="newDm">${I.plus}<span>Écrire à un éducateur</span></button>
       </aside>
@@ -121,7 +122,7 @@ const Messages = (() => {
   function pickCoach() {
     const others = S().staff.filter(s => s.id !== me().id).sort(Store.byName);
     const close = UI.modal({ title: 'Écrire à un éducateur', noFocus: true,
-      body: others.length ? `<div class="people">${others.map(s => `<button class="person-main" data-to="${s.id}"><span class="pnum role">${I.whistle}</span><span class="pmain"><b>${esc(Store.fullName(s))}</b><span class="muted">${esc(s.role || '')}</span></span></button>`).join('')}</div>` : '<p class="muted">Aucun autre dirigeant dans l\'appli.</p>',
+      body: others.length ? `<div class="people">${others.map(s => `<button class="person-main" data-to="${s.id}"><span class="pnum role">${I.whistle}</span><span class="pmain"><b>${esc(Store.fullName(s))}</b><span class="muted">${esc([s.role, (s.teamIds || []).map(id => (Store.get('teams', id) || {}).name).filter(Boolean).join(', ')].filter(Boolean).join(' · '))}</span></span></button>`).join('')}</div>` : '<p class="muted">Aucun autre dirigeant dans l\'appli.</p>',
       onOpen: r => $$('[data-to]', r).forEach(b => b.onclick = () => { close(); location.hash = '#/messages/' + encodeURIComponent(dmKey(me().id, b.dataset.to)); }) });
   }
   function leave() { fast = false; onNew = null; start(); }

@@ -210,9 +210,15 @@ const People = (() => {
         <label class="search">${I.search}<input id="q" type="search" placeholder="Chercher un nom" value="${esc(ui[key + 'Q'] || '')}"></label>
         <select id="cat" aria-label="Catégorie"><option value="">${Auth.isAdmin() ? 'Toutes les catégories' : 'Mes catégories'}</option>${Auth.teams().map(t => `<option value="${t.id}" ${t.id === filt ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}<option value="-" ${filt === '-' ? 'selected' : ''}>Sans catégorie</option></select>
       </div>
-      <div class="people big">${list.map(p => isP ? playerRow(p) : staffRow(p)).join('') || '<p class="muted">Personne ici.</p>'}</div>`;
-    const again = () => listPage(root, kind);
-    $('#q', root).oninput = e => { ui[key + 'Q'] = e.target.value; const pos = e.target.selectionStart; again(); const i = $('#q', root); i.focus(); i.setSelectionRange(pos, pos); };
+      <div class="people big" id="plist">${list.map(p => isP ? playerRow(p) : staffRow(p)).join('') || '<p class="muted">Personne ici.</p>'}</div>`;
+    const again = () => { const y = window.scrollY; listPage(root, kind); window.scrollTo(0, y); };
+    // Search: only the list is redrawn, the search field keeps the keyboard (no jump on iPhone)
+    $('#q', root).oninput = e => {
+      ui[key + 'Q'] = e.target.value; const qq = e.target.value.toLowerCase(), f = ui[key] || '';
+      const l = all.filter(p => (!f || (f === '-' ? !(p.teamIds || []).length : (p.teamIds || []).includes(f))) && (!qq || name(p).toLowerCase().includes(qq)));
+      $('#plist', root).innerHTML = l.map(p => isP ? playerRow(p) : staffRow(p)).join('') || '<p class="muted">Personne ici.</p>';
+      $('.page-head .sub', root).textContent = `${l.length} sur ${all.length} · ${Auth.isAdmin() ? 'tout le club' : 'mes catégories'}`;
+    };
     $('#cat', root).onchange = e => { ui[key] = e.target.value; Store.save(); again(); };
     root.onclick = e => {
       const b = e.target.closest('button'); if (!b) return;

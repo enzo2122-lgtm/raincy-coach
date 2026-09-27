@@ -604,6 +604,7 @@ body:not(.editing) main#view { padding-bottom: 96px; }
 /* ---------- planning ---------- */
 .plan-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; }
 .plan-nav b { font: 800 17px var(--round); }
+.plan-nav .sh { display: none; }
 .plan-legend { display: flex; align-items: center; gap: 6px 12px; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
 .plan-legend i { display: inline-block; width: 14px; height: 14px; border-radius: 4px; margin-right: 4px; vertical-align: -2px; }
 .plan-legend > span { white-space: nowrap; }
@@ -676,6 +677,12 @@ button.plan-head { display: block; width: 100%; border: 0; background: none; fon
   .rs-teams { font-size: 14px; gap: 6px; }
   .rs-score { font-size: 15px; padding: 2px 6px; }
 }
+#previewBar { position: fixed; top: 0; left: 0; right: 0; z-index: 45; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: nowrap; font-size: 14px; padding: calc(env(safe-area-inset-top) + 6px) 12px 6px; background: var(--gold); color: var(--navy); font-weight: 800; box-shadow: 0 4px 14px rgba(0,0,0,.25); }
+#previewBar .btn { min-height: 36px; padding: 0 14px; background: var(--navy); color: #fff; border: 0; }
+#previewBar > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#previewBar .btn { flex: none; }
+@media (max-width: 760px) { #previewBar .lg { display: none; } }
+body.previewing .shell { padding-top: var(--pvh, 52px); }
 .plan-mini a { grid-template-columns: 70px minmax(0, 1fr) auto; }
 @media (max-width: 760px) {
   .day-select { display: flex; }
@@ -687,6 +694,22 @@ button.plan-head { display: block; width: 100%; border: 0; background: none; fon
   .plan-day.sel { display: block; }
   .plan-view { display: flex; }
   .day-chips.wk { display: none; }
+  /* compact top of the planning page on a phone: the grid gets the room */
+  .page-head:has(.plan-actions) .sub { display: none; }
+  .page-head:has(.plan-actions) h1 { font-size: 24px; }
+  .plan-actions { flex-wrap: nowrap; gap: 6px; }
+  .plan-actions .btn { min-height: 42px; padding: 0 12px; }
+  .plan-actions .btn:not(.primary) span { display: none; }
+  .plan-nav { gap: 6px; margin-bottom: 8px; }
+  .plan-nav .lg { display: none; }
+  .plan-nav .sh { display: inline; }
+  .plan-nav b { font-size: 15px; }
+  .plan-nav .icon-btn { width: 40px; height: 40px; }
+  .plan-nav .btn { min-height: 40px; padding: 0 12px; }
+  .plan-nav .grow { display: none; }
+  .plan-view .chip { min-height: 36px; padding: 0 12px; }
+  .plan-legend { font-size: 11.5px; gap: 2px 8px; }
+  body[data-page="planning"] .help-fab { display: none; }
   /* « Semaine » on a phone: the 7 days side by side, coloured blocks, name only */
   .plan-wrap.wk { padding: 6px 4px; }
   .plan-wrap.wk .plan-grid { grid-template-columns: 30px repeat(7, minmax(0, 1fr)); gap: 0 2px; }
