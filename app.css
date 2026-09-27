@@ -109,6 +109,8 @@ h2.section { font-size: 21px; font-weight: 800; margin: 26px 0 10px; }
 .fld.inline { max-width: 320px; }
 input:not([type=checkbox]), select, textarea { width: 100%; min-height: 46px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface2); font-size: 17px; }
 textarea { resize: vertical; line-height: 1.4; }
+/* no zoom when a button is tapped twice quickly (iPhone) */
+button, a, input, select, textarea, label { touch-action: manipulation; }
 input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: transparent; }
 .switch { display: flex; align-items: center; gap: 12px; min-height: 44px; cursor: pointer; font-weight: 600; }
 .switch input { width: 26px; height: 26px; accent-color: var(--accent); flex: none; }
@@ -235,14 +237,14 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 .big-act span { font-size: 14px; color: var(--muted); }
 .big-act:disabled { opacity: .45; }
 @media (max-width: 420px) { .big-actions { grid-template-columns: 1fr; } }
-.busy { position: fixed; inset: 0; z-index: 60; background: rgba(8, 14, 20, .55); display: grid; place-items: center; }
+.busy { position: fixed; inset: 0; z-index: 96; background: rgba(8, 14, 20, .55); display: grid; place-items: center; }
 .busy-card { background: var(--surface); border-radius: 18px; padding: 24px; width: min(360px, 90vw); text-align: center; }
 .busy-card p { margin: 12px 0; font-weight: 600; }
 .spinner { width: 38px; height: 38px; margin: 0 auto; border-radius: 50%; border: 4px solid var(--line); border-top-color: var(--accent); animation: spin 1s linear infinite; }
 .bar { height: 8px; background: var(--surface2); border-radius: 4px; overflow: hidden; }
 .bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
 @keyframes spin { to { transform: rotate(360deg); } }
-.toast { position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 28px); transform: translate(-50%, 20px); opacity: 0; pointer-events: none; z-index: 70; background: var(--ink); color: var(--bg); padding: 12px 18px; border-radius: 12px; font-weight: 600; transition: .25s; max-width: 90vw; text-align: center; }
+.toast { position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 28px); transform: translate(-50%, 20px); opacity: 0; pointer-events: none; z-index: 100; background: var(--ink); color: var(--bg); padding: 12px 18px; border-radius: 12px; font-weight: 600; transition: .25s; max-width: 90vw; text-align: center; }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 .toast.err { background: var(--bad); color: #fff; }
 @media (max-width: 760px) { .toast { bottom: calc(env(safe-area-inset-bottom) + 86px); } }
@@ -342,7 +344,7 @@ fieldset.parent legend { font-weight: 800; padding: 0 6px; font-family: var(--ro
 .link-box { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 12px; background: var(--surface2); word-break: break-all; }
 .link-box svg { flex: none; width: 20px; height: 20px; }
 .lock-links { margin-top: 14px; padding-top: 6px; border-top: 1px solid var(--line); }
-.lock-card textarea { width: 100%; font-size: 12px; }
+.lock-card textarea { width: 100%; font-size: 16px; }
 .lock-card .wizard { padding-left: 20px; }
 .btn.link { border: 0; background: none; color: var(--accent); font-weight: 600; min-height: 40px; }
 .code { font: 800 clamp(18px, 5vw, 28px)/1.2 ui-monospace, "SF Mono", Menlo, Consolas, monospace; letter-spacing: .08em; word-break: break-all; text-align: center; padding: 14px; border: 2px dashed var(--gold); border-radius: 12px; background: var(--surface2); margin: 10px 0 16px; }
