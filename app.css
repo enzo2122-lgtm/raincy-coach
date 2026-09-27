@@ -1004,3 +1004,9 @@ h2.section svg { width: 22px; height: 22px; vertical-align: -4px; margin-right: 
   .person-main .pct + .has-tel, .person-main .has-tel { display: none; }
   .person-main { gap: 8px; }
 }
+.sub-posts { margin-top: 8px; padding: 8px; border-radius: 12px; background: var(--surface2); }
+.sub-posts .chip, #pPosts .chip { min-height: 38px; padding: 0 12px; font-size: 14.5px; }
+.posts-more { margin: 10px 0; }
+.posts-more summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
+.post-group { margin: 6px 0; }
+.post-group .chips { margin-top: 4px; }

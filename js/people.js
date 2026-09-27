@@ -13,10 +13,13 @@ const People = (() => {
 
   /* Positions: a main position and possibly others. p.posts = [main, ...others]; p.pos keeps the line (GB, DEF, MIL, ATT)
      that the lineups use. Old players only have p.pos (a line): it is shown as « Défenseur », « Milieu »… */
-  const POSTS = [['GB', 'Gardien', 'G', 'GB'], ['DC', 'Défenseur central', 'DC', 'DEF'], ['LD', 'Latéral droit', 'LD', 'DEF'], ['LG', 'Latéral gauche', 'LG', 'DEF'],
-    ['MDC', 'Milieu défensif', 'MDC', 'MIL'], ['MC', 'Milieu relayeur', 'MC', 'MIL'], ['MOC', 'Milieu offensif', 'MOC', 'MIL'],
-    ['AD', 'Ailier droit', 'AD', 'ATT'], ['AG', 'Ailier gauche', 'AG', 'ATT'], ['BU', 'Avant-centre', 'BU', 'ATT'],
-    ['DEF', 'Défenseur', 'DEF', 'DEF'], ['MIL', 'Milieu', 'MIL', 'MIL'], ['ATT', 'Attaquant', 'ATT', 'ATT']];
+  // [code, name, abbreviation, type]. The first one of each type is the type itself (« Défenseur », without more detail)
+  const POSTS = [['GB', 'Gardien', 'G', 'GB'],
+    ['DEF', 'Défenseur', 'DEF', 'DEF'], ['DC', 'Défenseur central', 'DC', 'DEF'], ['LD', 'Latéral droit', 'LD', 'DEF'], ['LG', 'Latéral gauche', 'LG', 'DEF'],
+    ['MIL', 'Milieu', 'MIL', 'MIL'], ['MDC', 'Milieu défensif', 'MDC', 'MIL'], ['MC', 'Milieu relayeur', 'MC', 'MIL'], ['MOC', 'Milieu offensif', 'MOC', 'MIL'], ['MD', 'Milieu droit', 'MD', 'MIL'], ['MG', 'Milieu gauche', 'MG', 'MIL'],
+    ['ATT', 'Attaquant', 'ATT', 'ATT'], ['AD', 'Ailier droit', 'AD', 'ATT'], ['AG', 'Ailier gauche', 'AG', 'ATT'], ['SA', 'Second attaquant', 'SA', 'ATT'], ['BU', 'Avant-centre', 'BU', 'ATT']];
+  const TYPES = [['GB', 'Gardien'], ['DEF', 'Défenseur'], ['MIL', 'Milieu'], ['ATT', 'Attaquant']];
+  const subsOf = type => POSTS.filter(x => x[3] === type && x[0] !== type); // the precise positions of a type
   const LINES = [['GB', 'Gardiens'], ['DEF', 'Défenseurs'], ['MIL', 'Milieux'], ['ATT', 'Attaquants'], ['', 'Poste non renseigné']];
   const postOf = c => POSTS.find(x => x[0] === c);
   const postsOf = p => (Array.isArray(p.posts) && p.posts.length ? p.posts : p.pos ? [p.pos] : []).filter(postOf);
@@ -110,8 +113,9 @@ const People = (() => {
         <div class="row3"><label class="fld"><span>Né(e) le</span><input id="pBirth" type="date" value="${esc(p.birth || '')}"></label>
         <label class="fld"><span>Sous-catégorie</span><select id="pSub"><option value="">–</option>${opt(SUBCATS, p.subcat)}</select></label>
         <label class="fld"><span>Numéro</span><input id="pNum" type="number" min="0" max="99" value="${esc(p.number)}"></label>
-        <label class="fld"><span>Poste principal</span><select id="pPos"><option value="">–</option>${POSTS.map((x, i) => i < 10 || postsOf(p)[0] === x[0] ? `<option value="${x[0]}" ${postsOf(p)[0] === x[0] ? 'selected' : ''}>${esc(x[1])}</option>` : '').join('')}</select></label></div>
-        <div class="lbl">Autres postes possibles (plusieurs au choix)</div><div class="chips" id="pPosts">${POSTS.slice(0, 10).map(x => `<button type="button" class="chip ${postsOf(p).slice(1).includes(x[0]) ? 'on' : ''}" data-post="${x[0]}">${esc(x[1])}</button>`).join('')}</div>
+        <input type="hidden" id="pPos" value="${esc(postsOf(p)[0] || '')}"></div>
+        <div class="lbl">Poste principal</div><div id="pMain">${mainPicker(postsOf(p)[0] || '')}</div>
+        <details class="posts-more" ${postsOf(p).length > 1 ? 'open' : ''}><summary>Autres postes possibles${postsOf(p).length > 1 ? ` (${postsOf(p).length - 1})` : ''}</summary><div id="pPosts">${TYPES.map(([t, l]) => `<div class="post-group"><span class="muted small">${esc(l)}</span><div class="chips">${POSTS.filter(x => x[3] === t).map(x => `<button type="button" class="chip ${postsOf(p).slice(1).includes(x[0]) ? 'on' : ''}" data-post="${x[0]}">${postChip(x)}</button>`).join('')}</div></div>`).join('')}</div></details>
         <div class="lbl">Catégories (plusieurs possibles)</div>${teamChips(p.teamIds)}
         <h3 class="sub-h">Contacts</h3>
         <div class="row2"><label class="fld"><span>Téléphone du joueur</span><input id="pTel" type="tel" inputmode="tel" value="${esc(p.phone || '')}"></label>
@@ -123,6 +127,8 @@ const People = (() => {
       onOpen: r => {
         bindChips(r);
         $$('#pPosts .chip', r).forEach(b => b.onclick = () => b.classList.toggle('on'));
+        // main position: touch a type (Défenseur…), then if you want a precise position (DC, LD…)
+        $('#pMain', r).onclick = e => { const b = e.target.closest('[data-main]'); if (!b) return; $('#pPos', r).value = b.dataset.main; $('#pMain', r).innerHTML = mainPicker(b.dataset.main); };
         // A new date of birth selects the matching category (U6 … U17, Seniors, Vétérans)
         $('#pBirth', r).onchange = e => {
           const cat = catOf({ birth: e.target.value, subcat: $('#pSub', r).value }); if (!cat) return;
@@ -144,6 +150,13 @@ const People = (() => {
     });
   }
 
+  // « DC · Défenseur central » (the abbreviation, then the name)
+  const postChip = x => x[0] === x[3] || x[0] === 'GB' ? `<b>${esc(x[1])}</b>` + (x[0] === 'GB' ? '' : ' <i class="muted">sans précision</i>') : `<b>${esc(x[2])}</b> · ${esc(x[1])}`;
+  function mainPicker(cur) {
+    const type = cur ? postOf(cur)[3] : '';
+    return `<div class="chips">${TYPES.map(([t, l]) => `<button type="button" class="chip ${type === t ? 'on' : ''}" data-main="${t}">${esc(l)}</button>`).join('')}${cur ? '<button type="button" class="chip" data-main="">✕ Aucun</button>' : ''}</div>` +
+      (type && subsOf(type).length ? `<div class="chips sub-posts">${[[type, 'Pas de précision']].concat(subsOf(type).map(x => [x[0], x])).map(([c, x]) => `<button type="button" class="chip ${cur === c ? 'on' : ''}" data-main="${c}">${typeof x === 'string' ? esc(x) : postChip(x)}</button>`).join('')}</div>` : '');
+  }
   // Main position first, then the other ones ticked (p.pos = its line, for the lineups)
   function readPosts(r, main) {
     const posts = [main, ...$$('#pPosts .chip.on', r).map(b => b.dataset.post).filter(c => c !== main)].filter(Boolean);
@@ -285,7 +298,7 @@ const People = (() => {
       <button class="btn primary" data-act="new">${I.plus}<span>${isP ? 'Nouveau joueur' : 'Nouveau dirigeant'}</span></button></div></header>
       <div class="filters">
         <label class="search">${I.search}<input id="q" type="search" placeholder="Chercher un nom" value="${esc(ui[key + 'Q'] || '')}"></label>
-        ${isP ? `<select id="post" aria-label="Poste"><option value="">Tous les postes</option>${[...LINES.slice(0, 4).map(([k, l]) => [k, l + ' (tous)']), ...POSTS.slice(0, 10).map(x => [x[0], x[1]])].map(([k, l]) => `<option value="${k}" ${pf === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}<option value="-" ${pf === '-' ? 'selected' : ''}>Poste non renseigné</option></select>` : ''}
+        ${isP ? `<select id="post" aria-label="Poste"><option value="">Tous les postes</option>${TYPES.map(([t]) => `<optgroup label="${esc(LINES.find(x => x[0] === t)[1])}"><option value="${t}" ${pf === t ? 'selected' : ''}>${esc(LINES.find(x => x[0] === t)[1])} (tous)</option>${subsOf(t).map(x => `<option value="${x[0]}" ${pf === x[0] ? 'selected' : ''}>${esc(x[2] + ' · ' + x[1])}</option>`).join('')}</optgroup>`).join('')}<option value="-" ${pf === '-' ? 'selected' : ''}>Poste non renseigné</option></select>` : ''}
         <select id="cat" aria-label="Catégorie"><option value="">${Auth.isAdmin() ? 'Toutes les catégories' : 'Mes catégories'}</option>${Auth.teams().map(t => `<option value="${t.id}" ${t.id === filt ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}<option value="-" ${filt === '-' ? 'selected' : ''}>Sans catégorie</option></select>
       </div>
       ${isP ? sortBar(sort, 'psort') : ''}
@@ -576,5 +589,5 @@ const People = (() => {
   }
 
   return { isClubList, importClubList, autoCategories, sortByBirth, sortByBirthDialog, catOf, seasonLabel, seasonFrom, editPlayer, editStaff, teamSections, bindTeamSections, staffPicker, listPage, playerPage, age, fmtBirth, tel, name,
-    attendance, pctBadge, matchLength, playerSeason, POSTS, postsOf, postsLabel, lineOf, sortPlayers, byLine, sortBar, PHONE_SHOW, staffPhone };
+    attendance, pctBadge, matchLength, playerSeason, POSTS, TYPES, postsOf, postsLabel, lineOf, sortPlayers, byLine, sortBar, PHONE_SHOW, staffPhone };
 })();
