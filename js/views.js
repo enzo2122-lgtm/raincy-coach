@@ -7,14 +7,18 @@ const Views = (() => {
   const FORMATS = [['11', 'Foot à 11'], ['8', 'Foot à 8'], ['5', 'Foot à 5']];
   const pName = Store.fullName;
   const pLabel = p => `${p.number ? p.number + ' · ' : ''}${pName(p)}`;
+  // name on a roster chip, with the positions in short (« DC/LD »)
+  const chipLabel = p => `${esc(pLabel(p))}${People.postsLabel(p, true) ? ` <i class="post-tag">${esc(People.postsLabel(p, true))}</i>` : ''}`;
   // The team's own players (all of its category when nobody is put in the team yet, e.g. « Seniors A »)
   const squad = teamId => { const own = Store.playersOf(teamId); return own.length ? own : Store.rosterOf(teamId); };
   // Chips of a team's players, then « Autres joueurs de la catégorie » (a team A / B can call up any player of its category)
   function rosterChips(teamId, chip) {
-    const all = Store.rosterOf(teamId), own = new Set(Store.playersOf(teamId).map(p => p.id)), mine = all.filter(p => own.has(p.id)), others = all.filter(p => !own.has(p.id));
-    const t = teamOf(teamId);
-    return (mine.length ? `<div class="chips roster">${mine.map(chip).join('')}</div>` : '') +
-      (others.length ? `${mine.length ? `<div class="lbl">Autres joueurs de la catégorie ${esc((t && t.category) || '')} (${others.length})</div>` : ''}<div class="chips roster">${others.map(chip).join('')}</div>` : '') +
+    const mode = S().ui.rosterSort || 'name', all = Store.rosterOf(teamId), own = new Set(Store.playersOf(teamId).map(p => p.id));
+    const mine = all.filter(p => own.has(p.id)), others = all.filter(p => !own.has(p.id)), t = teamOf(teamId);
+    // sorted by position: one row of chips per line (goalkeepers, defenders, midfielders, forwards)
+    const block = list => mode === 'post' ? People.byLine(list).map(([lab, ps]) => `<div class="lbl line-lbl">${esc(lab)} (${ps.length})</div><div class="chips roster">${ps.map(chip).join('')}</div>`).join('') : `<div class="chips roster">${People.sortPlayers(list, mode).map(chip).join('')}</div>`;
+    return (all.length > 1 ? People.sortBar(mode, 'rsort') : '') + (mine.length ? block(mine) : '') +
+      (others.length ? `${mine.length ? `<div class="lbl">Autres joueurs de la catégorie ${esc((t && t.category) || '')} (${others.length})</div>` : ''}${block(others)}` : '') +
       (!all.length ? '<p class="muted">Aucun joueur dans cette catégorie : ajoute-les dans Équipes.</p>' : '');
   }
   const POS = [['GB', 'Gardien'], ['DEF', 'Défenseur'], ['MIL', 'Milieu'], ['ATT', 'Attaquant']];
@@ -384,7 +388,7 @@ const Views = (() => {
       const box = $('#rateBox', root); if (box) Ratings.bind(box, tr, save);
       rateTr(); Media.mount(root); Library.mountDocs($('#docsBox', root), tr, save);
     };
-    const presChip = (p, teamId) => `<span>${esc(pLabel(p))}</span>${People.pctBadge(People.attendance(p, teamId))}`;
+    const presChip = (p, teamId) => `<span>${chipLabel(p)}</span>${People.pctBadge(People.attendance(p, teamId))}`;
     const rateTr = () => { const box = $('#rateBox', root); if (box) box.innerHTML = Ratings.section(tr, Store.rosterOf(tr.teamId || '').filter(p => (tr.presents || []).includes(p.id)), 'training'); };
     const exerciseCard = (e, i, n) => {
       const sc = e.schemaId && Store.get('schemas', e.schemaId);
@@ -423,6 +427,7 @@ const Views = (() => {
         $$('[data-present]', root).forEach(c => { const pl = Store.get('players', c.dataset.present); c.classList.toggle('on', p.includes(c.dataset.present)); if (pl) c.innerHTML = presChip(pl, tr.teamId); });
         $('#presH', root).textContent = `Présents (${p.length}/${squad(tr.teamId).length})`; rateTr(); return;
       }
+      if (b.dataset.rsort) { S().ui.rosterSort = b.dataset.rsort; Store.persistNow(); return render(); }
       if (b.dataset.allpres) {
         if (b.dataset.allpres === '0' && (tr.presents || []).length && !(await confirmBox('Décocher tous les présents de cette séance ?', 'Décocher'))) return;
         tr.presents =b.dataset.allpres === '1' ? squad(tr.teamId).map(p => p.id) : []; save(); return render(); }
@@ -555,7 +560,7 @@ const Views = (() => {
           <div class="chips"><button class="chip ch-home ${m.home ? 'on' : ''}" data-home="1">🏠 Domicile</button><button class="chip ch-away ${!m.home ? 'on' : ''}" data-home="0">🚌 Extérieur</button></div>
         </section>
         <div class="row-head"><h2 class="section">Convoqués (${conv.length})</h2>${conv.length ? `<button class="btn primary" data-act="convoc">${I.share}<span>Envoyer la convocation</span></button>` : ''}</div>
-        ${t ? rosterChips(t.id, p => `<button class="chip ${(m.convoked || []).includes(p.id) ? 'on' : ''}" data-conv="${p.id}">${esc(pLabel(p))}</button>`) : '<p class="muted">Choisis une équipe.</p>'}
+        ${t ? rosterChips(t.id, p => `<button class="chip ${(m.convoked || []).includes(p.id) ? 'on' : ''}" data-conv="${p.id}">${chipLabel(p)}</button>`) : '<p class="muted">Choisis une équipe.</p>'}
         <div id="answersBox"></div>
         ${!m.home && !m.exempt ? '<div id="carpoolBox"></div>' : ''}
         <h2 class="section">Encadrants</h2><div class="staff-pick">${People.staffPicker(m.teamId, m.staffIds)}</div>
@@ -601,6 +606,7 @@ const Views = (() => {
     root.onclick = async e => {
       const b = e.target.closest('button'); if (!b) return;
       if (b.dataset.act === 'convoc') return sendConvocation(m);
+      if (b.dataset.rsort) { S().ui.rosterSort = b.dataset.rsort; Store.persistNow(); return render(); }
       if (b.dataset.minset) {
         const full = People.matchLength(m), v = { full, half: Math.round(full / 2), zero: 0 }[b.dataset.v];
         setMin(b.dataset.minset, v); save(); const inp = $(`[data-min="${b.dataset.minset}"]`, root); if (inp) inp.value = v; return;
@@ -682,8 +688,8 @@ const Views = (() => {
       const g = ms.reduce((a, m) => a + (((m.stats || {})[p.id] || {}).g || 0), 0), as = ms.reduce((a, m) => a + (((m.stats || {})[p.id] || {}).a || 0), 0);
       const pr = trs.filter(x => x.presents.includes(p.id)).length;
       const min = ms.reduce((a, m) => a + (+((m.minutes || {})[p.id]) || 0), 0);
-      return { p, played, g, a: as, pr, min, rate:trs.length ? Math.round(pr / trs.length * 100) : null, nm: Ratings.average(p.id, 'match') || 0, nt: Ratings.average(p.id, 'training') || 0 };
-    }).filter(r => ownIds.has(r.p.id) || !ownIds.size || r.played || r.pr).sort((a, b) => sortKey === 'name' ? Store.byName(a.p, b.p) : sortKey === 'num' ? (+a.p.number || 99) - (+b.p.number || 99) : (b[sortKey] || 0) - (a[sortKey] || 0));
+      return { p, post: People.postsLabel(p, true), played, g, a: as, pr, min, rate:trs.length ? Math.round(pr / trs.length * 100) : null, nm: Ratings.average(p.id, 'match') || 0, nt: Ratings.average(p.id, 'training') || 0 };
+    }).filter(r => ownIds.has(r.p.id) || !ownIds.size || r.played || r.pr).sort((a, b) => sortKey === 'post' ? People.sortPlayers([a.p, b.p], 'post')[0] === a.p ? -1 : 1 : sortKey === 'name' ? Store.byName(a.p, b.p) : sortKey === 'num' ? (+a.p.number || 99) - (+b.p.number || 99) : (b[sortKey] || 0) - (a[sortKey] || 0));
     const th = (k, l) => `<th><button class="th ${sortKey === k ? 'on' : ''}" data-sort="${k}">${l}</button></th>`;
     root.innerHTML = `${header('Statistiques', esc(t.name))}
       ${teamSwitch()}
@@ -698,8 +704,8 @@ const Views = (() => {
       </div>
       <h2 class="section">Joueurs</h2>
       <div class="table-wrap"><table class="tbl">
-        <thead><tr>${th('num', 'N°')}${th('name', 'Joueur')}${th('played', 'Matchs')}${th('min', 'Minutes')}${th('g', 'Buts')}${th('a', 'Passes déc.')}${th('pr', 'Entraînements')}${th('nm', 'Note matchs')}${th('nt', 'Note entr.')}</tr></thead>
-        <tbody>${rows.map(r => `<tr><td class="num">${esc(r.p.number)}</td><td><a href="#/joueur/${r.p.id}">${esc(pName(r.p))}</a></td><td>${r.played}</td><td>${r.min ? r.min + "'" : '–'}</td><td><b>${r.g}</b></td><td>${r.a}</td><td>${r.rate === null ? '–' : `${r.pr} <span class="muted">(${r.rate} %)</span>`}</td><td>${r.nm ? '⭐ ' + Ratings.fr(r.nm) : '–'}</td><td>${r.nt ? '⭐ ' + Ratings.fr(r.nt) : '–'}</td></tr>`).join('')}</tbody>
+        <thead><tr>${th('num', 'N°')}${th('name', 'Joueur')}${th('post', 'Poste')}${th('played', 'Matchs')}${th('min', 'Minutes')}${th('g', 'Buts')}${th('a', 'Passes déc.')}${th('pr', 'Entraînements')}${th('nm', 'Note matchs')}${th('nt', 'Note entr.')}</tr></thead>
+        <tbody>${rows.map(r => `<tr><td class="num">${esc(r.p.number)}</td><td><a href="#/joueur/${r.p.id}">${esc(pName(r.p))}</a></td><td class="muted">${esc(r.post) || '–'}</td><td>${r.played}</td><td>${r.min ? r.min + "'" : '–'}</td><td><b>${r.g}</b></td><td>${r.a}</td><td>${r.rate === null ? '–' : `${r.pr} <span class="muted">(${r.rate} %)</span>`}</td><td>${r.nm ? '⭐ ' + Ratings.fr(r.nm) : '–'}</td><td>${r.nt ? '⭐ ' + Ratings.fr(r.nt) : '–'}</td></tr>`).join('')}</tbody>
       </table></div>
       <h2 class="section">Résultats</h2>
       ${ms.length ? `<div class="table-wrap"><table class="tbl"><thead><tr><th>Date</th><th>Match</th><th>Score</th><th>Résultat</th></tr></thead>

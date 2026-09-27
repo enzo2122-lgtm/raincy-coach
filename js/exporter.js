@@ -219,7 +219,7 @@ const Exporter = (() => {
     P.header(tr.title || 'Entraînement', team ? team.name : '');
     P.facts([['Date', fmtDate(tr.date)], ['Heure', tr.time || '-'], ['Durée', total + ' min'], ['Présents', tr.presents && tr.presents.length ? String(tr.presents.length) : '-']]);
     const staff = (tr.staffIds || []).map(id => Store.get('staff', id)).filter(Boolean);
-    if (staff.length) { P.label('Encadrants'); P.para(staff.map(s => `${Store.fullName(s)}${s.role ? ' (' + s.role + ')' : ''}${s.phone ? ' - ' + s.phone : ''}`).join('\n')); }
+    if (staff.length) { P.label('Encadrants'); P.para(staff.map(s => `${Store.fullName(s)}${s.role ? ' (' + s.role + ')' : ''}${People.staffPhone(s) ? ' - ' + s.phone : ''}`).join('\n')); }
     if (tr.goal) { P.label('Objectif'); P.para(tr.goal); }
     P.label('Programme');
     let cum = 0;
@@ -249,11 +249,11 @@ const Exporter = (() => {
     }
     const players = team ? Store.rosterOf(team.id).filter(p => (m.convoked || []).includes(p.id)) : [];
     const staff = (m.staffIds || []).map(id => Store.get('staff', id)).filter(Boolean);
-    if (staff.length) { P.label('Encadrants'); P.table(['Nom', 'Rôle', 'Téléphone'], staff.map(s => [Store.fullName(s), s.role || '', s.phone || '']), [.45, .3, .25]); }
+    if (staff.length) { P.label('Encadrants'); P.table(['Nom', 'Rôle', 'Téléphone'], staff.map(s => [Store.fullName(s), s.role || '', People.staffPhone(s) || '']), [.45, .3, .25]); }
     if (players.length) {
       P.label(`Convoqués (${players.length})`);
       P.table(['N°', 'Joueur', 'Poste', 'Buts', 'Passes'], players.sort((a, b) => (a.number || 0) - (b.number || 0)).map(p => {
-        const st = (m.stats || {})[p.id] || {}; return [String(p.number || ''), Store.fullName(p), p.pos || '', st.g ? String(st.g) : '', st.a ? String(st.a) : ''];
+        const st = (m.stats || {})[p.id] || {}; return [String(p.number || ''), Store.fullName(p), People.postsLabel(p, true) || '', st.g ? String(st.g) : '', st.a ? String(st.a) : ''];
       }), [.1, .5, .14, .13, .13]);
     }
     const sc = m.lineupId && S.schemas.find(s => s.id === m.lineupId);

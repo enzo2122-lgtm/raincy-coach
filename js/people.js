@@ -11,6 +11,41 @@ const People = (() => {
   const TEAM_OF_SUB = { 'Vétéran': 'Vétérans', 'Senior': 'Seniors', 'Senior U20': 'Seniors', U19: 'Seniors', U18: 'Seniors', U17: 'U17', U16: 'U16', U15: 'U15', U14: 'U14', U13: 'U13', U12: 'U12', U11: 'U11', U10: 'U10', U9: 'U9', U8: 'U8', U7: 'U7', U6: 'U6' };
   const FORMAT_OF_TEAM = { U7: '5', U9: '5', U11: '8', U13: '8' };
 
+  /* Positions: a main position and possibly others. p.posts = [main, ...others]; p.pos keeps the line (GB, DEF, MIL, ATT)
+     that the lineups use. Old players only have p.pos (a line): it is shown as « Défenseur », « Milieu »… */
+  const POSTS = [['GB', 'Gardien', 'G', 'GB'], ['DC', 'Défenseur central', 'DC', 'DEF'], ['LD', 'Latéral droit', 'LD', 'DEF'], ['LG', 'Latéral gauche', 'LG', 'DEF'],
+    ['MDC', 'Milieu défensif', 'MDC', 'MIL'], ['MC', 'Milieu relayeur', 'MC', 'MIL'], ['MOC', 'Milieu offensif', 'MOC', 'MIL'],
+    ['AD', 'Ailier droit', 'AD', 'ATT'], ['AG', 'Ailier gauche', 'AG', 'ATT'], ['BU', 'Avant-centre', 'BU', 'ATT'],
+    ['DEF', 'Défenseur', 'DEF', 'DEF'], ['MIL', 'Milieu', 'MIL', 'MIL'], ['ATT', 'Attaquant', 'ATT', 'ATT']];
+  const LINES = [['GB', 'Gardiens'], ['DEF', 'Défenseurs'], ['MIL', 'Milieux'], ['ATT', 'Attaquants'], ['', 'Poste non renseigné']];
+  const postOf = c => POSTS.find(x => x[0] === c);
+  const postsOf = p => (Array.isArray(p.posts) && p.posts.length ? p.posts : p.pos ? [p.pos] : []).filter(postOf);
+  const lineOf = p => { const m = postsOf(p)[0]; return m ? postOf(m)[3] : ''; };
+  const postsLabel = (p, short) => postsOf(p).map(c => postOf(c)[short ? 2 : 1]).join(short ? '/' : ' · ');
+  const hasPost = (p, c) => postsOf(p).some(x => x === c || postOf(x)[3] === c); // « DEF » also finds the central and full backs
+  // Players in the chosen order: 'name' (default), 'num', or 'post' (goalkeepers, defenders, midfielders, forwards)
+  function sortPlayers(list, mode) {
+    const l = list.slice(), num = p => (p.number === '' || p.number == null ? 999 : +p.number);
+    if (mode === 'num') return l.sort((a, b) => num(a) - num(b) || Store.byName(a, b));
+    if (mode === 'post') {
+      const rk = p => { const i = LINES.findIndex(x => x[0] === lineOf(p)); return i < 0 ? 9 : i; }, pk = p => { const m = postsOf(p)[0]; return m ? POSTS.findIndex(x => x[0] === m) : 99; };
+      return l.sort((a, b) => rk(a) - rk(b) || pk(a) - pk(b) || Store.byName(a, b));
+    }
+    return l.sort(Store.byName);
+  }
+  // Same list cut by line, for headings: [[« Gardiens », players], …]
+  const byLine = list => LINES.map(([k, lab]) => [lab, sortPlayers(list.filter(p => lineOf(p) === k), 'post')]).filter(x => x[1].length);
+  const sortBar = (cur, key = 'sort') => `<span class="sort-bar" role="group" aria-label="Trier"><span class="muted small">Trier :</span>${[['name', 'Nom'], ['num', 'N°'], ['post', 'Poste']].map(([v, l]) => `<button type="button" class="chip ${(cur || 'name') === v ? 'on' : ''}" data-${key}="${v}">${l}</button>`).join('')}</span>`;
+  // A list of player rows, cut by line when sorted by position
+  const rowsOf = (list, mode, row) => mode === 'post' ? byLine(list).map(([lab, ps]) => `<h3 class="line-h">${esc(lab)} (${ps.length})</h3>${ps.map(row).join('')}`).join('') : sortPlayers(list, mode).map(row).join('');
+
+  /* Phone of a dirigeant: each one chooses who sees it (Mon compte). 'resp': the responsables only, 'club': every dirigeant (default),
+     'parents': also the parents of his categories, on their page */
+  const PHONE_SHOW = [['resp', 'Seulement les responsables du club'], ['club', 'Tous les éducateurs et dirigeants du club'], ['parents', 'Les éducateurs, et les parents de mes catégories']];
+  const me = () => Auth.current();
+  const phoneVisible = s => !!s.phone && (Auth.isAdmin() || (me() && me().id === s.id) || (s.phoneShow || 'club') !== 'resp');
+  const staffPhone = s => phoneVisible(s) ? s.phone : '';
+
   const name = Store.fullName;
   const age = iso => { if (!iso) return ''; const b = new Date(iso + 'T12:00'), n = new Date(); let a = n.getFullYear() - b.getFullYear(); if (n < new Date(n.getFullYear(), b.getMonth(), b.getDate())) a--; return a; };
   const fmtBirth = iso => iso ? iso.split('-').reverse().join('/') : '';
@@ -28,7 +63,7 @@ const People = (() => {
 
   /* ---------- rows ---------- */
   function playerRow(p, teamId, groups) {
-    const sub = [p.subcat, p.birth ? `${age(p.birth)} ans` : '', teamId ? '' : teamNames(p.teamIds), S().staff.some(x => x.playerId === p.id) ? 'aussi dirigeant' : ''].filter(Boolean).join(' · ');
+    const sub = [postsLabel(p), p.subcat, p.birth ? `${age(p.birth)} ans` : '', teamId ? '' : teamNames(p.teamIds), S().staff.some(x => x.playerId === p.id) ? 'aussi dirigeant' : ''].filter(Boolean).join(' · ');
     // Groups A / B of the category: one touch puts the player in A or in B (touch his group again: no group)
     const ab = groups ? `<span class="ab" role="group" aria-label="Groupe de ${esc(name(p))}">${groups.subs.map(g => `<button type="button" class="ab-b ${(p.teamIds || []).includes(g.id) ? 'on' : ''}" data-ab="${g.id}" data-p="${p.id}" aria-label="Mettre ${esc(name(p))} en ${esc(g.name)}">${esc(g.name.trim().slice(-1))}</button>`).join('')}</span>` : '';
     return `<div class="person">
@@ -47,7 +82,7 @@ const People = (() => {
         <span class="pnum role">${I.whistle}</span>
         <span class="pmain"><b>${esc(name(p))}</b>${UI.motto(p)}<span class="muted">${esc(p.role || '')}${teamId ? '' : ' · ' + esc(teamNames(p.teamIds) || 'aucune catégorie')}${p.playerId && Store.get('players', p.playerId) ? ' · aussi joueur (' + esc(teamNames(Store.get('players', p.playerId).teamIds)) + ')' : ''}</span></span>
       </button>
-      ${p.phone ? `<a class="icon-btn" href="${telHref(p.phone)}" aria-label="Appeler ${esc(name(p))}">${I.phone}</a>` : ''}
+      ${staffPhone(p) ? `<a class="icon-btn" href="${telHref(p.phone)}" aria-label="Appeler ${esc(name(p))}">${I.phone}</a>` : ''}
       ${teamId ? `<button class="icon-btn" data-unlink="${p.id}" data-kind="staff" aria-label="Retirer ${esc(name(p))} de la catégorie">${I.x}</button>` : ''}
     </div>`;
   }
@@ -75,7 +110,8 @@ const People = (() => {
         <div class="row3"><label class="fld"><span>Né(e) le</span><input id="pBirth" type="date" value="${esc(p.birth || '')}"></label>
         <label class="fld"><span>Sous-catégorie</span><select id="pSub"><option value="">–</option>${opt(SUBCATS, p.subcat)}</select></label>
         <label class="fld"><span>Numéro</span><input id="pNum" type="number" min="0" max="99" value="${esc(p.number)}"></label>
-        <label class="fld"><span>Poste</span><select id="pPos">${opt(POS, p.pos || '')}</select></label></div>
+        <label class="fld"><span>Poste principal</span><select id="pPos"><option value="">–</option>${POSTS.map((x, i) => i < 10 || postsOf(p)[0] === x[0] ? `<option value="${x[0]}" ${postsOf(p)[0] === x[0] ? 'selected' : ''}>${esc(x[1])}</option>` : '').join('')}</select></label></div>
+        <div class="lbl">Autres postes possibles (plusieurs au choix)</div><div class="chips" id="pPosts">${POSTS.slice(0, 10).map(x => `<button type="button" class="chip ${postsOf(p).slice(1).includes(x[0]) ? 'on' : ''}" data-post="${x[0]}">${esc(x[1])}</button>`).join('')}</div>
         <div class="lbl">Catégories (plusieurs possibles)</div>${teamChips(p.teamIds)}
         <h3 class="sub-h">Contacts</h3>
         <div class="row2"><label class="fld"><span>Téléphone du joueur</span><input id="pTel" type="tel" inputmode="tel" value="${esc(p.phone || '')}"></label>
@@ -86,6 +122,7 @@ const People = (() => {
         ${isNew ? '' : notesHistory(p)}`,
       onOpen: r => {
         bindChips(r);
+        $$('#pPosts .chip', r).forEach(b => b.onclick = () => b.classList.toggle('on'));
         // A new date of birth selects the matching category (U6 … U17, Seniors, Vétérans)
         $('#pBirth', r).onchange = e => {
           const cat = catOf({ birth: e.target.value, subcat: $('#pSub', r).value }); if (!cat) return;
@@ -99,7 +136,7 @@ const People = (() => {
         { label: 'Enregistrer', kind: 'primary', onClick: (c, r) => {
           const v = id => $('#' + id, r).value.trim();
           if (!v('pLast') && !v('pFirst')) { toast('Écris au moins le nom ou le prénom', 'err'); return false; }
-          Object.assign(p, { lastName: v('pLast').toUpperCase(), firstName: v('pFirst'), birth: v('pBirth'), subcat: v('pSub'), number: v('pNum') === '' ? '' : +v('pNum'), pos: v('pPos'), phone: v('pTel'), email: v('pMail'), notes: $('#pNotes', r).value, teamIds: pickedTeams(r, p.teamIds || []),
+          Object.assign(p, { lastName: v('pLast').toUpperCase(), firstName: v('pFirst'), birth: v('pBirth'), subcat: v('pSub'), number: v('pNum') === '' ? '' : +v('pNum'), ...readPosts(r, v('pPos')), phone: v('pTel'), email: v('pMail'), notes: $('#pNotes', r).value, teamIds: pickedTeams(r, p.teamIds || []),
             parents: [0, 1].map(i => ({ name: v(`par${i}n`), rel: v(`par${i}r`), phone: v(`par${i}t`) })).filter(x => x.name || x.phone) });
           Store.upsert('players', p); toast('Enregistré'); opts.onSave && opts.onSave(p);
         } },
@@ -107,6 +144,11 @@ const People = (() => {
     });
   }
 
+  // Main position first, then the other ones ticked (p.pos = its line, for the lineups)
+  function readPosts(r, main) {
+    const posts = [main, ...$$('#pPosts .chip.on', r).map(b => b.dataset.post).filter(c => c !== main)].filter(Boolean);
+    return { posts, pos: posts.length ? postOf(posts[0])[3] : '' };
+  }
   function notesHistory(p) {
     const h = Ratings.history(p.id); if (!h.length) return '';
     const am = Ratings.average(p.id, 'match'), at = Ratings.average(p.id, 'training');
@@ -117,6 +159,8 @@ const People = (() => {
   }
 
   /* ---------- staff sheet ---------- */
+  // Who may change a dirigeant's phone: himself, a responsable, or whoever makes a new card
+  const canPhone = (p, isNew) => isNew || Auth.isAdmin() || (me() && me().id === p.id);
   function editStaff(p, opts = {}) {
     const isNew = !p;
     p = p || { id: Store.uid(), lastName: '', firstName: '', role: 'Éducateur', phone: '', email: '', notes: '', teamIds: opts.teamId ? [opts.teamId] : [] };
@@ -128,9 +172,11 @@ const People = (() => {
         <label class="fld"><span>Club de cœur (son blason s'affiche dans les messages)</span><select id="sClub">${Clubs.options(p.club)}</select></label></div>
         <label class="fld"><span>Petite phrase (drôle ou philosophique, à côté de son nom)</span><input id="sMotto" value="${esc(p.motto || '')}" maxlength="${UI.MOTTO_MAX}"></label>
         <div class="lbl">Catégories (plusieurs possibles)</div>${Auth.isAdmin() || isNew ? teamChips(p.teamIds) : `<p class="tip">🔒 ${esc(teamNames(p.teamIds) || 'Aucune catégorie')} · seul un responsable peut changer les catégories d'un dirigeant.</p>`}
-        <div class="row2"><label class="fld"><span>Téléphone</span><input id="sTel" type="tel" inputmode="tel" value="${esc(p.phone || '')}"></label>
-        <label class="fld"><span>E-mail</span><input id="sMail" type="email" inputmode="email" value="${esc(p.email || '')}"></label></div>
-        ${p.phone ? tel(p.phone, 'Appeler') : ''}
+        ${canPhone(p, isNew) ? `<div class="row2"><label class="fld"><span>Téléphone</span><input id="sTel" type="tel" inputmode="tel" value="${esc(p.phone || '')}"></label>
+        <label class="fld"><span>Qui voit ce numéro ?</span><select id="sShow">${PHONE_SHOW.map(([v, l]) => `<option value="${v}" ${(p.phoneShow || 'club') === v ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label></div>`
+          : `<p class="muted small">${!p.phone ? 'Pas de numéro. Chaque dirigeant peut ajouter le sien dans Réglages → Mon compte.' : staffPhone(p) ? '' : '📵 Numéro masqué : ce dirigeant le montre seulement aux responsables.'}</p>`}
+        ${staffPhone(p) ? tel(p.phone, 'Appeler') : ''}
+        <label class="fld"><span>E-mail</span><input id="sMail" type="email" inputmode="email" value="${esc(p.email || '')}"></label>
         ${S().players.length ? (() => { const sel = p.playerId || (playerLike(p) || {}).id || ''; return `<label class="fld"><span>Aussi joueur licencié ?</span><select id="sPlayer"><option value="">Non</option>
           ${S().players.slice().sort(Store.byName).map(x => `<option value="${x.id}" ${x.id === sel ? 'selected' : ''}>${esc(name(x))}${x.teamIds && x.teamIds.length ? ' · ' + esc(teamNames(x.teamIds)) : ''}</option>`).join('')}</select></label>`; })() : ''}
         <label class="fld"><span>Infos (diplôme, licence, disponibilités…)</span><textarea id="sNotes" rows="3">${esc(p.notes || '')}</textarea></label>`,
@@ -141,7 +187,8 @@ const People = (() => {
         { label: 'Enregistrer', kind: 'primary', onClick: (c, r) => {
           const v = id => $('#' + id, r).value.trim();
           if (!v('sLast') && !v('sFirst')) { toast('Écris au moins le nom ou le prénom', 'err'); return false; }
-          Object.assign(p, { lastName: v('sLast').toUpperCase(), firstName: v('sFirst'), role: v('sRole'), club: v('sClub'), motto: v('sMotto').replace(/\s+/g, ' '), phone: v('sTel'), email: v('sMail'), notes: $('#sNotes', r).value });
+          Object.assign(p, { lastName: v('sLast').toUpperCase(), firstName: v('sFirst'), role: v('sRole'), club: v('sClub'), motto: v('sMotto').replace(/\s+/g, ' '), email: v('sMail'), notes: $('#sNotes', r).value });
+          if ($('#sTel', r)) { p.phone = v('sTel'); p.phoneShow = v('sShow') || 'club'; }
           if (Auth.isAdmin() || isNew) p.teamIds = pickedTeams(r, p.teamIds || []);
           const sp = $('#sPlayer', r); if (sp) { if (sp.value) p.playerId = sp.value; else delete p.playerId; }
           Store.upsert('staff', p); toast('Enregistré'); opts.onSave && opts.onSave(p);
@@ -193,7 +240,8 @@ const People = (() => {
           <div class="chips"><button class="btn primary" data-newplayer>${I.plus}<span>Nouveau joueur</span></button></div></div>
         ${g ? `<p class="tip">Groupes : touche ${g.subs.map(s => `<b>${esc(s.name.trim().slice(-1))}</b>`).join(' ou ')} à côté d'un joueur pour le changer de groupe (touche encore : plus de groupe).<br>${count}</p>` : ''}
         ${addSelect('player', t.id, 'Ajouter un joueur d\'une autre catégorie…')}
-        <div class="people">${ps.map(p => playerRow(p, t.id, g)).join('') || '<p class="muted">Aucun joueur dans cette catégorie.</p>'}</div>
+        ${ps.length ? sortBar(S().ui.peopleSort, 'psort') : ''}
+        <div class="people">${rowsOf(ps, S().ui.peopleSort, p => playerRow(p, t.id, g)) || '<p class="muted">Aucun joueur dans cette catégorie.</p>'}</div>
       </section>
       <section class="card">
         <div class="row-head"><h2>${I.whistle}Encadrement (${st.length})</h2>
@@ -205,6 +253,7 @@ const People = (() => {
   function bindTeamSections(root, t, rerender) {
     root.addEventListener('click', async e => {
       const b = e.target.closest('button'); if (!b || !root.contains(b)) return;
+      if (b.dataset.psort) { S().ui.peopleSort = b.dataset.psort; Store.persistNow(); return rerender(); }
       if (b.dataset.ab) { const g = groupsOf(t), p = Store.get('players', b.dataset.p); if (g && p) { moveGroup(p, b.dataset.ab, g); rerender(); } return; }
       if (b.hasAttribute('data-newplayer')) return editPlayer(null, { teamId: t.id, onSave: rerender });
       if (b.hasAttribute('data-newstaff')) return editStaff(null, { teamId: t.id, onSave: rerender });
@@ -225,29 +274,35 @@ const People = (() => {
   /* ---------- pages ---------- */
   function listPage(root, kind) {
     const isP = kind === 'player', ui = S().ui, key = isP ? 'plFilter' : 'stFilter';
-    const filt = ui[key] || '', q = (ui[key + 'Q'] || '').toLowerCase();
+    const filt = ui[key] || '', q = (ui[key + 'Q'] || '').toLowerCase(), pf = isP ? ui.plPost || '' : '', sort = isP ? ui.peopleSort : 'name';
     const all = (isP ? S().players : S().staff).filter(Auth.seesPerson).sort(Store.byName);
-    const list = all.filter(p => (!filt || (filt === '-' ? !(p.teamIds || []).length : (p.teamIds || []).includes(filt))) && (!q || name(p).toLowerCase().includes(q)));
+    const match = (p, f, qq) => (!f || (f === '-' ? !(p.teamIds || []).length : (p.teamIds || []).includes(f))) && (!qq || name(p).toLowerCase().includes(qq)) && (!pf || (pf === '-' ? !postsOf(p).length : hasPost(p, pf)));
+    const list = all.filter(p => match(p, filt, q));
+    const draw = l => (isP ? rowsOf(l, sort, p => playerRow(p)) : l.map(p => staffRow(p)).join('')) || '<p class="muted">Personne ici.</p>';
     root.innerHTML = `<header class="page-head"><div><h1>${isP ? 'Joueurs' : 'Dirigeants'}</h1><p class="sub">${list.length} sur ${all.length} · ${Auth.isAdmin() ? 'tout le club' : 'mes catégories'}</p></div>
       <div class="head-actions"><a class="btn" href="#/equipes">${I.back}<span>Équipes</span></a>
       <button class="btn" data-act="paste">${I.paste}<span>Coller une liste</span></button>
       <button class="btn primary" data-act="new">${I.plus}<span>${isP ? 'Nouveau joueur' : 'Nouveau dirigeant'}</span></button></div></header>
       <div class="filters">
         <label class="search">${I.search}<input id="q" type="search" placeholder="Chercher un nom" value="${esc(ui[key + 'Q'] || '')}"></label>
+        ${isP ? `<select id="post" aria-label="Poste"><option value="">Tous les postes</option>${[...LINES.slice(0, 4).map(([k, l]) => [k, l + ' (tous)']), ...POSTS.slice(0, 10).map(x => [x[0], x[1]])].map(([k, l]) => `<option value="${k}" ${pf === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}<option value="-" ${pf === '-' ? 'selected' : ''}>Poste non renseigné</option></select>` : ''}
         <select id="cat" aria-label="Catégorie"><option value="">${Auth.isAdmin() ? 'Toutes les catégories' : 'Mes catégories'}</option>${Auth.teams().map(t => `<option value="${t.id}" ${t.id === filt ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}<option value="-" ${filt === '-' ? 'selected' : ''}>Sans catégorie</option></select>
       </div>
-      <div class="people big" id="plist">${list.map(p => isP ? playerRow(p) : staffRow(p)).join('') || '<p class="muted">Personne ici.</p>'}</div>`;
+      ${isP ? sortBar(sort, 'psort') : ''}
+      <div class="people big" id="plist">${draw(list)}</div>`;
     const again = () => { const y = window.scrollY; listPage(root, kind); window.scrollTo(0, y); };
     // Search: only the list is redrawn, the search field keeps the keyboard (no jump on iPhone)
     $('#q', root).oninput = e => {
       ui[key + 'Q'] = e.target.value; const qq = e.target.value.toLowerCase(), f = ui[key] || '';
-      const l = all.filter(p => (!f || (f === '-' ? !(p.teamIds || []).length : (p.teamIds || []).includes(f))) && (!qq || name(p).toLowerCase().includes(qq)));
-      $('#plist', root).innerHTML = l.map(p => isP ? playerRow(p) : staffRow(p)).join('') || '<p class="muted">Personne ici.</p>';
+      const l = all.filter(p => match(p, f, qq));
+      $('#plist', root).innerHTML = draw(l);
       $('.page-head .sub', root).textContent = `${l.length} sur ${all.length} · ${Auth.isAdmin() ? 'tout le club' : 'mes catégories'}`;
     };
     $('#cat', root).onchange = e => { ui[key] = e.target.value; Store.save(); again(); };
+    const ps = $('#post', root); if (ps) ps.onchange = e => { ui.plPost = e.target.value; Store.persistNow(); again(); };
     root.onclick = e => {
       const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.psort) { ui.peopleSort = b.dataset.psort; Store.persistNow(); return again(); }
       if (b.dataset.act === 'new') return (isP ? editPlayer : editStaff)(null, { teamId: filt && filt !== '-' ? filt : null, onSave: again });
       if (b.dataset.act === 'paste') return isP ? pasteList(again) : pasteStaff(again);
       if (b.dataset.person && isP) { location.hash = '#/joueur/' + b.dataset.person; return; }
@@ -488,7 +543,7 @@ const People = (() => {
     const tile = (v, l, cls = '') => `<div class="tile ${cls}"><b>${v}</b><span>${l}</span></div>`;
     const recentTr = s.att.list.slice().sort((a, b) => b.date.localeCompare(a.date)).slice(0, 12);
     root.innerHTML = `<header class="page-head"><div><h1>${p.number ? `<span class="pnum big">${esc(p.number)}</span> ` : ''}${esc(name(p))}</h1>
-        <p class="sub">${[POS.find(x => x[0] === p.pos) && p.pos ? POS.find(x => x[0] === p.pos)[1] : '', p.birth ? `${age(p.birth)} ans (${fmtBirth(p.birth)})` : '', p.subcat, teamNames(p.teamIds)].filter((x, i, a) => x && a.indexOf(x) === i).map(esc).join(' · ')}</p></div>
+        <p class="sub">${[postsLabel(p), p.birth ? `${age(p.birth)} ans (${fmtBirth(p.birth)})` : '', p.subcat, teamNames(p.teamIds)].filter((x, i, a) => x && a.indexOf(x) === i).map(esc).join(' · ')}</p></div>
       <div class="head-actions"><button class="btn" data-act="back">${I.back}<span>Retour</span></button><button class="btn primary" data-act="edit">${I.edit}<span>Modifier</span></button></div></header>
       <div class="tiles">
         ${tile(s.att.pct == null ? '–' : s.att.pct + ' %', `Présence à l'entraînement${s.att.total ? ` (${s.att.n}/${s.att.total})` : ''}`, s.att.pct == null ? '' : s.att.pct >= 75 ? 'v' : s.att.pct >= 50 ? 'n' : 'd')}
@@ -521,5 +576,5 @@ const People = (() => {
   }
 
   return { isClubList, importClubList, autoCategories, sortByBirth, sortByBirthDialog, catOf, seasonLabel, seasonFrom, editPlayer, editStaff, teamSections, bindTeamSections, staffPicker, listPage, playerPage, age, fmtBirth, tel, name,
-    attendance, pctBadge, matchLength, playerSeason };
+    attendance, pctBadge, matchLength, playerSeason, POSTS, postsOf, postsLabel, lineOf, sortPlayers, byLine, sortBar, PHONE_SHOW, staffPhone };
 })();

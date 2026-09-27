@@ -306,6 +306,10 @@ begin
   if l.token is null then raise exception 'LIEN_PARENTS'; end if;
   return jsonb_build_object('team', l.team_name,
     'club', (select jsonb_build_object('name', data->>'name', 'fieldName', data->>'fieldName') from items where col = 'club' and id = 'club' and not deleted),
+    -- (3.9) les coachs de la catégorie qui ont choisi de donner leur numéro aux parents (Réglages → Mon compte)
+    'coaches', (select coalesce(jsonb_agg(jsonb_build_object('name', trim(coalesce(st.data->>'firstName', '') || ' ' || coalesce(st.data->>'lastName', '')), 'role', st.data->>'role', 'phone', st.data->>'phone')
+        order by st.data->>'lastName'), '[]'::jsonb) from items st where st.col = 'staff' and not st.deleted and st.data->>'phoneShow' = 'parents' and coalesce(st.data->>'phone', '') <> ''
+        and exists (select 1 from jsonb_array_elements_text(case when jsonb_typeof(st.data->'teamIds') = 'array' then st.data->'teamIds' else '[]'::jsonb end) x where x = any(l.team_ids))),
     'matches', (select coalesce(jsonb_agg(x order by x->>'date', x->>'time'), '[]'::jsonb) from (
       select jsonb_build_object('id', i.id, 'date', i.data->>'date', 'time', i.data->>'time', 'rdv', i.data->>'rdv', 'opponent', i.data->>'opponent',
         'home', coalesce((i.data->>'home')::boolean, false), 'place', i.data->>'place', 'competition', i.data->>'competition',
