@@ -428,6 +428,17 @@ const Auth = (() => {
     });
   }
 
+  // Logged in with an account kept only on this device while the club has a server: log in again on the server
+  const localOnly = () => !!(user && !sess() && Cloud.canLogin());
+  function connectServer() {
+    const wasAdmin = isAdmin();
+    if (user) saveNames(user.lastName, user.firstName);
+    ss.del(KEY); ss.del(TMP); try { localStorage.removeItem(KEY); } catch (e) {}
+    user = null; App.refreshChrome();
+    gate().then(() => App.route());
+    if (wasAdmin) respScreen(); else firstScreen();
+  }
+
   /* ---------- settings section ---------- */
   const serverMode = () => !!(sess() && Cloud.ready());
   function settingsSection() {
@@ -517,5 +528,5 @@ const Auth = (() => {
     if (serverMode() && isAdmin()) Cloud.accountSet({ staff_id: staffId, delete: true }).catch(() => {});
   }
 
-  return { gate, current, isAdmin, logout, expired, settingsSection, mountSettings, onSettingsClick, onSettingsChange, forget, setInvite, nkey, firstKeys };
+  return { gate, current, isAdmin, logout, localOnly, connectServer, expired, settingsSection, mountSettings, onSettingsClick, onSettingsChange, forget, setInvite, nkey, firstKeys };
 })();

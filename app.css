@@ -625,6 +625,21 @@ body:not(.editing) main#view { padding-bottom: 96px; }
 .bk-detail { margin: 0; display: grid; gap: 10px; }
 .bk-detail dt { font-size: 12.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 .bk-detail dd { margin: 2px 0 0; font-size: 17px; }
+.server-banner { border: 2px solid var(--bordeaux); background: color-mix(in srgb, var(--bordeaux) 6%, var(--surface)); }
+.server-banner p { margin: 0 0 10px; }
+.plan-view { display: none; gap: 6px; }
+.plan-view .chip { min-height: 36px; padding: 0 14px; }
+.plan-list { display: none; flex-direction: column; gap: 10px; }
+.pl-day { border-radius: 12px; background: var(--surface2); padding: 6px; display: flex; flex-direction: column; gap: 6px; }
+.pl-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; border: 0; background: none; padding: 4px 6px; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.pl-head b { font: 800 16px var(--round); }
+.pl-head span { font-size: 13px; color: var(--muted); }
+.pl-day.today .pl-head b { color: var(--bordeaux); }
+.pl-row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 10px; align-items: baseline; border: 0; border-radius: 10px; padding: 8px 10px; text-align: left; font: inherit; cursor: pointer; }
+.pl-row .pl-t { font-weight: 800; font-variant-numeric: tabular-nums; grid-row: span 2; }
+.pl-row b { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pl-row .pl-p { font-size: 12.5px; opacity: .85; }
+.pl-row.mine { outline: 2px solid var(--gold); outline-offset: -2px; }
 .plan-mini a { grid-template-columns: 70px minmax(0, 1fr) auto; }
 @media (max-width: 760px) {
   .day-chips { display: flex; }
@@ -633,6 +648,11 @@ body:not(.editing) main#view { padding-bottom: 96px; }
   .plan-grid { grid-template-columns: 42px minmax(0, 1fr); min-width: 0; }
   .plan-day { display: none; }
   .plan-day.sel { display: block; }
+  .plan-view { display: flex; }
+  .day-chips.wk { display: none; }
+  .plan-wrap.wk { padding: 0; background: none; border: 0; }
+  .plan-wrap.wk .plan-grid { display: none; }
+  .plan-wrap.wk .plan-list { display: flex; }
   .bk { font-size: 13px; }
   .slot-row { grid-template-columns: 1fr 1fr 44px; }
   .slot-row span { display: none; }
