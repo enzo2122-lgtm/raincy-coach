@@ -61,9 +61,37 @@ const Messages = (() => {
     let b = a.querySelector('.nav-badge'); if (!b) { b = document.createElement('i'); b.className = 'nav-badge'; a.appendChild(b); }
     b.textContent = n > 9 ? '9+' : n; b.hidden = !n;
   }
+  /* ---------- automatic reminder the day before a match ----------
+     No server runs on its own, so the first device of a coach of the category (or of a responsable) opened the day before
+     posts it in the category's channel. The match keeps « reminded » and the message carries a tag: it is posted once. */
+  const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const TAG = id => `#rappel-${id}`;
+  let reminding = false;
+  async function matchReminders() {
+    if (reminding || !Cloud.ready() || !me()) return;
+    const now = new Date(), today = iso(now), tomorrow = iso(new Date(now.getTime() + 864e5)), mine = new Set(me().teamIds || []);
+    const due = S().matches.filter(m => !m.exempt && !m.played && !m.reminded && (m.date === tomorrow || (m.date === today && (!m.time || m.time > now.toTimeString().slice(0, 5))))
+      && m.teamId && (mine.has(m.teamId) || Auth.realAdmin()));
+    if (!due.length) return;
+    reminding = true;
+    try {
+      for (const m of due) {
+        const ch = 'team:' + m.teamId;
+        if (msgs.some(x => x.channel === ch && (x.body || '').includes(TAG(m.id)))) { m.reminded = m.date; Store.upsert('matches', m); continue; }
+        const t = Store.get('teams', m.teamId) || {}, club = S().club.name || 'FA Le Raincy', d = new Date(m.date + 'T12:00');
+        const when = m.date === today ? 'aujourd\'hui' : 'demain ' + d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+        const body = [`📣 Rappel : match ${when}`, `⚽ ${t.name || ''} · ${m.home ? club + ' – ' + (m.opponent || '?') : (m.opponent || '?') + ' – ' + club}`,
+          m.rdv || m.time ? `🕘 ${m.rdv ? 'Rendez-vous ' + m.rdv : ''}${m.rdv && m.time ? ' · ' : ''}${m.time ? 'coup d\'envoi ' + m.time : ''}` : '🕘 Heure à confirmer',
+          m.home ? `🏟️ À domicile${S().club.fieldName ? ' · ' + S().club.fieldName : ''}` : `🚌 À l'extérieur${m.place ? ' · ' + m.place : ''}`,
+          (m.convoked || []).length ? `👥 ${(m.convoked || []).length} joueur${m.convoked.length > 1 ? 's' : ''} convoqué${m.convoked.length > 1 ? 's' : ''}` : '',
+          TAG(m.id)].filter(Boolean).join('\n');
+        try { const r = await Cloud.post(ch, body); if (r) msgs.push(r); m.reminded = m.date; Store.upsert('matches', m); } catch (e) { break; }
+      }
+    } finally { reminding = false; }
+  }
   function start() {
     clearInterval(timer);
-    const tick = async () => { const changed = await fetchNew(); badge(); if (changed && fast && onNew) onNew(); };
+    const tick = async () => { const changed = await fetchNew(); await matchReminders(); badge(); if (changed && fast && onNew) onNew(); };
     tick(); timer = setInterval(tick, fast ? 6000 : 45000);
   }
   let onNew = null;
@@ -108,7 +136,7 @@ const Messages = (() => {
         const d = new Date(m.created_at), ds = d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
         const sep = ds !== day ? `<div class="day-sep">${esc(ds)}</div>` : ''; day = ds;
         const mine = m.author_id === me().id;
-        return `${sep}<div class="bubble ${mine ? 'mine' : ''}" data-m="${m.id}">${mine ? '' : `<span class="author-line"><b class="author">${crestOf(staffOf(m))}${esc(authorName(m))}</b>${UI.motto(staffOf(m))}</span>`}<p>${esc(m.body).replace(/\n/g, '<br>')}</p>
+        return `${sep}<div class="bubble ${mine ? 'mine' : ''}" data-m="${m.id}">${mine ? '' : `<span class="author-line"><b class="author">${crestOf(staffOf(m))}${esc(authorName(m))}</b>${UI.motto(staffOf(m))}</span>`}<p>${esc(String(m.body).replace(/\n?#rappel-[\w-]+\s*$/, '')).replace(/\n/g, '<br>')}</p>
           <span class="time">${d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}${mine || Auth.isAdmin() ? ` · <button class="linkish" data-delm="${m.id}">supprimer</button>` : ''}</span></div>`;
       }).join('') : '<p class="muted conv-hint">Pas encore de message. Écris le premier !</p>';
       body.scrollTop = body.scrollHeight;
