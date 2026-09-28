@@ -175,7 +175,7 @@ const Library = (() => {
     const pages = rec.kind === 'pdf' ? rec.pages.slice(0, 8) : rec.kind === 'image' ? [{ blob: rec.blob, w: rec.w || 1600, h: rec.h || 1000 }] : [];
     if (!pages.length) return toast('Seuls les images et les PDF s\'envoient dans la messagerie', 'err');
     if (!Cloud.ready()) return toast('La messagerie passe par le serveur du club, pas encore connecté ici', 'err');
-    const chans = [['general', 'Tout le club · tous les coachs'], ...S().teams.map(t => ['team:' + t.id, t.name])];
+    const chans = [['general', 'Tout le club · tous les coachs'], ...S().teams.map(t => ['team:' + t.id, Store.teamLabel(t)])];
     modal({ title: 'Envoyer dans la messagerie', body: `<label class="fld"><span>Où ?</span><select id="chTo">${chans.map(([v, l]) => `<option value="${v}" ${v === 'team:' + (Auth.teams()[0] || {}).id && !Auth.isAdmin() ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
       <label class="fld"><span>Message (facultatif)</span><input id="chTxt" placeholder="Ex : la séance de mercredi"></label>
       ${rec.kind === 'pdf' && rec.pages.length > 8 ? '<p class="muted small">Les 8 premières pages sont envoyées.</p>' : ''}`,

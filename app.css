@@ -1115,3 +1115,6 @@ h2.section svg { width: 22px; height: 22px; vertical-align: -4px; margin-right: 
 .team-sub b { font-size: 15px; }
 .team-sub .muted { font-size: 12.5px; }
 .team-sub:hover, .team-main:hover h2 { color: var(--bordeaux); }
+/* 3.19 : messagerie, les équipes A / B sous leur catégorie */
+.ch.ch-sub { margin-left: 22px; padding-top: 6px; padding-bottom: 6px; font-weight: 500; font-size: .95em; }
+.ch.ch-sub .ch-ic { width: 24px; height: 24px; background: transparent; color: var(--muted); font-weight: 700; }

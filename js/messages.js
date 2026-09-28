@@ -138,14 +138,17 @@ const Messages = (() => {
     const mineTeams = new Set((me().teamIds || []));
     const teams = S().teams.slice(); // club order: Seniors, Vétérans, École de foot, U6 … U17
     const dms = [...new Set(msgs.map(m => m.channel).filter(isMineDm))];
-    const item = c => `<a class="ch ${c === ch ? 'on' : ''}" href="#/messages/${encodeURIComponent(c)}"><span class="ch-ic">${c === 'general' ? I.team : c.startsWith('team:') ? I.whistle : (crestOf(Store.get('staff', c.split(':').slice(1).find(id => id !== (me() || {}).id))) || I.edit)}</span>
+    const item = (c, sub) => `<a class="ch ${sub ? 'ch-sub' : ''} ${c === ch ? 'on' : ''}" href="#/messages/${encodeURIComponent(c)}"><span class="ch-ic">${sub ? '↳' : c === 'general' ? I.team : c.startsWith('team:') ? I.whistle : (crestOf(Store.get('staff', c.split(':').slice(1).find(id => id !== (me() || {}).id))) || I.edit)}</span>
       <span class="ch-name">${esc(channelName(c))}</span>${unread(c) ? `<i class="ch-badge">${unread(c)}</i>` : ''}</a>`;
+    // a category, then its teams A / B just under it (« U14 », « ↳ U14 A », « ↳ U14 B »); a category is « mine » when one of its teams is
+    const groups = Store.teamGroups(teams), mineGroup = g => g.some(t => mineTeams.has(t.id));
+    const groupItems = list => list.map(g => g.map(t => item('team:' + t.id, Store.isSub(t))).join('')).join('');
     root.innerHTML = `<div class="msg-layout ${ch ? 'has-ch' : ''}">
       <aside class="ch-list">
         <header class="page-head"><div><h1>Messages</h1><p class="sub">Entre éducateurs du club</p></div></header>
         ${item('general')}
-        ${mineTeams.size ? `<div class="ch-sec">Mes catégories</div>${teams.filter(t => mineTeams.has(t.id)).map(t => item('team:' + t.id)).join('')}` : ''}
-        <div class="ch-sec">${mineTeams.size ? 'Les autres catégories' : 'Catégories'}</div>${teams.filter(t => !mineTeams.has(t.id)).map(t => item('team:' + t.id)).join('')}
+        ${mineTeams.size ? `<div class="ch-sec">Mes catégories</div>${groupItems(groups.filter(mineGroup))}` : ''}
+        <div class="ch-sec">${mineTeams.size ? 'Les autres catégories' : 'Catégories'}</div>${groupItems(groups.filter(g => !mineGroup(g)))}
         <div class="ch-sec">Messages privés</div>${dms.map(item).join('')}
         <button class="btn soft wide" id="newDm">${I.plus}<span>Écrire à un éducateur</span></button>
       </aside>
