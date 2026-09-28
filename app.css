@@ -1478,3 +1478,15 @@ h2.section svg { width: 22px; height: 22px; vertical-align: -4px; margin-right: 
 .pg-stars button.on { color: #f59e0b; }
 .pg-ok { font-size: 18px; }
 @media (max-width: 600px) { .pg-top { grid-template-columns: 1fr; } .pg-stars button { width: 32px; height: 34px; font-size: 22px; } }
+
+/* 3.36 : exercices du club et générateur de séance */
+.ex-themes { margin: 8px 0 4px; }
+.ex-themes .chip, .ex-lib + .chips .chip { min-height: 36px; font-size: 13.5px; }
+.ex-lib { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 10px; }
+.ex-lib .card { margin: 0; }
+.ex-item-head { display: flex; gap: 10px; align-items: center; margin-bottom: 6px; }
+.ex-item-head img { width: 96px; height: 62px; object-fit: cover; border-radius: 8px; flex: none; }
+.ex-noimg { width: 62px; height: 62px; flex: none; display: grid; place-items: center; border-radius: 10px; background: var(--surface2); font-size: 28px; }
+.ex-item-head > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ex-cons { margin: 4px 0 8px; padding-left: 18px; color: var(--muted); }
+.hl-pickrow { width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer; }
