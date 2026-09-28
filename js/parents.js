@@ -264,5 +264,5 @@ const Parents = (() => {
     }).catch(e => { if (ab.isConnected) drawAnswers(ab, m, conv, e.code === 'MISE_A_JOUR' ? needUpdate(e) : ''); });
   }
 
-  return { shareDialog, sharePlayers, teamCard, linkOf, mountMatch, carText };
+  return { shareDialog, sharePlayers, teamCard, linkOf, playerLinkOf, mountMatch, carText };
 })();

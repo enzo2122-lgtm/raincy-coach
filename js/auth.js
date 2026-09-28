@@ -54,19 +54,42 @@ const Auth = (() => {
   const teams = () => allTeams() ? Store.state.teams : Store.state.teams.filter(t => myIds().includes(t.id));
   const sees = teamId => allTeams() || !teamId || myIds().includes(teamId);
   const seesPerson = p => allTeams() || (p.teamIds || []).some(id => myIds().includes(id)) || (user && p.id === user.id);
-  function startPreview(teamIds) { try { sessionStorage.setItem(PREVIEW, JSON.stringify({ teamIds })); } catch (e) {} Store.state.ui.teamId = ''; App.refreshChrome(); location.hash = '#/'; App.route(); toast('Tu vois l\'appli comme un coach'); }
+  function startPreview(teamIds, role) { try { sessionStorage.setItem(PREVIEW, JSON.stringify({ teamIds, role: role || 'coach' })); } catch (e) {} Store.state.ui.teamId = ''; App.refreshChrome(); location.hash = '#/'; App.route(); toast(role === 'benevole' ? 'Tu vois l\'appli comme un bénévole' : 'Tu vois l\'appli comme un coach'); }
   function stopPreview() { try { sessionStorage.removeItem(PREVIEW); } catch (e) {} App.refreshChrome(); App.route(); toast('Retour en responsable'); }
+  // « Voir l'appli comme… » : un coach (ses catégories), un parent ou un joueur (leur vraie page), un bénévole (l'appli réduite)
+  const ROLES = [['coach', '🧢 Un coach', 'L\'appli exactement comme lui : ses catégories seulement, sans les réglages du responsable.'],
+    ['parent', '👨‍👩‍👧 Un parent', 'La vraie page des parents de la catégorie : matchs, convocations, covoiturage, bénévoles, photos.'],
+    ['joueur', '⚽ Un joueur', 'La vraie page des joueurs de la catégorie : convocation, causerie du match, temps de jeu, classements.'],
+    ['benevole', '🙋 Un bénévole', 'L\'appli réduite à ce qu\'utilise un bénévole : accueil, planning, vie du club, bénévoles, messages.']];
   function previewDialog() {
-    const el = modal({ title: 'Voir l\'appli comme un coach', body: `<p>Choisis la ou les catégories du coach. Tu verras l'appli exactement comme lui : ses catégories seulement, sans les réglages du responsable. Le planning, les résultats et les messages restent ceux de tout le club.</p>
-      <p class="muted small">Rien n'est changé pour les autres : c'est seulement un aperçu sur cet appareil. Le bandeau en haut de l'écran te ramène en responsable.</p>
-      ${teamChips([])}`,
-      onOpen: r => r.querySelectorAll('#myTeams .chip').forEach(b => b.onclick = () => b.classList.toggle('on')),
+    let role = 'coach';
+    const body = () => `<div class="chips pv-roles">${ROLES.map(([k, l]) => `<button class="chip ${k === role ? 'on' : ''}" data-role="${k}">${l}</button>`).join('')}</div>
+      <p>${ROLES.find(x => x[0] === role)[2]}</p>
+      ${role === 'benevole' ? '' : `<div class="lbl">${role === 'coach' ? 'Ses catégories' : 'La catégorie'}</div>${teamChips([])}`}
+      <p class="muted small">Rien n'est changé pour les autres : c'est seulement un aperçu sur cet appareil.${role === 'parent' || role === 'joueur' ? ' Les réponses faites dans l\'aperçu comptent vraiment : regarde sans répondre.' : ' Le bandeau en haut de l\'écran te ramène en responsable.'}</p>`;
+    const el = modal({ title: 'Voir l\'appli comme…', noFocus: true, body: `<div id="pvBody">${body()}</div>`,
+      onOpen: r => { r.querySelector('#pvBody').onclick = e => {
+        const rb = e.target.closest('[data-role]'); if (rb) { role = rb.dataset.role; r.querySelector('#pvBody').innerHTML = body(); return; }
+        const c = e.target.closest('#myTeams .chip'); if (!c) return;
+        if (role !== 'coach') r.querySelectorAll('#myTeams .chip').forEach(x => x !== c && x.classList.remove('on'));
+        c.classList.toggle('on'); }; },
       actions: [{ label: 'Annuler' }, { label: 'Voir', kind: 'primary', icon: I.check, onClick: (c, r) => {
         const ids = [...r.querySelectorAll('#myTeams .chip.on')].map(b => b.dataset.t);
-        if (!ids.length) { toast('Choisis au moins une catégorie', 'err'); return false; }
-        startPreview(ids);
+        if (role === 'benevole') { startPreview([], 'benevole'); return; }
+        if (!ids.length) { toast('Choisis une catégorie', 'err'); return false; }
+        if (role === 'coach') return startPreview(ids);
+        setTimeout(() => viewPage(role, ids[0]), 60);
       } }] });
     return el;
+  }
+  // the parents' or players' page, inside the app (full screen), with a bar to come back
+  async function viewPage(role, teamId) {
+    if (!Cloud.ready()) return toast('Il faut être connecté au serveur du club', 'err');
+    let url; const b = UI.busy('Ouverture de la page…');
+    try { url = role === 'parent' ? await Parents.linkOf(teamId) : await Parents.playerLinkOf(teamId); } catch (e) { return toast(e.message || 'Page indisponible', 'err'); } finally { b.done(); }
+    const ov = document.createElement('div'); ov.className = 'pv-frame';
+    ov.innerHTML = `<div class="pv-bar"><b>${role === 'parent' ? '👨‍👩‍👧 Vue parent' : '⚽ Vue joueur'} · ${esc((Store.get('teams', teamId) || {}).name || '')}</b><button class="btn" data-pvx>${I.x}<span>Fermer</span></button></div><iframe src="${esc(url)}" title="Aperçu"></iframe>`;
+    document.body.appendChild(ov); ov.querySelector('[data-pvx]').onclick = () => ov.remove();
   }
   const hasAccounts = () => Object.values(A().users).some(u => u.hash);
   async function setPassword(id, pw, extra = {}) {
@@ -490,7 +513,7 @@ const Auth = (() => {
       <p class="muted small">${sess() ? 'Ton compte est sur le serveur du club : connecte-toi sur n\'importe quel appareil avec ton nom, ton prénom et ton mot de passe.' : 'Ton compte est seulement sur cet appareil.'}</p>
       <div class="chips"><button class="btn" data-auth="pw">${I.edit}<span>Changer mon mot de passe</span></button>
       <button class="btn" data-auth="logout">${I.back}<span>Se déconnecter</span></button>
-      ${realAdmin() ? (preview() ? `<button class="btn primary" data-auth="stopPreview">${I.whistle}<span>Revenir en responsable</span></button>` : `<button class="btn" data-auth="preview">${I.team}<span>Voir l'appli comme un coach</span></button>`) : ''}</div></section>`;
+      ${realAdmin() ? (preview() ? `<button class="btn primary" data-auth="stopPreview">${I.whistle}<span>Revenir en responsable</span></button>` : `<button class="btn" data-auth="preview">${I.team}<span>Voir l'appli comme… (coach, parent, joueur, bénévole)</span></button>`) : ''}</div></section>`;
     if (!isAdmin()) return me;
     return me + `<section class="card"><h2>${I.team}Comptes des dirigeants</h2>
       <p class="muted">Un responsable peut réinitialiser le mot de passe d'un dirigeant (il en recréera un avec « Première connexion ») et changer ses catégories. 🔒 : catégories choisies à la première connexion, verrouillées pour l'éducateur.</p>

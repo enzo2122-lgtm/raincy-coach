@@ -196,6 +196,7 @@ const Views = (() => {
       `<a class="btn" href="#/joueurs">${I.team}<span>${Auth.isAdmin() ? 'Tous les joueurs' : 'Mes joueurs'} (${S().players.filter(Auth.seesPerson).length})</span></a>
        <a class="btn" href="#/dirigeants">${I.whistle}<span>Dirigeants (${S().staff.filter(Auth.seesPerson).length})</span></a>
        <a class="btn" href="#/progression">📈<span>Progression</span></a>
+       <a class="btn" href="#/tests">🏃<span>Tests physiques</span></a>
        <a class="btn" href="#/infirmerie">🚑<span>Infirmerie${Health.count() ? ' (' + Health.count() + ')' : ''}</span></a>
        ${Auth.isAdmin() ? `<button class="btn" data-act="bybirth">${I.calendar}<span>Ranger par année de naissance</span></button>` : ''}
        ${Auth.isAdmin() ? `<button class="btn primary" data-act="new">${I.plus}<span>Nouvelle catégorie</span></button>` : ''}`)}

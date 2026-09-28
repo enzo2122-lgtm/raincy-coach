@@ -1524,3 +1524,29 @@ h2.section svg { width: 22px; height: 22px; vertical-align: -4px; margin-right: 
 .ss-results a { display: grid; grid-template-columns: 70px 1fr auto; gap: 8px; padding: 6px 10px; border-radius: 10px; background: var(--surface2); color: inherit; text-decoration: none; border-left: 4px solid #a16207; }
 .ss-results a.res-V { border-left-color: #15803d; } .ss-results a.res-D { border-left-color: #b91c1c; }
 #ssNote { width: 100%; }
+
+/* 3.39 : tests physiques */
+.tt-rank { display: flex; flex-direction: column; gap: 4px; }
+.tt-rank a { display: grid; grid-template-columns: 1fr auto 60px 64px; gap: 10px; align-items: baseline; padding: 7px 10px; border-radius: 10px; background: var(--surface2); color: inherit; text-decoration: none; }
+.tt-rank a.top { background: color-mix(in srgb, var(--gold, #e2c27d) 25%, var(--surface)); }
+.tt-rank b { font: 800 16px var(--round); }
+.tt-rank i, .tt-cards i { font-style: normal; font-size: 12px; font-weight: 700; } .tt-rank i.up, .tt-cards i.up { color: #15803d; } .tt-rank i.down, .tt-cards i.down { color: #dc2626; }
+.tt-rank em, .tt-cards em { font-style: normal; font-size: 12px; color: var(--muted); }
+.tt-entry { display: flex; flex-direction: column; gap: 4px; max-height: 50vh; overflow-y: auto; }
+.tt-entry label { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 4px 0; border-bottom: 1px solid var(--line); }
+.tt-entry input { width: 110px; min-height: 40px; border: 1px solid var(--line); border-radius: 10px; padding: 0 10px; font: inherit; background: var(--surface); color: inherit; text-align: right; }
+.tt-cols { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px; margin-bottom: 10px; }
+.tt-cols label { display: flex; flex-direction: column; gap: 2px; font-size: 13px; font-weight: 600; }
+.tt-cols select, .row2 select[data-map] { min-height: 38px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: inherit; }
+.tt-match { padding: 8px 12px; border-radius: 10px; background: color-mix(in srgb, #16a34a 10%, var(--surface)); font-size: 14px; }
+.tt-match.warn { background: color-mix(in srgb, #ca8a04 14%, var(--surface)); }
+.tt-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 6px; margin-bottom: 8px; }
+.tt-cards > div { display: flex; flex-direction: column; padding: 8px 10px; border-radius: 10px; background: var(--surface2); }
+.tt-cards span { font-size: 12.5px; color: var(--muted); } .tt-cards b { font: 800 19px var(--round); } .tt-cards small { font-size: 12px; font-weight: 600; }
+.grid2x { display: grid; grid-template-columns: 1fr auto; gap: 3px 12px; font-size: 14px; margin-top: 6px; }
+
+/* 3.39 : voir l'appli comme un parent, un joueur, un bénévole */
+.pv-roles .chip { min-height: 40px; }
+.pv-frame { position: fixed; inset: 0; z-index: 9995; display: flex; flex-direction: column; background: var(--bg); }
+.pv-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: calc(env(safe-area-inset-top) + 8px) 12px 8px; background: var(--gold, #e2c27d); color: var(--navy, #0e1d45); }
+.pv-frame iframe { flex: 1; width: 100%; border: 0; background: #fff; }
