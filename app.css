@@ -1126,3 +1126,11 @@ h2.section svg { width: 22px; height: 22px; vertical-align: -4px; margin-right: 
 .an-ytbox:has(.an-yt-err) { aspect-ratio: auto; min-height: 140px; }
 .an-show .an-show-yt { position: absolute; inset: 0 0 130px 0; aspect-ratio: auto; max-height: none; }
 @media (max-width: 760px) { .an-ytbox { max-height: 42vh; } }
+/* 3.21 : messagerie, équipes A / B repliées sous leur catégorie */
+.ch-row { display: flex; align-items: center; gap: 4px; }
+.ch-row .ch { flex: 1; min-width: 0; }
+.ch-tog { position: relative; flex: none; min-width: 44px; height: 34px; padding: 0 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--muted); font: 700 13px/1 inherit; cursor: pointer; }
+.ch-tog:hover { color: var(--bordeaux); border-color: var(--bordeaux); }
+.ch-dot { position: absolute; top: -2px; right: -2px; width: 9px; height: 9px; border-radius: 50%; background: var(--bordeaux); }
+.ch-fam .ch-subs { display: none; }
+.ch-fam.open .ch-subs { display: block; }

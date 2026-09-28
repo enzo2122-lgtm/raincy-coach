@@ -8,6 +8,10 @@ const Messages = (() => {
 
   try { msgs = JSON.parse(localStorage.getItem(CACHE)) || []; if (msgs.length) last = msgs[msgs.length - 1].created_at; } catch (e) {}
   const reads = () => { try { return JSON.parse(localStorage.getItem(READ)) || {}; } catch (e) { return {}; } };
+  // categories whose teams A / B are shown in the list of conversations (this device)
+  const FAMS = 'raincy-msg-fams';
+  const openFams = () => { try { return JSON.parse(localStorage.getItem(FAMS)) || []; } catch (e) { return []; } };
+  const saveFams = l => { try { localStorage.setItem(FAMS, JSON.stringify(l)); } catch (e) {} };
   const markRead = ch => { const r = reads(); r[ch] = new Date().toISOString(); try { localStorage.setItem(READ, JSON.stringify(r)); } catch (e) {} };
   const me = () => Auth.current();
   const dmKey = (a, b) => 'dm:' + [a, b].sort().join(':');
@@ -138,11 +142,21 @@ const Messages = (() => {
     const mineTeams = new Set((me().teamIds || []));
     const teams = S().teams.slice(); // club order: Seniors, Vétérans, École de foot, U6 … U17
     const dms = [...new Set(msgs.map(m => m.channel).filter(isMineDm))];
-    const item = (c, sub) => `<a class="ch ${sub ? 'ch-sub' : ''} ${c === ch ? 'on' : ''}" href="#/messages/${encodeURIComponent(c)}"><span class="ch-ic">${sub ? '↳' : c === 'general' ? I.team : c.startsWith('team:') ? I.whistle : (crestOf(Store.get('staff', c.split(':').slice(1).find(id => id !== (me() || {}).id))) || I.edit)}</span>
-      <span class="ch-name">${esc(channelName(c))}</span>${unread(c) ? `<i class="ch-badge">${unread(c)}</i>` : ''}</a>`;
-    // a category, then its teams A / B just under it (« U14 », « ↳ U14 A », « ↳ U14 B »); a category is « mine » when one of its teams is
+    const item = (c, sub, n = unread(c)) => `<a class="ch ${sub ? 'ch-sub' : ''} ${c === ch ? 'on' : ''}" href="#/messages/${encodeURIComponent(c)}"><span class="ch-ic">${sub ? '↳' : c === 'general' ? I.team : c.startsWith('team:') ? I.whistle : (crestOf(Store.get('staff', c.split(':').slice(1).find(id => id !== (me() || {}).id))) || I.edit)}</span>
+      <span class="ch-name">${esc(channelName(c))}</span>${n ? `<i class="ch-badge">${n}</i>` : ''}</a>`;
+    // a category, its teams A / B folded under it: « U14 » always shows the unread messages of the whole category,
+    // « ▸ 2 » opens « ↳ U14 A », « ↳ U14 B » (kept open on this device, and always open on the team being read)
     const groups = Store.teamGroups(teams), mineGroup = g => g.some(t => mineTeams.has(t.id));
-    const groupItems = list => list.map(g => g.map(t => item('team:' + t.id, Store.isSub(t))).join('')).join('');
+    const opened = openFams();
+    const groupItems = list => list.map(g => {
+      const [main, ...subs] = g;
+      if (!Store.isMain(main) || !subs.length) return g.map(t => item('team:' + t.id, Store.isSub(t))).join('');
+      const open = opened.includes(main.id) || subs.some(t => 'team:' + t.id === ch);
+      const total = g.reduce((a, t) => a + unread('team:' + t.id), 0), subN = subs.reduce((a, t) => a + unread('team:' + t.id), 0);
+      return `<div class="ch-fam ${open ? 'open' : ''}"><div class="ch-row">${item('team:' + main.id, false, total)}
+          <button type="button" class="ch-tog" data-fam="${main.id}" aria-expanded="${open}" aria-label="${open ? 'Cacher' : 'Voir'} les équipes de ${esc(main.name)}">${open ? '▾' : '▸'} ${subs.length}${!open && subN ? '<i class="ch-dot"></i>' : ''}</button></div>
+        <div class="ch-subs">${subs.map(t => item('team:' + t.id, true)).join('')}</div></div>`;
+    }).join('');
     root.innerHTML = `<div class="msg-layout ${ch ? 'has-ch' : ''}">
       <aside class="ch-list">
         <header class="page-head"><div><h1>Messages</h1><p class="sub">Entre éducateurs du club</p></div></header>
@@ -159,6 +173,14 @@ const Messages = (() => {
           <button class="btn primary" type="submit" aria-label="Envoyer">${I.upload}</button></form>`
         : '<div class="conv-empty"><p class="muted">Choisis une conversation.</p></div>'}</section></div>`;
     $('#newDm', root).onclick = pickCoach;
+    $$('[data-fam]', root).forEach(b => b.onclick = () => {
+      const l = openFams(), id = b.dataset.fam, on = !l.includes(id);
+      saveFams(on ? [...l, id] : l.filter(x => x !== id));
+      const fam = b.closest('.ch-fam'), g = Store.teamGroups(S().teams).find(x => x[0].id === id) || [];
+      fam.classList.toggle('open', on); b.setAttribute('aria-expanded', on);
+      const subN = g.slice(1).reduce((a, t) => a + unread('team:' + t.id), 0);
+      b.innerHTML = `${on ? '▾' : '▸'} ${g.length - 1}${!on && subN ? '<i class="ch-dot"></i>' : ''}`;
+    });
     if (!ch) { fast = false; onNew = () => page(root); start(); return; }
     markRead(ch); badge();
     const body = $('#convBody', root);
