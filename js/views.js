@@ -94,7 +94,7 @@ const Views = (() => {
   // Top of the home page, made for the coach who is connected: his name, his sentence, his categories, his day
   function hero(now) {
     const me = Auth.current(), club = esc(S().club.name);
-    if (!me) return `<header class="hero"><span class="crest-live"><img src="icons/crest.png" alt="" class="hero-crest"></span><div><p class="eyebrow">Espace éducateurs</p><h1>${club}</h1></div></header>`;
+    if (!me) return `<header class="hero">${Supporters.coin('hero-crest')}<div><p class="eyebrow">Espace éducateurs</p><h1>${club}</h1></div></header>`;
     const h = new Date().getHours(), hello = h < 5 ? 'Bonsoir' : h < 12 ? 'Bonjour' : h < 18 ? 'Bon après-midi' : 'Bonsoir';
     const coach = Messages.coachName(me), { mine, isMine } = myScope();
     const matchesOn = d => S().matches.filter(m => m.date === d && !m.exempt && isMine(m.teamId)).sort((a, b) => (a.time || '').localeCompare(b.time || ''));
@@ -109,7 +109,7 @@ const Views = (() => {
     else if (tomorrowM.length) box = `<b>Demain</b> · ⚽ ${esc(matchLabel(tomorrowM[0]))}${tomorrowM[0].time ? ' à ' + esc(tomorrowM[0].time) : ''}<i class="hero-wish">Bonne préparation, et repose bien tes troupes !</i>`;
     const redraw = () => { if (/^#?\/?$/.test(location.hash.replace('#/', '#'))) App.route(true); };
     return `<header class="hero hero-me" data-wx-time="${esc(firstTime)}">
-      <span class="crest-live"><img src="icons/crest.png" alt="" class="hero-crest"></span>
+      ${Supporters.coin('hero-crest')}
       <div class="hero-main">
         <p class="eyebrow">Espace de ${esc(coach)}<span class="eb-club"> · ${club}</span></p>
         <h1>${title}</h1>
@@ -117,6 +117,7 @@ const Views = (() => {
         <div class="hero-chips">${mine.length ? mine.map(t => `<a class="hero-chip" href="#/equipe/${t.id}">${esc(t.name)}</a>`).join('') : Auth.isAdmin() ? '<span class="hero-chip">Responsable du club</span>' : ''}</div>
         ${box ? `<p class="hero-today">${box}</p>` : ''}
       </div>
+      <div class="hero-flag">${Supporters.flag()}</div>
       ${me.club ? `<a class="hero-heart" href="#/reglages" title="Mon club de cœur : ${esc(Clubs.name(me.club))}">${Clubs.crest(me.club, 44, redraw)}<span>Mon club de cœur</span></a>` : ''}
     </header>`;
   }
