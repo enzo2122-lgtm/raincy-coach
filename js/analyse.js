@@ -368,36 +368,47 @@ const Analyse = (() => {
     return list.find(m => { try { return MediaRecorder.isTypeSupported(m); } catch (e) { return false; } }) || '';
   }
   async function exportVideo(items, name) {
-    if (!(window.MediaRecorder && HTMLCanvasElement.prototype.captureStream)) return toast('Cet appareil ne sait pas créer de vidéo depuis l\'appli : utilise « Présenter » avec l\'enregistrement d\'écran.', 'err');
+    if (!Exporter.canVideo()) return toast('Cet appareil ne sait pas créer de vidéo depuis l\'appli : utilise « Présenter » avec l\'enregistrement d\'écran.', 'err');
     // YouTube never lets a page copy its images: its sequences stay out of the file
     const nYT = items.filter(x => isYT(x.rec)).length;
     items = items.filter(x => !isYT(x.rec));
     if (!items.length) return toast('Ces séquences viennent de YouTube : YouTube ne laisse pas en faire un fichier vidéo. Utilise « Présenter », ou importe la vidéo elle-même dans la Bibliothèque.', 'err');
     if (nYT) toast(`${nYT} séquence${nYT > 1 ? 's' : ''} YouTube ne ${nYT > 1 ? 'seront' : 'sera'} pas dans le fichier (YouTube ne le permet pas)`);
     const total = items.reduce((a, x) => a + (x.clip.end - x.clip.start) + 1.8, 2.2);
-    if (!(await confirmBox(`Créer la vidéo « ${name} » (${mmss(total)}) ? Garde l'appli ouverte pendant l'enregistrement, qui dure le temps de la vidéo.`, 'Créer la vidéo'))) return;
+    if (!(await confirmBox(`Créer la vidéo « ${name} » (${mmss(total)}) ? Garde l'appli ouverte pendant la création, qui dure à peu près le temps de la vidéo.`, 'Créer la vidéo'))) return;
     const bz = UI.busy('Création de la vidéo… garde l\'appli ouverte');
     const W = 1280, H = 720, c = document.createElement('canvas'); c.width = W; c.height = H;
-    const ctx = c.getContext('2d'), mime = pickMime(), stream = c.captureStream(30);
-    const rec = new MediaRecorder(stream, Object.assign({ videoBitsPerSecond: 5e6 }, mime ? { mimeType: mime } : {}));
-    const chunks = []; rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
-    const stopped = new Promise(r => { rec.onstop = r; });
+    const ctx = c.getContext('2d');
+    /* MP4 (H.264) when the browser can: plays on every phone, computer and TV. Each image is put in the file at its exact time.
+       Otherwise the browser records the canvas itself (MediaRecorder: MP4 on Safari, sometimes WebM elsewhere). */
+    const wr = await Exporter.mp4Writer(W, H, 30);
+    let rec = null, chunks = [], stopped = null, mime = null;
+    if (!wr) {
+      mime = Exporter.pickMime();
+      rec = new MediaRecorder(c.captureStream(30), Object.assign({ videoBitsPerSecond: 5e6 }, mime ? { mimeType: mime } : {}));
+      rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+      stopped = new Promise(r => { rec.onstop = r; });
+    }
     // the video plays in the page (hidden) so every browser decodes its images
     const v = document.createElement('video'); v.muted = true; v.playsInline = true; v.style.cssText = 'position:fixed;left:-10px;top:0;width:2px;height:2px;opacity:0';
     document.body.appendChild(v);
     const urls = [];
     const wrap = (text, maxW, font) => { ctx.font = font; const words = String(text).split(/\s+/), lines = []; let l = ''; words.forEach(w => { const t = l ? l + ' ' + w : w; if (ctx.measureText(t).width > maxW && l) { lines.push(l); l = w; } else l = t; }); if (l) lines.push(l); return lines; };
+    const drawCard = (color, top, title, sub) => {
+      ctx.fillStyle = '#0e1d45'; ctx.fillRect(0, 0, W, H); ctx.fillStyle = color || '#8c1024'; ctx.fillRect(0, H - 14, W, 14);
+      ctx.fillStyle = '#e2c27d'; ctx.font = '600 30px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(top, W / 2, H / 2 - 80);
+      ctx.fillStyle = '#fff'; wrap(title, W - 160, '800 58px system-ui, sans-serif').slice(0, 2).forEach((l, k) => ctx.fillText(l, W / 2, H / 2 + k * 66));
+      if (sub) { ctx.fillStyle = '#cbd5e1'; wrap(sub, W - 200, '500 32px system-ui, sans-serif').slice(0, 3).forEach((l, k) => ctx.fillText(l, W / 2, H / 2 + 110 + k * 42)); }
+    };
     const card = async (color, top, title, sub, ms) => {
+      drawCard(color, top, title, sub);
+      // MP4: the title card is written at once (no need to wait); recorder: it stays on screen for its time
+      if (wr) { const n = Math.round(ms / 1000 * wr.fps); for (let i = 0; i < n; i++) await wr.frame(c); return; }
       const t0 = performance.now();
-      await new Promise(res => { const tick = () => {
-        ctx.fillStyle = '#0e1d45'; ctx.fillRect(0, 0, W, H); ctx.fillStyle = color || '#8c1024'; ctx.fillRect(0, H - 14, W, 14);
-        ctx.fillStyle = '#e2c27d'; ctx.font = '600 30px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(top, W / 2, H / 2 - 80);
-        ctx.fillStyle = '#fff'; wrap(title, W - 160, '800 58px system-ui, sans-serif').slice(0, 2).forEach((l, k) => ctx.fillText(l, W / 2, H / 2 + k * 66));
-        if (sub) { ctx.fillStyle = '#cbd5e1'; wrap(sub, W - 200, '500 32px system-ui, sans-serif').slice(0, 3).forEach((l, k) => ctx.fillText(l, W / 2, H / 2 + 110 + k * 42)); }
-        if (performance.now() - t0 < ms) requestAnimationFrame(tick); else res(); }; tick(); });
+      await new Promise(res => { const tick = () => { drawCard(color, top, title, sub); if (performance.now() - t0 < ms) requestAnimationFrame(tick); else res(); }; tick(); });
     };
     try {
-      rec.start(250);
+      if (rec) rec.start(250);
       await card('#8c1024', `${S().club.name || 'Raincy Coach'} · Briefing vidéo`, name, `${items.length} séquence${items.length > 1 ? 's' : ''}`, 2200);
       for (let k = 0; k < items.length; k++) {
         const { rec: m, clip } = items[k], t = tagOf(clip.tag), ps = (clip.players || []).map(pid => Store.get('players', pid)).filter(Boolean);
@@ -407,23 +418,30 @@ const Analyse = (() => {
         await new Promise(r => { v.onloadedmetadata = r; setTimeout(r, 5000); });
         v.currentTime = clip.start; await new Promise(r => { v.onseeked = r; setTimeout(r, 3000); });
         await v.play().catch(() => {});
-        await new Promise(res => { const tick = () => {
-          const vw = v.videoWidth || 16, vh = v.videoHeight || 9, s = Math.min(W / vw, H / vh), dw = vw * s, dh = vh * s;
-          ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); try { ctx.drawImage(v, (W - dw) / 2, (H - dh) / 2, dw, dh); } catch (e) {}
-          // caption bar at the bottom
-          const cap = `${t[1]} ${t[2]}${clip.note ? ' · ' + clip.note : ''}${ps.length ? ' · ' + ps.map(p => Store.shortName(p)).join(', ') : ''}`;
-          ctx.fillStyle = 'rgba(14,29,69,.82)'; ctx.fillRect(0, H - 70, W, 70); ctx.fillStyle = t[3]; ctx.fillRect(0, H - 70, 10, 70);
-          ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.font = '700 28px system-ui, sans-serif'; ctx.fillText(wrap(cap, W - 60, '700 28px system-ui, sans-serif')[0] || '', 28, H - 26);
-          if (v.currentTime >= clip.end || v.ended) { v.pause(); return res(); }
-          requestAnimationFrame(tick); }; tick(); });
+        const first = wr ? wr.count : 0, cap = `${t[1]} ${t[2]}${clip.note ? ' · ' + clip.note : ''}${ps.length ? ' · ' + ps.map(p => Store.shortName(p)).join(', ') : ''}`;
+        await new Promise((res, rej) => { const tick = async () => {
+          try {
+            const vw = v.videoWidth || 16, vh = v.videoHeight || 9, s = Math.min(W / vw, H / vh), dw = vw * s, dh = vh * s;
+            ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); try { ctx.drawImage(v, (W - dw) / 2, (H - dh) / 2, dw, dh); } catch (e) {}
+            // caption bar at the bottom
+            ctx.fillStyle = 'rgba(14,29,69,.82)'; ctx.fillRect(0, H - 70, W, 70); ctx.fillStyle = t[3]; ctx.fillRect(0, H - 70, 10, 70);
+            ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.font = '700 28px system-ui, sans-serif'; ctx.fillText(wrap(cap, W - 60, '700 28px system-ui, sans-serif')[0] || '', 28, H - 26);
+            // MP4: the images follow the video's own clock (a slow phone never makes the sequence jerky or too short)
+            if (wr) { const due = first + Math.floor((Math.min(v.currentTime, clip.end) - clip.start) * wr.fps); while (wr.count <= due) await wr.frame(c); }
+            if (v.currentTime >= clip.end || v.ended) { v.pause(); return res(); }
+            requestAnimationFrame(tick);
+          } catch (e) { rej(e); } }; tick(); });
       }
       await card('#8c1024', S().club.name || 'Raincy Coach', 'Fin du briefing', '', 1200);
-      rec.stop(); await stopped;
-      const type = (rec.mimeType || mime || 'video/webm').split(';')[0], blob = new Blob(chunks, { type });
+      let blob;
+      if (wr) blob = await wr.finish();
+      else { rec.stop(); await stopped; blob = new Blob(chunks, { type: (rec.mimeType || mime || 'video/webm').split(';')[0] }); }
       bz.done();
-      const r = await Exporter.deliver(blob, `${name.replace(/[^\wÀ-ÿ -]+/g, ' ').replace(/\s+/g, ' ').trim() || 'briefing'}.${type.includes('mp4') ? 'mp4' : 'webm'}`);
-      if (r === 'downloaded') toast('Vidéo enregistrée dans Téléchargements');
-    } catch (e) { bz.done(); try { rec.state !== 'inactive' && rec.stop(); } catch (e2) {} toast('La vidéo n\'a pas pu être créée : ' + (e.message || e), 'err'); }
+      const mp4 = blob.type.includes('mp4');
+      const r = await Exporter.deliver(blob, `${name.replace(/[^\wÀ-ÿ -]+/g, ' ').replace(/\s+/g, ' ').trim() || 'briefing'}.${mp4 ? 'mp4' : 'webm'}`);
+      if (!mp4) toast('Ce navigateur ne sait faire qu\'une vidéo WebM (lisible sur ordinateur, pas toujours sur iPhone ni sur une télé). Pour un MP4 lisible partout : Chrome, Edge ou Safari à jour.', 'err');
+      else if (r === 'downloaded') toast('Vidéo MP4 enregistrée dans Téléchargements');
+    } catch (e) { bz.done(); if (wr) wr.cancel(); try { rec && rec.state !== 'inactive' && rec.stop(); } catch (e2) {} toast('La vidéo n\'a pas pu être créée : ' + (e.message || e), 'err'); }
     finally { v.remove(); urls.forEach(u => URL.revokeObjectURL(u)); }
   }
 

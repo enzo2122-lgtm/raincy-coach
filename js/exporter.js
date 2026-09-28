@@ -75,7 +75,44 @@ const Exporter = (() => {
     if (!window.MediaRecorder) return null;
     return list.find(m => { try { return MediaRecorder.isTypeSupported(m); } catch (e) { return false; } }) || '';
   }
-  function canVideo() { return !!(window.MediaRecorder && HTMLCanvasElement.prototype.captureStream); }
+  function canVideo() { return !!(window.MediaRecorder && HTMLCanvasElement.prototype.captureStream) || !!window.VideoEncoder; }
+
+  /* A real MP4 (H.264), the video every phone, computer and TV plays: the images of a canvas are encoded one by one
+     (WebCodecs) and put in an MP4 file (mp4-muxer, loaded the first time). null when the browser can't: then MediaRecorder,
+     which gives WebM on some browsers. */
+  let muxerLoad = null;
+  const loadMuxer = () => muxerLoad || (muxerLoad = new Promise((res, rej) => {
+    if (window.Mp4Muxer) return res();
+    const s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/mp4-muxer@5.1.3/build/mp4-muxer.min.js';
+    s.onload = res; s.onerror = () => { muxerLoad = null; s.remove(); rej(new Error('mp4')); }; document.head.appendChild(s);
+  }));
+  async function mp4Writer(w, h, fps = 30) {
+    if (!window.VideoEncoder || !window.VideoFrame) return null;
+    let cfg = null;
+    for (const codec of ['avc1.42001f', 'avc1.4d001f', 'avc1.640028', 'avc1.42002a']) {
+      const c = { codec, width: w, height: h, bitrate: 6e6, framerate: fps, avc: { format: 'avc' } };
+      try { if ((await VideoEncoder.isConfigSupported(c)).supported) { cfg = c; break; } } catch (e) {}
+    }
+    if (!cfg) return null;
+    try { await loadMuxer(); } catch (e) { return null; }
+    const muxer = new Mp4Muxer.Muxer({ target: new Mp4Muxer.ArrayBufferTarget(), video: { codec: 'avc', width: w, height: h, frameRate: fps }, fastStart: 'in-memory' });
+    let err = null, n = 0;
+    const enc = new VideoEncoder({ output: (chunk, meta) => muxer.addVideoChunk(chunk, meta), error: e => { err = e; } });
+    enc.configure(cfg);
+    const dur = 1e6 / fps;
+    return {
+      fps,
+      get count() { return n; },
+      async frame(canvas) {
+        if (err) throw err;
+        while (enc.encodeQueueSize > 6) await new Promise(r => setTimeout(r, 4));
+        const f = new VideoFrame(canvas, { timestamp: Math.round(n * dur), duration: Math.round(dur) });
+        enc.encode(f, { keyFrame: n % (fps * 2) === 0 }); f.close(); n++;
+      },
+      async finish() { await enc.flush(); if (err) throw err; muxer.finalize(); enc.close(); return new Blob([muxer.target.buffer], { type: 'video/mp4' }); },
+      cancel() { try { enc.close(); } catch (e) {} },
+    };
+  }
   async function video(sc, o = {}, onProgress = () => {}) {
     await Board.ensureBg(sc);
     if (!canVideo()) throw new Error("Cet appareil ne sait pas enregistrer de vidéo depuis l'appli. Utilise l'enregistrement d'écran de l'iPad pendant la lecture.");
@@ -86,6 +123,14 @@ const Exporter = (() => {
     const at = t => { let acc = 0; for (const s of segs) { if (t < acc + s.d) return { k: s.k, u: s.move ? (t - acc) / s.d : 0 }; acc += s.d; } const l = segs[segs.length - 1]; return { k: l.k, u: 0 }; };
     const draw = t => { const { k, u } = at(t); Board.drawFrame(ctx, w, h - ch, sc, k, u, { homeBib: o.homeBib, names: o.names }); drawCaption(ctx, w, h, ch, sc, k); };
     draw(0);
+    // MP4 when possible: every image of the animation is computed, no need to wait for it to play
+    const wr = await mp4Writer(w, h, 30);
+    if (wr) {
+      const nf = Math.ceil((total + .3) * wr.fps);
+      for (let i = 0; i < nf; i++) { draw(Math.min(i / wr.fps, total)); await wr.frame(c); if (i % 10 === 0) onProgress(i / nf); }
+      onProgress(1);
+      return deliver(await wr.finish(), `${safeName(sc.name)}.mp4`);
+    }
     const mime = pickMime();
     const stream = c.captureStream(30);
     const rec = new MediaRecorder(stream, Object.assign({ videoBitsPerSecond: 6e6 }, mime ? { mimeType: mime } : {}));
@@ -264,5 +309,5 @@ const Exporter = (() => {
   }
   async function json(text, name) { return deliver(new Blob([text], { type: 'application/json' }), safeName(name) + '.raincy.json'); }
 
-  return { frameCanvas, png, video, canVideo, pdfSchema, pdfTraining, pdfMatch, json, deliver };
+  return { frameCanvas, png, video, canVideo, mp4Writer, pickMime,pdfSchema, pdfTraining, pdfMatch, json, deliver };
 })();
