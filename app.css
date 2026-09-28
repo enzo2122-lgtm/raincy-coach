@@ -1118,3 +1118,11 @@ h2.section svg { width: 22px; height: 22px; vertical-align: -4px; margin-right: 
 /* 3.19 : messagerie, les équipes A / B sous leur catégorie */
 .ch.ch-sub { margin-left: 22px; padding-top: 6px; padding-bottom: 6px; font-weight: 500; font-size: .95em; }
 .ch.ch-sub .ch-ic { width: 24px; height: 24px; background: transparent; color: var(--muted); font-weight: 700; }
+/* 3.20 : vidéos YouTube dans l'analyse */
+.an-ytbox { position: relative; width: 100%; aspect-ratio: 16 / 9; max-height: 62vh; background: #000; color: #fff; display: grid; place-items: center; }
+.an-ytbox iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.an-yt .an-time { pointer-events: none; }
+.an-yt-err { padding: 16px; text-align: center; color: #fff; }
+.an-ytbox:has(.an-yt-err) { aspect-ratio: auto; min-height: 140px; }
+.an-show .an-show-yt { position: absolute; inset: 0 0 130px 0; aspect-ratio: auto; max-height: none; }
+@media (max-width: 760px) { .an-ytbox { max-height: 42vh; } }

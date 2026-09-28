@@ -17,21 +17,70 @@ const Analyse = (() => {
   let urlNow = null;
   const freeUrl = () => { if (urlNow) { URL.revokeObjectURL(urlNow); urlNow = null; } };
 
+  /* ---------- YouTube: a link of the library, played in YouTube's own player ----------
+     Tagging, sequences and the full-screen briefing work the same; YouTube never lets a page read its images,
+     so no drawing on a frame and no exported video file for these sequences. */
+  const ytId = url => { const m = /(?:youtube\.com\/(?:watch\?(?:[^#]*&)?v=|embed\/|shorts\/|live\/|v\/)|youtu\.be\/)([\w-]{11})/.exec(url || ''); return m ? m[1] : null; };
+  const isYT = rec => !!rec && rec.kind === 'link' && !!ytId(rec.url);
+  let ytApi = null;
+  const loadYT = () => ytApi || (ytApi = new Promise((res, rej) => {
+    if (window.YT && YT.Player) return res(YT);
+    const prev = window.onYouTubeIframeAPIReady; window.onYouTubeIframeAPIReady = () => { if (prev) prev(); res(YT); };
+    const s = document.createElement('script'); s.src = 'https://www.youtube.com/iframe_api';
+    s.onerror = () => { ytApi = null; s.remove(); rej(new Error('YouTube injoignable')); };
+    document.head.appendChild(s);
+  }));
+  // A YouTube player that answers like a <video>: currentTime, duration, paused, play(), pause(), playbackRate, onplay/onpause/ontimeupdate…
+  async function ytPlayer(box, id) {
+    const Y = await loadYT(), el = document.createElement('div'); box.appendChild(el);
+    const v = { isYT: true }; let p, timer, known = false;
+    await new Promise((res, rej) => {
+      const to = setTimeout(() => rej(new Error('YouTube ne répond pas')), 20000);
+      p = new Y.Player(el, { videoId: id, width: '100%', height: '100%', playerVars: { playsinline: 1, rel: 0, modestbranding: 1 },
+        events: { onReady: () => { clearTimeout(to); res(); }, onError: e => { clearTimeout(to); rej(new Error('YT' + e.data)); },
+          onStateChange: e => { if (e.data === 1 && v.onplay) v.onplay(); if (e.data === 2 && v.onpause) v.onpause(); if (e.data === 0) { if (v.onpause) v.onpause(); if (v.onended) v.onended(); } } } });
+    });
+    Object.defineProperties(v, {
+      currentTime: { get: () => (p.getCurrentTime && p.getCurrentTime()) || 0, set: t => { p.seekTo(Math.max(0, t), true); setTimeout(() => { if (v.ontimeupdate) v.ontimeupdate(); if (v.onseeked) v.onseeked(); }, 300); } },
+      duration: { get: () => (p.getDuration && p.getDuration()) || NaN },
+      paused: { get: () => p.getPlayerState() !== 1 },
+      playbackRate: { get: () => p.getPlaybackRate(), set: r => p.setPlaybackRate(r) },
+      muted: { get: () => p.isMuted(), set: m => m ? p.mute() : p.unMute() },
+    });
+    v.play = () => { p.playVideo(); return Promise.resolve(); };
+    v.pause = () => { try { p.pauseVideo(); } catch (e) {} };
+    v.scrollIntoView = o => box.scrollIntoView(o);
+    v.destroy = () => { clearInterval(timer); try { p.destroy(); } catch (e) {} };
+    // no events from YouTube while playing: the time is read 4 times a second, and the player goes away with its page
+    timer = setInterval(() => {
+      if (!document.body.contains(box)) return v.destroy();
+      if (!known && v.duration > 0) { known = true; if (v.onloadedmetadata) v.onloadedmetadata(); }
+      if (v.ontimeupdate) v.ontimeupdate();
+    }, 250);
+    return v;
+  }
+  const ytError = e => /YT(101|150)/.test(String(e && e.message)) ? 'Le propriétaire de cette vidéo YouTube ne permet pas de la lire dans une autre appli. Télécharge-la sur l\'appareil puis importe-la dans la Bibliothèque.'
+    : /YT(100|2)/.test(String(e && e.message)) ? 'Vidéo YouTube introuvable : elle est peut-être privée ou supprimée. Une vidéo « non répertoriée » fonctionne.'
+    : 'YouTube ne répond pas : vérifie la connexion internet, puis réessaie.';
+
   /* ---------- analysis page (#/analyse/mediaId) ---------- */
   async function page(root, id) {
     freeUrl();
     const rec = id && await Media.get(id);
-    if (!rec || rec.kind !== 'video') { root.innerHTML = `<div class="empty"><p>Vidéo introuvable sur cet appareil : les vidéos restent sur l'appareil qui les a importées.</p><a class="btn" href="#/bibliotheque">${I.back}<span>Bibliothèque</span></a></div>`; return; }
+    const yt = isYT(rec);
+    if (!rec || (rec.kind !== 'video' && !yt)) { root.innerHTML = `<div class="empty"><p>${rec && rec.kind === 'link' ? 'Seules les vidéos YouTube s\'analysent depuis un lien. Pour un autre site, télécharge la vidéo sur l\'appareil puis importe-la dans la Bibliothèque.' : 'Vidéo introuvable sur cet appareil : les vidéos restent sur l\'appareil qui les a importées.'}</p><a class="btn" href="#/bibliotheque">${I.back}<span>Bibliothèque</span></a></div>`; return; }
     rec.clips = rec.clips || [];
     if (!rec.matchId && String(rec.ref || '').startsWith('match:')) rec.matchId = rec.ref.slice(6);
     const match = () => rec.matchId && Store.get('matches', rec.matchId);
     const players = () => { const m = match(); return m ? (m.convoked || []).map(pid => Store.get('players', pid)).filter(Boolean).sort(Store.byName) : []; };
-    urlNow = URL.createObjectURL(rec.blob);
-    const ms = S().matches.filter(m => Auth.sees(m.teamId) && !m.exempt).sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 60);
+    if (!yt) urlNow = URL.createObjectURL(rec.blob);
+    const ms =S().matches.filter(m => Auth.sees(m.teamId) && !m.exempt).sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 60);
     root.innerHTML = `<header class="page-head an-head"><div><h1>🎬 Analyse vidéo</h1><p class="sub">${esc(rec.name || 'Vidéo')}</p></div>
       <div class="head-actions"><button class="btn" data-a="back">${I.back}<span>Retour</span></button><button class="btn primary" data-a="briefings">${I.video}<span>Briefings</span></button></div></header>
       <label class="fld an-match"><span>Match analysé (pour choisir les joueurs)</span><select id="anMatch"><option value="">Aucun</option>${ms.map(m => `<option value="${m.id}" ${m.id === rec.matchId ? 'selected' : ''}>${esc(UI.fmtDate(m.date))} · ${esc((Store.get('teams', m.teamId) || {}).name || '')} ${m.home ? 'contre' : 'chez'} ${esc(m.opponent || '?')}</option>`).join('')}</select></label>
-      <div class="an-player"><video id="anVideo" src="${urlNow}" playsinline preload="auto"></video><div class="an-time" id="anTime">0:00</div></div>
+      ${yt ? `<div class="an-player an-yt"><div id="anYT" class="an-ytbox"><p class="muted">Chargement de YouTube…</p></div><div class="an-time" id="anTime">0:00</div></div>
+        <p class="tip">Vidéo YouTube : marque les actions et fais tes briefings comme d'habitude. YouTube ne laisse pas copier ses images, donc pas de dessin sur l'image ni d'export en fichier vidéo. Pour ça, importe la vidéo elle-même dans la Bibliothèque.</p>`
+      : `<div class="an-player"><video id="anVideo" src="${urlNow}" playsinline preload="auto"></video><div class="an-time" id="anTime">0:00</div></div>`}
       <div class="an-bar" id="anBar" role="slider" aria-label="Position dans la vidéo"><i class="an-pos" id="anPos"></i></div>
       <div class="an-ctrl">
         <button class="icon-btn" data-a="-5" aria-label="Reculer de 5 secondes">−5</button><button class="icon-btn" data-a="-f" aria-label="Image précédente">◀︎|</button>
@@ -42,7 +91,12 @@ const Analyse = (() => {
         <div class="an-tags">${TAGS.map(([k, ic, l, c]) => `<button class="an-tag" data-tag="${k}" style="--c:${c}"><b>${ic}</b><span>${esc(l)}</span></button>`).join('')}</div></section>
       <div id="anStats"></div>
       <h2 class="section">Séquences</h2><div id="anClips"></div>`;
-    const v = $('#anVideo', root), bar = $('#anBar', root);
+    const bar = $('#anBar', root);
+    let v = $('#anVideo', root);
+    if (yt) {
+      try { v = await ytPlayer($('#anYT', root), ytId(rec.url)); $('#anYT p', root) && $('#anYT p', root).remove(); }
+      catch (e) { $('#anYT', root).innerHTML = `<p class="an-yt-err">${esc(ytError(e))}</p><p><a class="btn soft" href="${esc(rec.url)}" target="_blank" rel="noopener noreferrer">${I.share}<span>Ouvrir sur YouTube</span></a></p>`; return; }
+    }
     const save = async () => { await Media.put(rec); };
     const drawBar = () => {
       const d = isFinite(v.duration) ? v.duration : 0;
@@ -60,8 +114,8 @@ const Analyse = (() => {
           <select class="add-select" data-retag="${c.id}" aria-label="Type d'action">${TAGS.map(([k, ic, l]) => `<option value="${k}" ${k === c.tag ? 'selected' : ''}>${ic} ${esc(l)}</option>`).join('')}</select></div>
         <label class="fld"><span>Commentaire (s'affiche dans le briefing)</span><input data-note="${c.id}" value="${esc(c.note || '')}" maxlength="120" placeholder="ex : on laisse l'intervalle ouvert entre le 4 et le 5"></label>
         ${ps.length ? `<div class="chips an-players">${ps.map(p => `<button class="chip ${(c.players || []).includes(p.id) ? 'on' : ''}" data-pl="${c.id}|${p.id}">${esc(Store.shortName(p))}</button>`).join('')}</div>` : ''}
-        <div class="chips"><button class="btn soft" data-draw="${c.id}">${I.board}<span>Dessiner sur l'image</span></button><button class="btn soft" data-brief="${c.id}">${I.video}<span>Ajouter à un briefing</span></button>
-          <button class="btn soft" data-share="${c.id}">${I.share}<span>Exporter</span></button><button class="icon-btn danger" data-del="${c.id}" aria-label="Supprimer la séquence">${I.trash}</button></div></article>`; };
+        <div class="chips">${yt ? '' : `<button class="btn soft" data-draw="${c.id}">${I.board}<span>Dessiner sur l'image</span></button>`}<button class="btn soft" data-brief="${c.id}">${I.video}<span>Ajouter à un briefing</span></button>
+          ${yt ? '' : `<button class="btn soft" data-share="${c.id}">${I.share}<span>Exporter</span></button>`}<button class="icon-btn danger" data-del="${c.id}" aria-label="Supprimer la séquence">${I.trash}</button></div></article>`; };
     const drawClips = () => {
       rec.clips.sort((a, b) => a.start - b.start);
       $('#anClips', root).innerHTML = rec.clips.length ? rec.clips.map(clipRow).join('') : '<p class="muted">Lance la vidéo et touche une action (But, Occasion, Perte de balle…) au moment où elle arrive : la séquence est créée toute seule.</p>';
@@ -87,7 +141,7 @@ const Analyse = (() => {
       if (a === 'back') { v.pause(); return history.length > 1 ? history.back() : (location.hash = '#/bibliotheque'); }
       if (a === 'briefings') { v.pause(); return briefingsDialog(); }
       if (a === 'play') { stopAt = null; return v.paused ? v.play().catch(() => {}) : v.pause(); }
-      if (a === '-5' || a === '+5') { v.currentTime = Math.max(0, Math.min(v.duration || 0, v.currentTime + (a === '-5' ? -5 : 5))); return; }
+      if (a === '-5' || a === '+5') { const to = v.currentTime + (a === '-5' ? -5 : 5); v.currentTime = Math.max(0, isFinite(v.duration) && v.duration ? Math.min(v.duration, to) : to); return; }
       if (a === '-f' || a === '+f') { v.pause(); v.currentTime = Math.max(0, v.currentTime + (a === '-f' ? -1 : 1) / 25); return; }
       if (a === 'pref') return prefDialog(() => page(root, id));
       if (b.dataset.rate) { v.playbackRate = +b.dataset.rate; $$('[data-rate]', root).forEach(x => x.classList.toggle('on', x === b)); return; }
@@ -183,12 +237,13 @@ const Analyse = (() => {
     const ov = document.createElement('div'); ov.className = 'an-show'; document.body.appendChild(ov);
     const urls = {}; let i = 0, v = null, stop = false, timer = null;
     const urlOf = rec => urls[rec.id] || (urls[rec.id] = URL.createObjectURL(rec.blob));
-    const end = () => { stop = true; clearTimeout(timer); if (v) v.pause(); Object.values(urls).forEach(u => URL.revokeObjectURL(u)); ov.remove(); document.removeEventListener('keydown', key); try { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); } catch (e) {} };
+    const drop = () => { if (v) { v.pause(); if (v.destroy) v.destroy(); } v = null; };
+    const end = () => { stop = true; clearTimeout(timer); drop();Object.values(urls).forEach(u => URL.revokeObjectURL(u)); ov.remove(); document.removeEventListener('keydown', key); try { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); } catch (e) {} };
     const key = e => { if (e.key === 'Escape') end(); if (e.key === 'ArrowRight') go(i + 1); if (e.key === 'ArrowLeft') go(i - 1); if (e.key === ' ') { e.preventDefault(); if (v) v.paused ? v.play() : v.pause(); } };
     document.addEventListener('keydown', key);
     try { const d = document.documentElement, p = (d.requestFullscreen || d.webkitRequestFullscreen || (() => {})).call(d); if (p && p.catch) p.catch(() => {}); } catch (e) {}
     function go(n) {
-      if (stop) return; clearTimeout(timer);
+      if (stop) return; clearTimeout(timer); drop();
       if (n < 0) n = 0;
       if (n >= items.length) { ov.innerHTML = `<div class="an-card"><p>Fin du briefing</p><h2>${esc(name)}</h2><button class="btn primary" data-x="again">${I.rotate}<span>Revoir</span></button><button class="btn" data-x="close">Fermer</button></div>`; return; }
       i = n; const { rec, clip } = items[i], t = tagOf(clip.tag), ps = (clip.players || []).map(pid => Store.get('players', pid)).filter(Boolean);
@@ -197,14 +252,28 @@ const Analyse = (() => {
       ov.innerHTML = `<div class="an-card" style="--c:${t[3]}"><p>${i + 1} / ${items.length}</p><h2>${t[1]} ${esc(t[2])}</h2>${clip.note ? `<p class="an-note">${esc(clip.note)}</p>` : ''}</div>`;
       timer = setTimeout(() => {
         if (stop) return;
-        ov.innerHTML = `<video playsinline></video><div class="an-cap">${caption}</div>
+        const yt = isYT(rec);
+        ov.innerHTML = `${yt ? '<div class="an-ytbox an-show-yt"></div>' : '<video playsinline></video>'}<div class="an-cap">${caption}</div>
           <div class="an-show-ctrl"><button class="icon-btn" data-x="prev" aria-label="Précédente">${I.back}</button><button class="icon-btn" data-x="pause" aria-label="Pause">${I.pause}</button>
           <span>${i + 1} / ${items.length}</span><button class="icon-btn" data-x="next" aria-label="Suivante">${I.next}</button><button class="icon-btn" data-x="close" aria-label="Fermer">${I.x}</button></div>`;
-        v = $('video', ov); v.src = urlOf(rec);
+        const run = p => {
+          v = p;
+          p.ontimeupdate = () => { if (p.currentTime >= clip.end) { p.ontimeupdate = p.onended = null; p.pause(); go(i + 1); } };
+          p.onended = () => { p.ontimeupdate = p.onended = null; go(i + 1); };
+        };
+        if (yt) {
+          const at = i;
+          ytPlayer($('.an-ytbox', ov), ytId(rec.url)).then(p => {
+            if (stop || i !== at) return p.destroy();
+            run(p); p.currentTime = clip.start; p.play();
+            // with the sound when the browser allows it, otherwise muted
+            setTimeout(() => { if (v === p && p.paused) { p.muted = true; p.play(); } }, 1500);
+          }).catch(e => { if (!stop && i === at) { toast(ytError(e), 'err'); go(i + 1); } });
+          return;
+        }
+        const el = $('video', ov); el.src = urlOf(rec); run(el);
         // with the sound when the browser allows it, otherwise muted
-        v.onloadedmetadata = () => { v.currentTime = clip.start; v.play().catch(() => { v.muted = true; v.play().catch(() => {}); }); };
-        v.ontimeupdate = () => { if (v.currentTime >= clip.end) { v.ontimeupdate = v.onended = null; v.pause(); go(i + 1); } };
-        v.onended = () => { v.ontimeupdate = v.onended = null; go(i + 1); };
+        el.onloadedmetadata = () => { el.currentTime = clip.start; el.play().catch(() => { el.muted = true; el.play().catch(() => {}); }); };
       }, 1800);
     }
     ov.onclick = e => {
@@ -227,6 +296,11 @@ const Analyse = (() => {
   }
   async function exportVideo(items, name) {
     if (!(window.MediaRecorder && HTMLCanvasElement.prototype.captureStream)) return toast('Cet appareil ne sait pas créer de vidéo depuis l\'appli : utilise « Présenter » avec l\'enregistrement d\'écran.', 'err');
+    // YouTube never lets a page copy its images: its sequences stay out of the file
+    const nYT = items.filter(x => isYT(x.rec)).length;
+    items = items.filter(x => !isYT(x.rec));
+    if (!items.length) return toast('Ces séquences viennent de YouTube : YouTube ne laisse pas en faire un fichier vidéo. Utilise « Présenter », ou importe la vidéo elle-même dans la Bibliothèque.', 'err');
+    if (nYT) toast(`${nYT} séquence${nYT > 1 ? 's' : ''} YouTube ne ${nYT > 1 ? 'seront' : 'sera'} pas dans le fichier (YouTube ne le permet pas)`);
     const total = items.reduce((a, x) => a + (x.clip.end - x.clip.start) + 1.8, 2.2);
     if (!(await confirmBox(`Créer la vidéo « ${name} » (${mmss(total)}) ? Garde l'appli ouverte pendant l'enregistrement, qui dure le temps de la vidéo.`, 'Créer la vidéo'))) return;
     const bz = UI.busy('Création de la vidéo… garde l\'appli ouverte');
@@ -286,5 +360,5 @@ const Analyse = (() => {
     return `<section class="card"><div class="row-head"><h2>${I.video}Briefings vidéo</h2><button class="btn soft" data-anbrief>${I.layers}<span>Mes briefings (${list.length})</span></button></div>
       <p class="muted small">Ouvre une vidéo de match puis « Analyser » : marque les actions (but, occasion, perte de balle…), puis rassemble les séquences dans un briefing à présenter ou à envoyer en vidéo.</p></section>`;
   }
-  return { page, briefingPage, briefingsDialog, libraryCard, TAGS, leave: freeUrl };
+  return { page, briefingPage, briefingsDialog, libraryCard, TAGS, isYT, leave: freeUrl };
 })();

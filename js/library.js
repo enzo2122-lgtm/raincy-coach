@@ -99,6 +99,13 @@ const Library = (() => {
           (async () => {
             const b = busy('Récupération du fichier…'), step = t => { const p = document.querySelector('#busy p'); if (p) p.textContent = t; };
             let ids = [];
+            // a YouTube video stays a link, played by YouTube in the analysis (its thumbnail comes from YouTube)
+            const yt = /(?:youtube\.com\/(?:watch\?(?:[^#]*&)?v=|embed\/|shorts\/|live\/|v\/)|youtu\.be\/)([\w-]{11})/.exec(url);
+            if (yt) {
+              const me = Auth.current(), id = Store.uid();
+              await Media.put({ id, ref: 'lib', kind: 'link', url, name: $('#lkName', r).value.trim() || 'Vidéo YouTube', host, thumb: `https://i.ytimg.com/vi/${yt[1]}/hqdefault.jpg`, createdAt: Date.now(), by: me ? me.id : null });
+              b.done(); toast('Vidéo YouTube ajoutée : ouvre-la puis « Analyser le match »'); cb && cb([id]); return res();
+            }
             try { ids = await importFiles([await fetchFile(url, name)], step); toast('Fichier récupéré depuis le lien'); }
             catch (e) {
               const me = Auth.current(), id = Store.uid();
@@ -253,7 +260,8 @@ const Library = (() => {
     const urls = [], url = b => { const u = URL.createObjectURL(b); urls.push(u); return u; };
     let body = `<label class="fld"><span>Nom</span><input id="docName" value="${esc(rec.name || '')}"></label>`;
     if (rec.kind === 'link') body += `<p class="link-box">${I.share}<a href="${esc(rec.url)}" target="_blank" rel="noopener noreferrer">${esc(rec.url)}</a></p>
-      <p class="muted small">Pour dessiner dessus ou en faire une séance, télécharge le fichier sur l'appareil depuis ${esc(rec.host || 'le site')}, puis importe-le avec « Fichiers ».</p>`;
+      <p class="muted small">${Analyse.isYT(rec) ? '« Analyser le match » : marque les actions pendant la lecture et prépare un briefing vidéo. Pour dessiner sur une image ou exporter les séquences en fichier vidéo, télécharge la vidéo sur l\'appareil puis importe-la avec « Fichiers » (YouTube ne laisse pas copier ses images).'
+        : `Pour dessiner dessus ou en faire une séance, télécharge le fichier sur l'appareil depuis ${esc(rec.host || 'le site')}, puis importe-le avec « Fichiers ».`}</p>`;
     if (rec.kind === 'image') body += `<div class="viewer"><img alt="" src="${url(rec.blob)}"></div>`;
     if (rec.kind === 'video') body += `<div class="viewer"><video id="docVideo" src="${url(rec.blob)}" controls playsinline></video></div>
       <p class="tip">« Analyser le match » : marque les actions pendant la lecture et prépare un briefing vidéo. Ou mets la vidéo sur pause au bon moment, puis touche « Dessiner sur cette image » pour analyser l'action avec les flèches et les joueurs.</p>`;
@@ -273,7 +281,8 @@ const Library = (() => {
       actions.push({ label: 'Imprimer', icon: I.pdf, onClick: () => { printRec(rec); return false; } });
       actions.push({ label: 'Envoyer dans la messagerie', icon: I.chat, onClick: () => { setTimeout(() => sendToChat(rec), 60); } });
     }
-    if (rec.kind === 'link') actions.push({ label: 'Ouvrir', kind: 'primary', icon: I.share, onClick: () => { window.open(rec.url, '_blank', 'noopener'); return false; } });
+    if (Analyse.isYT(rec)) actions.push({ label: 'Analyser le match', kind: 'primary', icon: I.video, onClick: () => { location.hash = '#/analyse/' + rec.id; } });
+    if (rec.kind === 'link') actions.push({ label: Analyse.isYT(rec) ? 'Ouvrir sur YouTube' : 'Ouvrir', kind: Analyse.isYT(rec) ? '' : 'primary', icon: I.share,onClick: () => { window.open(rec.url, '_blank', 'noopener'); return false; } });
     actions.push({ label: 'Joindre…', icon: I.layers, onClick: () => { setTimeout(() => attach(rec), 60); } });
     if (rec.blob) actions.push({ label: 'Partager', icon: I.share, onClick: () => { Exporter.deliver(rec.blob, rec.name || 'document'); return false; } });
     if (Auth.isAdmin() || (Auth.current() && rec.by === Auth.current().id)) actions.push({ label: 'Supprimer', kind: 'danger', icon: I.trash, onClick: () => { setTimeout(async () => { if (await confirmBox(`Supprimer « ${rec.name} » de la bibliothèque ?`)) { await Media.del(rec.id); toast('Supprimé'); after && after(); } }, 60); } });
