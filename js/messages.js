@@ -34,6 +34,9 @@ const Messages = (() => {
   // Documents sent from the library: [[fichier:id,id]] = pictures travelling as schemas (with their image) to every device
   const bgAsked = new Set();
   function filesOf(m) {
+    const rid = (String(m.body).match(/\[\[signalement:([\w-]+)\]\]/) || [])[1];
+    if (rid) { const rep = Store.get('reports', rid);
+      return `<div class="msg-files">${rep && rep.shot ? `<button class="msg-shot" data-shot="${rid}" aria-label="Voir la capture d'écran"><img alt="Capture d'écran du problème" src="${rep.shot}"></button>` : '<span class="msg-file wait">Capture d\'écran en cours de réception…</span>'}</div>`; }
     const ids = ((String(m.body).match(/\[\[fichier:([\w,-]+)\]\]/) || [])[1] || '').split(',').filter(Boolean); if (!ids.length) return '';
     const missing = ids.map(id => Store.get('schemas', id)).filter(s => s && s.field && s.field.bgId && !Board.BG.has(s.field.bgId) && !bgAsked.has(s.id));
     if (missing.length) { missing.forEach(s => bgAsked.add(s.id)); Board.preloadBackgrounds(missing).then(() => { if (location.hash.startsWith('#/messages')) App.route(true); }); }
@@ -145,7 +148,7 @@ const Messages = (() => {
         const d = new Date(m.created_at), ds = d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
         const sep = ds !== day ? `<div class="day-sep">${esc(ds)}</div>` : ''; day = ds;
         const mine = m.author_id === me().id;
-        return `${sep}<div class="bubble ${mine ? 'mine' : ''}" data-m="${m.id}">${mine ? '' : `<span class="author-line"><b class="author">${crestOf(staffOf(m))}${esc(authorName(m))}</b>${UI.motto(staffOf(m))}</span>`}<p>${esc(String(m.body).replace(/\n?#rappel-[\w-]+\s*$/, '').replace(/\n?\[\[fichier:[\w,-]+\]\]/, '')).replace(/\n/g, '<br>')}</p>${filesOf(m)}
+        return `${sep}<div class="bubble ${mine ? 'mine' : ''}" data-m="${m.id}">${mine ? '' : `<span class="author-line"><b class="author">${crestOf(staffOf(m))}${esc(authorName(m))}</b>${UI.motto(staffOf(m))}</span>`}<p>${esc(String(m.body).replace(/\n?#rappel-[\w-]+\s*$/, '').replace(/\n?\[\[fichier:[\w,-]+\]\]/, '').replace(/\n?\[\[signalement:[\w-]+\]\]/, '')).replace(/\n/g, '<br>')}</p>${filesOf(m)}
           <span class="time">${d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}${mine || Auth.isAdmin() ? ` · <button class="linkish" data-delm="${m.id}">supprimer</button>` : ''}</span></div>`;
       }).join('') : '<p class="muted conv-hint">Pas encore de message. Écris le premier !</p>';
       body.scrollTop = body.scrollHeight;
@@ -162,6 +165,9 @@ const Messages = (() => {
       catch (err) { ta.value = text; toast(err.message, 'err'); }
     };
     body.onclick = async e => {
+      // a report's screenshot, full size
+      const sh = e.target.closest('[data-shot]');
+      if (sh) { const rep = Store.get('reports', sh.dataset.shot); if (rep && rep.shot) UI.modal({ title: 'Capture d\'écran', noFocus: true, body: `<div class="viewer"><img alt="Capture d'écran du problème" src="${rep.shot}"></div><p class="muted small">${esc(rep.byName || '')}${rep.page ? ' · page « ' + esc(rep.page) + ' »' : ''}</p>`, actions: [{ label: 'Fermer', kind: 'primary' }] }); return; }
       const b = e.target.closest('[data-delm]'); if (!b) return;
       if (!(await confirmBox('Supprimer ce message pour tout le monde ?'))) return;
       try { await Cloud.deleteMessage(b.dataset.delm); msgs = msgs.filter(m => m.id !== b.dataset.delm); try { localStorage.setItem(CACHE, JSON.stringify(msgs)); } catch (e2) {} draw(); }

@@ -2,7 +2,7 @@
    Errors are caught and kept so a coach can attach them to a report. */
 const Help = (() => {
   const { esc, $, $$, toast, modal } = UI;
-  const VERSION = '3.12';
+  const VERSION = '3.13';
   const TOUR_KEY = 'raincy-tour-seen', ERR_KEY = 'raincy-errors';
 
   /* ---------- error log ---------- */
@@ -159,7 +159,7 @@ const Help = (() => {
     const admins = ((await Cloud.accounts()) || []).filter(a => a.admin && a.staff_id !== me.id);
     const msg = [`${TYPES[rep.type][0]} ${TYPES[rep.type][1]} signalé depuis la page « ${rep.page} »`, rep.text, rep.context ? 'Ce que je faisais : ' + rep.context : '',
       rep.withDiag ? `(version ${VERSION} · ${/iPhone|iPad/.test(navigator.userAgent) ? 'iPhone / iPad' : /Android/.test(navigator.userAgent) ? 'Android' : 'ordinateur'}${(rep.diag.errors || []).length ? ' · ' + rep.diag.errors.length + ' erreur(s) notée(s)' : ''})` : '',
-      rep.shot ? '📎 Capture d\'écran jointe : Tableau de bord → Signalements.' : ''].filter(Boolean).join('\n').slice(0, 1900);
+      ].filter(Boolean).join('\n').slice(0, 1900) + (rep.shot ? `\n[[signalement:${rep.id}]]` : ''); // the screenshot shows in the message
     let n = 0; for (const a of admins) { try { await Cloud.post('dm:' + [me.id, a.staff_id].sort().join(':'), msg); n++; } catch (e) {} }
     return n;
   }
