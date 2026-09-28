@@ -753,6 +753,7 @@ const Views = (() => {
     const th = (k, l) => `<th><button class="th ${sortKey === k ? 'on' : ''}" data-sort="${k}">${l}</button></th>`;
     root.innerHTML = `${header('Statistiques', esc(t.name), `<a class="btn" href="#/bilan/${t.id}">🏆<span>Bilan de saison</span></a><button class="btn" data-act="excel">${I.download}<span>Excel</span></button>`)}
       ${teamSwitch()}
+      ${Season.advanced(t)}
       <div class="tiles">
         <div class="tile"><b>${ms.length}</b><span>Matchs</span></div>
         <div class="tile v"><b>${V}</b><span>Gagnés</span></div>

@@ -1550,3 +1550,17 @@ h2.section svg { width: 22px; height: 22px; vertical-align: -4px; margin-right: 
 .pv-frame { position: fixed; inset: 0; z-index: 9995; display: flex; flex-direction: column; background: var(--bg); }
 .pv-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: calc(env(safe-area-inset-top) + 8px) 12px 8px; background: var(--gold, #e2c27d); color: var(--navy, #0e1d45); }
 .pv-frame iframe { flex: 1; width: 100%; border: 0; background: #fff; }
+.ex-res summary { cursor: pointer; }
+.ex-res-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 0; border-top: 1px solid var(--line); }
+.ex-res-row a { flex: 1; min-width: 200px; font-weight: 600; }
+.ex-res-row .tag { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 99px; background: var(--surface2); }
+/* 3.40 : statistiques avancées */
+.adv-form { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; font-weight: 700; }
+.adv-form a { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; color: #fff; text-decoration: none; font: 800 14px var(--round); }
+.adv-form .f-V { background: #15803d; } .adv-form .f-N { background: #a16207; } .adv-form .f-D { background: #b91c1c; }
+.adv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-bottom: 12px; }
+.adv-grid > div { padding: 10px; border-radius: 12px; background: var(--surface2); }
+.adv-grid h3 { margin: 0 0 4px; font-size: 13px; color: var(--muted); } .adv-grid p { margin: 0; font-weight: 800; }
+.adv-bands > div { display: grid; grid-template-columns: 70px 1fr 1fr; gap: 6px; align-items: center; margin: 3px 0; font-size: 13px; }
+.adv-bands i { display: block; height: 18px; min-width: 2px; border-radius: 4px; color: #fff; font: 700 12px/18px var(--round); font-style: normal; padding: 0 5px; }
+.adv-bands i.f { background: #16a34a; } .adv-bands i.a { background: #dc2626; }

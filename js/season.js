@@ -63,5 +63,32 @@ const Season = (() => {
       if (r === 'downloaded') toast('Bilan enregistré dans Téléchargements');
     } catch (e) { console.error(e); toast('Bilan impossible : ' + (e.message || e), 'err'); } finally { b.done(); }
   }
-  return { page, pdf, data };
+  /* ---------- detailed statistics (Stats page): form, points, home / away, clean sheets, goals by period (live match) ---------- */
+  function advanced(t) {
+    const from = People.seasonFrom(), ms = S().matches.filter(m => m.teamId === t.id && m.played && !m.exempt && m.date >= from).sort((a, b) => a.date.localeCompare(b.date));
+    if (!ms.length) return '';
+    const pts = m => ({ V: 3, N: 1, D: 0 })[res(m)], rec = l => { const r = { V: 0, N: 0, D: 0, gf: 0, ga: 0 }; l.forEach(m => { r[res(m)]++; r.gf += +m.gf || 0; r.ga += +m.ga || 0; }); return r; };
+    const home = rec(ms.filter(m => m.home)), away = rec(ms.filter(m => !m.home)), total = ms.reduce((a, m) => a + pts(m), 0);
+    const cs = ms.filter(m => !+m.ga).length, scored = ms.filter(m => +m.gf > 0).length, form = ms.slice(-5);
+    const big = ms.slice().sort((a, b) => (b.gf - b.ga) - (a.gf - a.ga))[0], bad = ms.slice().sort((a, b) => (a.gf - a.ga) - (b.gf - b.ga))[0];
+    // goals by period of 15 min, from the matches followed live
+    const lives = ms.filter(m => m.live && (m.live.events || []).length), bands = {}, bandOf = min => { const n = parseInt(min, 10) || 0; const half = (m => m.live.halfLen)(lives[0] || { live: { halfLen: 45 } }); return Math.min(Math.floor((n - 1) / 15), Math.ceil(half * 2 / 15) - 1); };
+    lives.forEach(m => m.live.events.forEach(e => { if (e.type !== 'goal' && e.type !== 'against') return; const b = bandOf(e.min); bands[b] = bands[b] || { f: 0, a: 0 }; bands[b][e.type === 'goal' ? 'f' : 'a']++; }));
+    const firsts = lives.map(m => { const g = m.live.events.filter(e => e.type === 'goal' || e.type === 'against').sort((a, b) => a.wall - b.wall)[0]; return g ? { us: g.type === 'goal', r: res(m) } : null; }).filter(Boolean);
+    const whenFirst = r => { const l = firsts.filter(x => x.us === r); return l.length ? `${l.filter(x => x.r === 'V').length} V · ${l.filter(x => x.r === 'N').length} N · ${l.filter(x => x.r === 'D').length} D` : '–'; };
+    const maxB = Math.max(1, ...Object.values(bands).map(b => Math.max(b.f, b.a)));
+    return `<section class="card adv"><h2>📊 Statistiques avancées</h2>
+      <div class="adv-form">Forme : ${form.map(m => `<a href="#/match/${m.id}" class="f-${res(m)}" title="${esc(m.opponent || '')} ${m.gf}-${m.ga}">${res(m)}</a>`).join('')}<span class="muted small">${total} pts en ${ms.length} matchs · ${(total / ms.length).toFixed(2).replace('.', ',')} par match</span></div>
+      <div class="adv-grid"><div><h3>🏠 À domicile</h3><p>${home.V} V · ${home.N} N · ${home.D} D</p><p class="muted small">${home.gf} – ${home.ga}</p></div>
+        <div><h3>🚌 À l'extérieur</h3><p>${away.V} V · ${away.N} N · ${away.D} D</p><p class="muted small">${away.gf} – ${away.ga}</p></div>
+        <div><h3>🧤 Sans encaisser</h3><p>${cs} match${cs > 1 ? 's' : ''}</p><p class="muted small">${Math.round(cs / ms.length * 100)} % des matchs</p></div>
+        <div><h3>⚽ A marqué</h3><p>${scored} match${scored > 1 ? 's' : ''} sur ${ms.length}</p><p class="muted small">${(ms.reduce((a, m) => a + (+m.gf || 0), 0) / ms.length).toFixed(1).replace('.', ',')} but${ms.length ? 's' : ''} par match</p></div>
+        ${big ? `<div><h3>🏆 Plus large victoire</h3><p>${big.gf} – ${big.ga}</p><p class="muted small">${big.home ? 'contre' : 'chez'} ${esc(big.opponent || '?')}</p></div>` : ''}
+        ${bad && bad.gf < bad.ga ? `<div><h3>📉 Plus lourde défaite</h3><p>${bad.gf} – ${bad.ga}</p><p class="muted small">${bad.home ? 'contre' : 'chez'} ${esc(bad.opponent || '?')}</p></div>` : ''}</div>
+      ${lives.length ? `<h3>⏱️ Buts par période de 15 min (${lives.length} match${lives.length > 1 ? 's' : ''} suivi${lives.length > 1 ? 's' : ''} en direct)</h3>
+        <div class="adv-bands">${Object.keys(bands).map(Number).sort((a, b) => a - b).map(b => `<div><span>${b * 15 + 1}-${(b + 1) * 15}'</span><i class="f" style="width:${bands[b].f / maxB * 100}%">${bands[b].f || ''}</i><i class="a" style="width:${bands[b].a / maxB * 100}%">${bands[b].a || ''}</i></div>`).join('')}</div>
+        <p class="muted small">En vert nos buts, en rouge les buts encaissés. Quand on marque le premier : ${whenFirst(true)} · quand on encaisse le premier : ${whenFirst(false)}.</p>`
+        : '<p class="muted small">Suis tes matchs en direct (📱 sur la page du match) pour voir les buts par période et les résultats selon qui marque le premier.</p>'}</section>`;
+  }
+  return { page, pdf, data, advanced };
 })();

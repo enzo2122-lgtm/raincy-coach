@@ -7,12 +7,12 @@ const Exos = (() => {
   const S = () => Store.state;
   const THEMES = [['pressing', '🔥 Pressing / récupération'], ['conservation', '🔄 Conservation'], ['transitions', '⚡ Transitions'], ['finition', '🎯 Finition'],
     ['defense', '🛡️ Défense'], ['construction', '🧱 Construction / relance'], ['technique', '⚽ Technique'], ['cpa', '🚩 Coups de pied arrêtés'], ['physique', '🏃 Physique / vitesse'],
-    ['echauffement', '🔥 Échauffement'], ['jeu', '🏟️ Jeu / match à thème'], ['calme', '🧘 Retour au calme']];
+    ['gardien', '🧤 Gardien de but'], ['echauffement', '🔥 Échauffement'], ['jeu', '🏟️ Jeu / match à thème'], ['calme', '🧘 Retour au calme']];
   const KEYS = { pressing: /press|récup|contre-press|harc|déclench/i, conservation: /conserv|rondo|possess|toro|garder le ballon/i, transitions: /transit|contre-attaque|perte.*balle|récupération.*attaque|attaque rapide/i,
     finition: /finit|frapp|\btirs?\b|\bcentres?\b|devant le but|conclu/i, defense: /défen|duel|marquage|bloc|couverture|coulisse/i, construction: /construct|relance|sortie de balle|jeu court|premi[eè]re relance/i,
     technique: /techni|contrôle|passe|conduite|dribble|jongl|coordination|motricit/i, cpa: /cpa|corner|coup franc|coup-franc|penalty|touche longue|arrêté/i,
     physique: /physi|vitesse|sprint|endurance|puissance|fractionn|intermittent|explos|athlét/i, echauffement: /échauff|activation|mobilit|gamme/i,
-    jeu: /match|jeu réduit|jeu à thème|opposition|\d ?c ?\d|contre \d/i, calme: /retour au calme|étirement|récupération active/i };
+    gardien: /gardien|plongeon|sortie aérienne|prise de balle/i, jeu: /match|jeu réduit|jeu à thème|opposition|\d ?c ?\d|contre \d/i, calme: /retour au calme|étirement|récupération active/i };
   // age groups: the format of the team (5, 8 or 11)
   const fmtOf = teamId => ((Store.get('teams', teamId) || {}).format) || '11';
   // the classic base: [theme, title, minutes, organisation, consignes, matériel, formats]
@@ -49,8 +49,39 @@ const Exos = (() => {
     ['jeu', 'Jeu réduit 6 contre 6 avec zones', 20, 'Terrain de 50 × 35 m découpé en 3 zones, contraintes par zone.', 'Occuper la largeur\nProgresser zone par zone', 'Chasubles, buts, plots', '8,11'],
     ['jeu', 'Petit match 3 contre 3', 15, 'Terrain de 20 × 15 m, mini-buts, pas de gardien.', 'Chacun touche beaucoup de ballons\nAttaquer, défendre ensemble', 'Mini-buts, chasubles', '5,8'],
     ['calme', 'Retour au calme et étirements', 5, 'Footing léger puis étirements en cercle, retour sur la séance.', 'Respirer calmement\nUne phrase sur ce qu\'on retient', '', '5,8,11'],
-  ].map(([theme, title, duration, org, consignes, materiel, formats], i) => ({ id: 'base' + i, theme, title, duration, org, consignes, materiel, formats: formats.split(','), base: true }));
+    // (3.40) des exercices pour chaque âge et chaque taille de terrain, et pour les gardiens (dimensions en mètres)
+    ['jeu', 'L\'épervier balle au pied', 10, 'Couloir de 20 × 15 m. Les joueurs traversent en conduite, l\'épervier au milieu essaie de toucher les ballons ; ceux touchés deviennent éperviers.', 'Garder le ballon près du pied\nLever la tête\nChanger de direction', 'Ballons, plots', '5', '20x15'],
+    ['technique', 'Les déménageurs', 10, 'Deux camps de 15 × 15 m, ballons au centre. En 1 minute, ramener le plus de ballons en conduite dans son camp.', 'Conduite rapide\nPetites touches\nOn ne prend qu\'un ballon à la fois', 'Ballons, plots', '5', '30x15'],
+    ['technique', 'Feu rouge, feu vert', 8, 'Chacun son ballon dans un carré de 15 × 15 m. Vert : conduite ; orange : pied sur le ballon ; rouge : s\'asseoir sur le ballon.', 'Écouter et réagir\nContrôler le ballon', 'Ballons, plots', '5', '15x15'],
+    ['finition', 'Tirs dans les mini-buts de couleur', 10, '4 mini-buts de couleurs différentes ; le coach annonce une couleur, le joueur conduit puis frappe dans ce but.', 'Regarder le but avant de frapper\nFrappe du bon pied', 'Mini-buts, ballons', '5', '20x20'],
+    ['conservation', 'Passe à dix', 10, 'Terrain de 20 × 20 m, 4 contre 4. Dix passes d\'affilée = un point.', 'Se démarquer\nPasser au partenaire libre\nParler', 'Chasubles, ballons', '5,8', '20x20'],
+    ['defense', 'Le chat et la souris (1 contre 1)', 8, 'Couloirs de 10 × 5 m : l\'attaquant doit franchir la ligne, le défenseur l\'en empêche.', 'Défenseur : rester entre l\'attaquant et la ligne\nAttaquant : feinter', 'Plots, ballons', '5,8', '10x5'],
+    ['echauffement', 'Les statues avec ballon', 8, 'Carré de 15 × 15 m, conduite libre ; au coup de sifflet, tout le monde s\'arrête pied sur le ballon.', 'Conduite en regardant autour\nArrêt rapide', 'Ballons, plots', '5', '15x15'],
+    ['physique', 'Relais conduite de balle', 8, 'Équipes de 4, aller-retour en slalom balle au pied sur 15 m.', 'Vitesse avec ballon\nEncourager son équipe', 'Plots, ballons', '5,8', '15x10'],
+    ['calme', 'Le mot de la séance', 5, 'En cercle, chaque enfant dit ce qu\'il a aimé ou appris.', 'Écouter les autres\nRespirer calmement', '', '5', ''],
+    ['technique', 'Circuit technique : conduite, passe, frappe', 15, 'Parcours de 40 × 30 m : slalom en conduite, une-deux contre un mur ou un partenaire, frappe au but.', 'Qualité de la dernière touche\nEnchaîner sans s\'arrêter', 'Plots, ballons, but', '8', '40x30'],
+    ['conservation', 'Rondo 4 contre 1 à deux touches', 10, 'Carré de 10 × 10 m, 4 autour et 1 au milieu.', 'Contrôle orienté\nPasse appuyée\nOffrir une solution', 'Ballons, plots', '8,11', '10x10'],
+    ['transitions', '2 contre 1 puis 2 contre 2 en continu', 15, 'Terrain de 30 × 20 m avec 2 buts : attaque à 2 contre 1, un second défenseur entre à la première passe.', 'Attaquer vite\nFixer le défenseur\nFinir avant que l\'autre revienne', 'Chasubles, 2 buts', '8', '30x20'],
+    ['construction', 'Relance du gardien à 3 contre 2', 15, 'Zone de 35 × 40 m : le gardien relance, 3 joueurs doivent franchir la ligne médiane contre 2 presseurs.', 'Écarter\nUn joueur à l\'opposé\nJouer vers l\'avant dès que possible', 'Chasubles, but, plots', '8', '35x40'],
+    ['finition', 'Combinaisons à 2 et frappe', 15, 'Deux colonnes à 30 m du but : une-deux, appel en profondeur, frappe.', 'Timing de l\'appel\nPasse dans la course\nFrappe cadrée', 'Ballons, but, plots', '8,11', '30x40'],
+    ['defense', 'Défendre à 2 : presser et couvrir', 12, 'Zone de 20 × 15 m, 2 contre 2 : un défenseur presse, l\'autre couvre.', 'Le plus proche presse\nL\'autre couvre en diagonale\nParler', 'Chasubles, mini-buts', '8,11', '20x15'],
+    ['jeu', 'Jeu à 4 portes', 15, 'Terrain de 30 × 25 m, 2 portes de 3 m sur chaque ligne de fond ; marquer en conduisant à travers une porte.', 'Changer de côté quand c\'est fermé\nOccuper la largeur', 'Plots, chasubles', '8', '30x25'],
+    ['pressing', 'Chasse au ballon 4 contre 2', 12, 'Carré de 20 × 20 m ; les 2 chasseurs récupèrent en moins de 8 passes adverses.', 'Presser à deux\nFermer la passe facile\nAccélérer à la mauvaise passe', 'Chasubles, ballons', '8,11', '20x20'],
+    ['construction', 'Circulation 11 contre 0 par ligne', 15, 'Demi-terrain : le gardien relance, le ballon passe par chaque ligne avant de finir.', 'Écartement\nSoutien\nRythme de passe', 'Ballons, buts', '11', '60x68'],
+    ['transitions', 'Jeu 8 contre 8 à transitions rapides', 20, 'Terrain de 60 × 45 m découpé en 3 zones : après la récupération, marquer en moins de 10 secondes rapporte double.', 'Première passe vers l\'avant\nRepli immédiat à la perte', 'Chasubles, 2 buts', '11', '60x45'],
+    ['pressing', 'Bloc équipe : pressing coordonné 10 contre 8', 20, 'Trois quarts de terrain : l\'équipe presse sur un signal (passe vers le latéral) et doit récupérer avant la ligne médiane.', 'Monter ensemble\nFermer l\'intérieur\nCompacité', 'Chasubles, but, mini-buts', '11', '75x68'],
+    ['finition', 'Attaque 4 contre 3 + gardien', 20, 'Zone de 40 × 40 m face au but, 4 attaquants contre 3 défenseurs.', 'Créer le surnombre\nCentres en retrait\nSuivre les frappes', 'Chasubles, ballons, but', '8,11', '40x40'],
+    ['defense', 'Défense de zone en infériorité 4 contre 5', 15, 'Largeur du terrain sur 30 m : 4 défenseurs contre 5 attaquants.', 'Coulisser\nDéfendre l\'axe d\'abord\nRetarder', 'Chasubles, but', '11', '68x30'],
+    ['physique', 'Circuit puissance-vitesse avec ballon', 15, 'Ateliers de 30 s : haies basses, sprint 10 m, frappe, retour trottiné.', 'Qualité avant quantité\nRécupération complète', 'Haies, plots, ballons', '11', '30x20'],
+    ['conservation', 'Jeu de position 6 contre 6 + 3 appuis', 18, 'Terrain de 40 × 35 m, 3 appuis (2 en bout, 1 au centre) jouent avec l\'équipe qui a le ballon.', 'Se placer entre les lignes\nJouer vers l\'appui opposé\nRegarder avant de recevoir', 'Chasubles 3 couleurs', '11', '40x35'],
+    ['cpa', 'Touche longue et deuxième ballon', 10, 'Touches longues vers la surface, 4 contre 4 sur le deuxième ballon.', 'Anticiper le point de chute\nÊtre premier sur le deuxième ballon', 'Ballons, but', '11', '40x30'],
+    ['gardien', 'Gardien : prises de balle et plongeons', 15, 'Frappes à 11 m, au sol puis à mi-hauteur, des deux côtés.', 'Mains en W\nPas d\'appel avant le plongeon\nSe relever vite', 'Ballons, but', '8,11', '16x11'],
+    ['gardien', 'Gardien : sorties aériennes sur centres', 15, 'Centres des deux côtés avec un attaquant passif puis actif.', 'Annoncer « gardien ! »\nPrendre le ballon au point le plus haut\nGenou de protection', 'Ballons, but', '8,11', '30x16'],
+    ['gardien', 'Gardien : jeu au pied et relance', 12, 'Passes en retrait, contrôle et relance vers une cible (plot) à gauche ou à droite.', 'Regarder avant de recevoir\nRelance rapide et précise', 'Ballons, plots', '5,8,11', '30x30'],
+    ['gardien', 'Gardien : duels en 1 contre 1', 12, 'L\'attaquant part de 25 m, le gardien sort réduire l\'angle.', 'Sortir vite puis se fixer\nRester debout le plus longtemps', 'Ballons, but', '5,8,11', '25x20'],
+  ].map(([theme, title, duration, org, consignes, materiel, formats, size], i) => ({ id: 'base' + i, theme, title, duration, org, consignes, materiel, formats: formats.split(','), size: size || '', base: true }));
 
+  const schemaOfBase = e => e.base && S().schemas.find(sc => sc.baseEx === e.id);
   const themeOf = e => { if (e.theme) return [e.theme]; const t = `${e.title || ''} ${e.org || ''} ${e.consignes || ''}`; return Object.keys(KEYS).filter(k => KEYS[k].test(t)); };
   const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   // every exercise of the club (one per title, the one with a diagram first), then the base
@@ -65,7 +96,7 @@ const Exos = (() => {
     }));
     const club = [...seen.values()];
     const clubTitles = new Set(club.map(e => norm(e.title)));
-    return [...club, ...BASE.filter(b => !clubTitles.has(norm(b.title)))];
+    return [...club, ...BASE.filter(b => !clubTitles.has(norm(b.title))).map(b => { const sc = schemaOfBase(b); return sc ? Object.assign({}, b, { schemaId: sc.id }) : b; })];
   }
 
   /* ---------- the library page ---------- */
@@ -78,12 +109,13 @@ const Exos = (() => {
       <input class="hl-q" id="exQ" placeholder="Rechercher (ex : rondo, centre, pressing)" value="${esc(st.q)}" autocomplete="off">
       <div class="chips ex-themes"><button class="chip ${!st.theme ? 'on' : ''}" data-th="">Tous</button>${THEMES.map(([k, l]) => `<button class="chip ${st.theme === k ? 'on' : ''}" data-th="${k}">${l}</button>`).join('')}</div>
       <div class="chips"><button class="chip ${!st.fmt ? 'on' : ''}" data-fm="">Toutes catégories</button>${[['5', 'Foot à 5 (U6-U9)'], ['8', 'Foot à 8 (U10-U13)'], ['11', 'Foot à 11 (U14+)']].map(([k, l]) => `<button class="chip ${st.fmt === k ? 'on' : ''}" data-fm="${k}">${l}</button>`).join('')}</div>
+      <details class="card ex-res"><summary><b>📚 Ressources officielles gratuites (FFF)</b><span class="muted small"> · vidéos, fiches et guides par âge</span></summary>${RES.map(([age, n, u], i) => `<div class="ex-res-row"><span class="tag">${esc(age)}</span><a href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(n)}</a><button class="btn soft" data-res="${i}">${I.plus}<span>Bibliothèque</span></button></div>`).join('')}</details>
       <p class="muted small">${list.length} exercice${list.length > 1 ? 's' : ''}</p>
       <div class="ex-lib">${list.slice(0, 80).map(e => { const sc = e.schemaId && Store.get('schemas', e.schemaId), th = themeOf(e);
         return `<article class="card ex-item"><div class="ex-item-head">${sc ? `<img alt="" src="${UI.thumb(sc, 240, 156)}">` : `<span class="ex-noimg">${(THEMES.find(t => t[0] === th[0]) || ['', '⚽'])[1].split(' ')[0]}</span>`}
-          <div><b>${esc(e.title)}</b><span class="muted small">${e.duration} min · ${th.map(k => (THEMES.find(t => t[0] === k) || ['', k])[1].replace(/^\S+\s/, '')).join(', ') || 'Divers'}${e.club ? ` · ${esc((Store.get('teams', e.from.teamId) || {}).name || 'club')}` : ' · base'}</span></div></div>
+          <div><b>${esc(e.title)}</b><span class="muted small">${e.duration} min${e.size ? ' · ' + esc(e.size.replace('x', ' × ')) + ' m' : ''} · ${th.map(k => (THEMES.find(t => t[0] === k) || ['', k])[1].replace(/^\S+\s/, '')).join(', ') || 'Divers'}${e.club ? ` · ${esc((Store.get('teams', e.from.teamId) || {}).name || 'club')}` : ' · base'}</span></div></div>
           ${e.org ? `<p class="small">${esc(e.org)}</p>` : ''}${e.consignes ? `<ul class="small ex-cons">${e.consignes.split('\n').filter(Boolean).slice(0, 4).map(c => `<li>${esc(c)}</li>`).join('')}</ul>` : ''}
-          <div class="chips"><button class="btn soft" data-addex="${esc(e.id)}">${I.plus}<span>Ajouter à une séance</span></button>${e.club ? `<a class="btn soft" href="#/entrainement/${e.from.id}">Voir la séance</a>` : ''}</div></article>`; }).join('') || '<p class="muted">Aucun exercice ne correspond.</p>'}</div>`;
+          <div class="chips"><button class="btn soft" data-addex="${esc(e.id)}">${I.plus}<span>Ajouter à une séance</span></button>${e.club ? `<a class="btn soft" href="#/entrainement/${e.from.id}">Voir la séance</a>` : sc ? `<a class="btn soft" href="#/schema/${sc.id}">${I.board}<span>Le schéma</span></a>` : `<button class="btn soft" data-draw="${esc(e.id)}">${I.board}<span>Dessiner le schéma</span></button>`}</div></article>`; }).join('') || '<p class="muted">Aucun exercice ne correspond.</p>'}</div>`;
     const redraw = () => page(root);
     $('#exQ', root).oninput = e => { st.q = e.target.value; clearTimeout(page.t); page.t = setTimeout(() => { const pos = e.target.selectionStart; redraw(); const q = $('#exQ', root); q.focus(); q.setSelectionRange(pos, pos); }, 300); };
     root.onclick = e => {
@@ -92,7 +124,21 @@ const Exos = (() => {
       if (b.dataset.fm !== undefined) { st.fmt = b.dataset.fm; Store.persistNow(); return redraw(); }
       if (b.hasAttribute('data-gen')) return generator();
       if (b.dataset.addex) return addTo(all().find(x => x.id === b.dataset.addex));
+      if (b.dataset.draw) return drawBase(all().find(x => x.id === b.dataset.draw));
+      if (b.dataset.res) { const r = RES[+b.dataset.res]; Media.put({ id: Store.uid(), ref: 'lib', kind: 'link', url: r[2], name: r[1], host: 'fff.fr', createdAt: Date.now(), by: (Auth.current() || {}).id || null }).then(() => toast('Ajouté à la Bibliothèque')); return; }
     };
+  }
+  // free official resources (FFF): opened on their site, or kept in the Bibliothèque
+  const RES = [['U6-U13', 'Guide interactif du football des enfants (GIFE) : séances, vidéos, fiches par catégorie', 'https://lfpl.fff.fr/video/guide-interactif-du-football-des-enfants-gife/'],
+    ['U6-U9', 'Guide de la pratique du foot à 5 (FFF, édition 2025, PDF)', 'https://media.fff.fr/uploads/documents/guide-de-la-pratique-fff_foot5_e-dition-2025.pdf'],
+    ['U6-U19', 'Programme éducatif fédéral : fiches et actions terrain', 'https://pef.fff.fr/fiches/'],
+    ['Tous', 'L\'échauffement d\'avant-match (FFF, PDF)', 'https://lgef.fff.fr/wp-content/uploads/sites/14/2017/11/1-LEchauffement-dAvant-Match.pdf'],
+    ['U11-U13', 'L\'échauffement du jeune footballeur U11-U13 (PDF)', 'https://district71.fff.fr/wp-content/uploads/sites/51/2024/09/Lechauffement-du-jeune-footballeur-U11-U13.pdf']];
+  function drawBase(e) {
+    if (!e) return; const [w, h] = (e.size || '').split('x').map(Number);
+    const sc = Object.assign(Templates.blank(w && h ? 'zone' : (e.formats[0] || '11')), { id: Store.uid(), name: e.title, notes: [e.org, e.consignes].filter(Boolean).join('\n'), baseEx: e.id });
+    delete sc.scratch; if (w && h) sc.field = { format: 'zone', view: 'full', w, h };
+    Store.upsert('schemas', sc); toast(`Terrain de ${w && h ? w + ' × ' + h + ' m' : 'la catégorie'} prêt : place les joueurs et les flèches`); location.hash = '#/schema/' + sc.id;
   }
   const copyEx = e => ({ id: Store.uid(), theme: e.theme || themeOf(e)[0] || null, title: e.title, duration: e.duration, org: e.org || '', consignes: e.consignes || '', materiel: e.materiel || '', schemaId: e.schemaId || null });
   function addTo(ex) {
