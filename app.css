@@ -1266,3 +1266,28 @@ h2.section svg { width: 22px; height: 22px; vertical-align: -4px; margin-right: 
 @media (prefers-reduced-motion: reduce) {
   .coin-in, .coin-front::after, .fl-s, .fl-sh, .sp, .sp-scarf, .coin, #view.page-enter .hero .coin { animation: none !important; }
 }
+
+/* 3.29 : dessins sur la vidéo (projecteur, anneaux, vision, étiquettes, espaces, zoom…) */
+.tele-layer { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 3; }
+.tele-layer.drawing { pointer-events: auto; touch-action: none; cursor: crosshair; outline: 3px solid var(--gold, #e2c27d); outline-offset: -3px; }
+.an-player .an-time { z-index: 4; }
+.tele-box:empty { display: none; }
+.tele-bar { margin: 4px 0 14px; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); display: flex; flex-direction: column; gap: 10px; }
+.tele-tools { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 6px; }
+.tele-tool { display: flex; align-items: center; gap: 6px; min-height: 42px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface2); color: inherit; font: inherit; font-size: 12.5px; line-height: 1.15; text-align: left; cursor: pointer; }
+.tele-tool b { font-size: 17px; }
+.tele-tool.on { border-color: var(--bordeaux); background: color-mix(in srgb, var(--bordeaux) 12%, var(--surface)); box-shadow: inset 0 0 0 1px var(--bordeaux); font-weight: 700; }
+.tele-hint { margin: 0; font-size: 13.5px; color: var(--muted); }
+.tele-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.tele-lbl { font-size: 13px; font-weight: 700; color: var(--muted); }
+.tele-row input, .tele-row select { flex: 1; min-width: 140px; min-height: 40px; padding: 0 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: inherit; font: inherit; }
+.tele-col { width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--line); background: var(--c); cursor: pointer; }
+.tele-col.on { box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px var(--bordeaux); }
+.tele-sugg { display: flex; gap: 6px; overflow-x: auto; flex-wrap: nowrap; padding-bottom: 2px; scrollbar-width: thin; }
+.tele-sugg .chip { flex: none; min-height: 32px; padding: 0 10px; font-size: 13px; }
+.tele-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.tele-item { display: inline-flex; align-items: center; gap: 2px; padding: 2px 4px 2px 10px; border-radius: 999px; background: var(--surface2); font-size: 13px; }
+.tele-item .icon-btn { width: 28px; height: 28px; min-height: 28px; }
+.an-phase { display: inline-flex; align-items: center; padding: 0 10px; min-height: 30px; border-radius: 8px; background: rgba(0,0,0,.7); color: #fff; font-size: 12.5px; font-weight: 700; }
+.an-show .tele-layer { z-index: 1; }
+.an-show .an-cap, .an-show .an-show-ctrl { z-index: 2; }

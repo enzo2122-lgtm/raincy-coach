@@ -79,7 +79,7 @@ const Analyse = (() => {
       <div class="head-actions"><button class="btn" data-a="back">${I.back}<span>Retour</span></button><button class="btn primary" data-a="briefings">${I.video}<span>Briefings</span></button></div></header>
       <label class="fld an-match"><span>Match analysé (pour choisir les joueurs)</span><select id="anMatch"><option value="">Aucun</option>${ms.map(m => `<option value="${m.id}" ${m.id === rec.matchId ? 'selected' : ''}>${esc(UI.fmtDate(m.date))} · ${esc((Store.get('teams', m.teamId) || {}).name || '')} ${m.home ? 'contre' : 'chez'} ${esc(m.opponent || '?')}</option>`).join('')}</select></label>
       ${yt ? `<div class="an-player an-yt"><div id="anYT" class="an-ytbox"><p class="muted">Chargement de YouTube…</p></div><div class="an-time" id="anTime">0:00</div></div>
-        <p class="tip">Vidéo YouTube : marque les actions et fais tes briefings comme d'habitude. YouTube ne laisse pas copier ses images, donc pas de dessin sur l'image ni d'export en fichier vidéo. Pour ça, importe la vidéo elle-même dans la Bibliothèque.</p>`
+        <p class="tip">Vidéo YouTube : marque les actions, dessine sur la vidéo et fais tes briefings comme d'habitude. YouTube ne laisse pas copier ses images : pas de zoom, pas de tableau tactique sur l'image, pas d'export en fichier vidéo. Pour ça, importe la vidéo elle-même dans la Bibliothèque.</p>`
       : `<div class="an-player"><video id="anVideo" src="${urlNow}" playsinline preload="auto"></video><div class="an-time" id="anTime">0:00</div></div>`}
       <div class="an-bar" id="anBar" role="slider" aria-label="Position dans la vidéo"><i class="an-pos" id="anPos"></i></div>
       <div class="an-ctrl">
@@ -87,6 +87,7 @@ const Analyse = (() => {
         <button class="btn primary an-play" data-a="play" id="anPlay">${I.play}<span>Lecture</span></button>
         <button class="icon-btn" data-a="+f" aria-label="Image suivante">|▶︎</button><button class="icon-btn" data-a="+5" aria-label="Avancer de 5 secondes">+5</button>
         <span class="an-speed">${[.25, .5, 1, 2].map(r => `<button class="chip ${r === 1 ? 'on' : ''}" data-rate="${r}">×${String(r).replace('.', ',')}</button>`).join('')}</span></div>
+      <div id="teleBox" class="tele-box"></div>
       <section class="card"><div class="row-head"><h2>Marquer une action</h2><button class="linkish" data-a="pref">Séquence : ${pref().before} s avant, ${pref().after} s après</button></div>
         <div class="an-tags">${TAGS.map(([k, ic, l, c]) => `<button class="an-tag" data-tag="${k}" style="--c:${c}"><b>${ic}</b><span>${esc(l)}</span></button>`).join('')}</div></section>
       <div id="anStats"></div>
@@ -98,6 +99,8 @@ const Analyse = (() => {
       catch (e) { $('#anYT', root).innerHTML = `<p class="an-yt-err">${esc(ytError(e))}</p><p><a class="btn soft" href="${esc(rec.url)}" target="_blank" rel="noopener noreferrer">${I.share}<span>Ouvrir sur YouTube</span></a></p>`; return; }
     }
     const save = async () => { await Media.put(rec); };
+    // the drawings of the sequences, over the video (shown while it plays, drawn with « Dessins sur la vidéo »)
+    const L = Tele.layer($('.an-player', root), yt ? $('#anYT', root) : v, () => v, () => rec.clips);
     const drawBar = () => {
       const d = isFinite(v.duration) ? v.duration : 0;
       bar.innerHTML = `<i class="an-pos" id="anPos" style="left:${d ? v.currentTime / d * 100 : 0}%"></i>` + (d ? rec.clips.map(c => `<button class="an-mark" data-seek="${c.start}" style="left:${c.start / d * 100}%;width:${Math.max(.6, (c.end - c.start) / d * 100)}%;--c:${tagOf(c.tag)[3]}" title="${esc(tagOf(c.tag)[2])} ${mmss(c.start)}"></button>`).join('') : '');
@@ -114,7 +117,8 @@ const Analyse = (() => {
           <select class="add-select" data-retag="${c.id}" aria-label="Type d'action">${TAGS.map(([k, ic, l]) => `<option value="${k}" ${k === c.tag ? 'selected' : ''}>${ic} ${esc(l)}</option>`).join('')}</select></div>
         <label class="fld"><span>Commentaire (s'affiche dans le briefing)</span><input data-note="${c.id}" value="${esc(c.note || '')}" maxlength="120" placeholder="ex : on laisse l'intervalle ouvert entre le 4 et le 5"></label>
         ${ps.length ? `<div class="chips an-players">${ps.map(p => `<button class="chip ${(c.players || []).includes(p.id) ? 'on' : ''}" data-pl="${c.id}|${p.id}">${esc(Store.shortName(p))}</button>`).join('')}</div>` : ''}
-        <div class="chips">${yt ? '' : `<button class="btn soft" data-draw="${c.id}">${I.board}<span>Dessiner sur l'image</span></button>`}<button class="btn soft" data-brief="${c.id}">${I.video}<span>Ajouter à un briefing</span></button>
+        <div class="chips"><button class="btn primary" data-teleclip="${c.id}">🎨<span>Dessins sur la vidéo${(c.draws || []).length ? ' (' + c.draws.length + ')' : ''}</span></button>${c.phase ? `<span class="an-phase">${esc(c.phase)}</span>` : ''}
+          ${yt ? '' : `<button class="btn soft" data-draw="${c.id}">${I.board}<span>Tableau tactique sur l'image</span></button>`}<button class="btn soft" data-brief="${c.id}">${I.video}<span>Ajouter à un briefing</span></button>
           ${yt ? '' : `<button class="btn soft" data-share="${c.id}">${I.share}<span>Exporter</span></button>`}<button class="icon-btn danger" data-del="${c.id}" aria-label="Supprimer la séquence">${I.trash}</button></div></article>`; };
     const drawClips = () => {
       rec.clips.sort((a, b) => a.start - b.start);
@@ -136,11 +140,11 @@ const Analyse = (() => {
     root.oninput = e => { const n = e.target.dataset.note; if (n) { const c = rec.clips.find(x => x.id === n); c.note = e.target.value; clearTimeout(page.t); page.t = setTimeout(save, 500); } };
     root.onchange = async e => { const t = e.target.dataset.retag; if (t) { rec.clips.find(x => x.id === t).tag = e.target.value; await save(); drawClips(); } };
     root.onclick = async e => {
-      const b = e.target.closest('button'); if (!b) return;
+      const b = e.target.closest('button'); if (!b || b.closest('#teleBox')) return;
       const a = b.dataset.a;
       if (a === 'back') { v.pause(); return history.length > 1 ? history.back() : (location.hash = '#/bibliotheque'); }
       if (a === 'briefings') { v.pause(); return briefingsDialog(); }
-      if (a === 'play') { stopAt = null; return v.paused ? v.play().catch(() => {}) : v.pause(); }
+      if (a === 'play') { stopAt = null; L.cancelFreeze(); return v.paused ? v.play().catch(() => {}) : v.pause(); }
       if (a === '-5' || a === '+5') { const to = v.currentTime + (a === '-5' ? -5 : 5); v.currentTime = Math.max(0, isFinite(v.duration) && v.duration ? Math.min(v.duration, to) : to); return; }
       if (a === '-f' || a === '+f') { v.pause(); v.currentTime = Math.max(0, v.currentTime + (a === '-f' ? -1 : 1) / 25); return; }
       if (a === 'pref') return prefDialog(() => page(root, id));
@@ -156,6 +160,13 @@ const Analyse = (() => {
       if (b.dataset.out) { const c = clip(b.dataset.out); if (v.currentTime <= c.start) return toast('La fin doit être après le début', 'err'); c.end = v.currentTime; await save(); return drawClips(); }
       if (b.dataset.pl) { const [cid, pid] = b.dataset.pl.split('|'), c = clip(cid); c.players = (c.players || []).includes(pid) ? c.players.filter(x => x !== pid) : [...(c.players || []), pid]; b.classList.toggle('on'); return save(); }
       if (b.dataset.del) { if (await confirmBox('Supprimer cette séquence ?', 'Supprimer')) { rec.clips = rec.clips.filter(c => c.id !== b.dataset.del); await save(); drawClips(); } return; }
+      if (b.dataset.teleclip) {
+        // drawing on a sequence: the video stops inside it, the tools open under the player
+        const c = clip(b.dataset.teleclip); stopAt = null; v.pause();
+        if (v.currentTime < c.start || v.currentTime > c.end) v.currentTime = c.at != null ? c.at : c.start;
+        Tele.tools($('#teleBox', root), L, () => v, c, save, yt, () => drawClips());
+        $('.an-player', root).scrollIntoView({ block: 'start', behavior: 'smooth' }); return;
+      }
       if (b.dataset.brief) return addToBriefing([{ mediaId: rec.id, clipId: b.dataset.brief }]);
       if (b.dataset.share) return exportVideo([{ rec, clip: clip(b.dataset.share) }], `${tagOf(clip(b.dataset.share).tag)[2]} · ${rec.name || 'match'}`);
       if (b.dataset.draw) {
@@ -308,7 +319,7 @@ const Analyse = (() => {
   /* ---------- full-screen presentation ---------- */
   function present(items, name) {
     const ov = document.createElement('div'); ov.className = 'an-show'; document.body.appendChild(ov);
-    const urls = {}; let i = 0, v = null, stop = false, timer = null;
+    const urls = {}; let i = 0, v = null, stop = false, timer = null, lay = null;
     const urlOf = rec => urls[rec.id] || (urls[rec.id] = URL.createObjectURL(rec.blob));
     const drop = () => { if (v) { v.pause(); if (v.destroy) v.destroy(); } v = null; };
     const end = () => { stop = true; clearTimeout(timer); drop();Object.values(urls).forEach(u => URL.revokeObjectURL(u)); ov.remove(); document.removeEventListener('keydown', key); try { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); } catch (e) {} };
@@ -329,6 +340,8 @@ const Analyse = (() => {
         ov.innerHTML = `${yt ? '<div class="an-ytbox an-show-yt"></div>' : '<video playsinline></video>'}<div class="an-cap">${caption}</div>
           <div class="an-show-ctrl"><button class="icon-btn" data-x="prev" aria-label="Précédente">${I.back}</button><button class="icon-btn" data-x="pause" aria-label="Pause">${I.pause}</button>
           <span>${i + 1} / ${items.length}</span><button class="icon-btn" data-x="next" aria-label="Suivante">${I.next}</button><button class="icon-btn" data-x="close" aria-label="Fermer">${I.x}</button></div>`;
+        // the drawings of the sequence over the video (projecteur, anneaux, vision, étiquettes…), the phase title at the top
+        lay = Tele.layer(ov, () => $(yt ? '.an-ytbox' : 'video', ov), () => v, () => [clip], { phaseTop: true });
         const run = p => {
           v = p;
           p.ontimeupdate = () => { if (p.currentTime >= clip.end) { p.ontimeupdate = p.onended = null; p.pause(); go(i + 1); } };
@@ -340,7 +353,7 @@ const Analyse = (() => {
             if (stop || i !== at) return p.destroy();
             run(p); p.currentTime = clip.start; p.play();
             // with the sound when the browser allows it, otherwise muted
-            setTimeout(() => { if (v === p && p.paused) { p.muted = true; p.play(); } }, 1500);
+            setTimeout(() => { if (v === p && p.paused && p.currentTime < clip.start + .5) { p.muted = true; p.play(); } }, 1500);
           }).catch(e => { if (!stop && i === at) { toast(ytError(e), 'err'); go(i + 1); } });
           return;
         }
@@ -356,7 +369,7 @@ const Analyse = (() => {
       if (x === 'again') return go(0);
       if (x === 'next') return go(i + 1);
       if (x === 'prev') return go(i - 1);
-      if (x === 'pause' && v) { if (v.paused) { v.play(); b.innerHTML = I.pause; } else { v.pause(); b.innerHTML = I.play; } }
+      if (x === 'pause' && v) { if (lay) lay.cancelFreeze(); if (v.paused) { v.play(); b.innerHTML = I.pause; } else { v.pause(); b.innerHTML = I.play; } }
     };
     go(0);
   }
@@ -419,15 +432,29 @@ const Analyse = (() => {
         v.currentTime = clip.start; await new Promise(r => { v.onseeked = r; setTimeout(r, 3000); });
         await v.play().catch(() => {});
         const first = wr ? wr.count : 0, cap = `${t[1]} ${t[2]}${clip.note ? ' · ' + clip.note : ''}${ps.length ? ' · ' + ps.map(p => Store.shortName(p)).join(', ') : ''}`;
+        // one image: the video, the drawings of the sequence (with the phase title at the top), the caption at the bottom
+        const paint = ct => {
+          const vw = v.videoWidth || 16, vh = v.videoHeight || 9, s = Math.min(W / vw, H / vh), dw = vw * s, dh = vh * s, box = { x: (W - dw) / 2, y: (H - dh) / 2, w: dw, h: dh };
+          ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); try { ctx.drawImage(v, box.x, box.y, dw, dh); } catch (e) {}
+          Tele.render(ctx, box, clip, ct, v, { phaseTop: true });
+          ctx.fillStyle = 'rgba(14,29,69,.82)'; ctx.fillRect(0, H - 70, W, 70); ctx.fillStyle = t[3]; ctx.fillRect(0, H - 70, 10, 70);
+          ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.font = '700 28px system-ui, sans-serif'; ctx.fillText(wrap(cap, W - 60, '700 28px system-ui, sans-serif')[0] || '', 28, H - 26);
+        };
+        let extra = 0, lastT = clip.start - .001;
         await new Promise((res, rej) => { const tick = async () => {
           try {
-            const vw = v.videoWidth || 16, vh = v.videoHeight || 9, s = Math.min(W / vw, H / vh), dw = vw * s, dh = vh * s;
-            ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); try { ctx.drawImage(v, (W - dw) / 2, (H - dh) / 2, dw, dh); } catch (e) {}
-            // caption bar at the bottom
-            ctx.fillStyle = 'rgba(14,29,69,.82)'; ctx.fillRect(0, H - 70, W, 70); ctx.fillStyle = t[3]; ctx.fillRect(0, H - 70, 10, 70);
-            ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.font = '700 28px system-ui, sans-serif'; ctx.fillText(wrap(cap, W - 60, '700 28px system-ui, sans-serif')[0] || '', 28, H - 26);
+            const ct = Math.min(v.currentTime, clip.end);
+            paint(ct);
             // MP4: the images follow the video's own clock (a slow phone never makes the sequence jerky or too short)
-            if (wr) { const due = first + Math.floor((Math.min(v.currentTime, clip.end) - clip.start) * wr.fps); while (wr.count <= due) await wr.frame(c); }
+            if (wr) { const due = first + extra + Math.floor((ct - clip.start) * wr.fps); while (wr.count <= due) await wr.frame(c); }
+            // « arrêt sur image » asked by a drawing: the image stays still a few seconds, with the drawing on it
+            const fz = Tele.freezesBetween(clip, lastT, ct); lastT = ct;
+            if (fz.length) {
+              v.pause(); const secs = Math.max(...fz.map(d => d.freeze));
+              if (wr) { const n = Math.round(secs * wr.fps); for (let k = 0; k < n; k++) await wr.frame(c); extra += n; }
+              else await new Promise(r => setTimeout(r, secs * 1000));
+              if (ct < clip.end) await v.play().catch(() => {});
+            }
             if (v.currentTime >= clip.end || v.ended) { v.pause(); return res(); }
             requestAnimationFrame(tick);
           } catch (e) { rej(e); } }; tick(); });
@@ -451,5 +478,5 @@ const Analyse = (() => {
     return `<section class="card"><div class="row-head"><h2>${I.video}Briefings vidéo</h2><button class="btn soft" data-anbrief>${I.layers}<span>Mes briefings (${list.length})</span></button></div>
       <p class="muted small">Ouvre une vidéo de match puis « Analyser » : marque les actions (but, occasion, perte de balle…), puis rassemble les séquences dans un briefing à présenter ou à envoyer en vidéo.</p></section>`;
   }
-  return { page, briefingPage, briefingsDialog, libraryCard, importBriefing, TAGS, isYT, leave: freeUrl };
+  return { page, briefingPage, briefingsDialog, libraryCard, importBriefing, TAGS, isYT, mmss, leave: freeUrl };
 })();
