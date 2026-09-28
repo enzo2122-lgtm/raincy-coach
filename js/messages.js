@@ -163,7 +163,7 @@ const Messages = (() => {
         ${item('general')}
         ${mineTeams.size ? `<div class="ch-sec">Mes catégories</div>${groupItems(groups.filter(mineGroup))}` : ''}
         <div class="ch-sec">${mineTeams.size ? 'Les autres catégories' : 'Catégories'}</div>${groupItems(groups.filter(g => !mineGroup(g)))}
-        <div class="ch-sec">Messages privés</div>${dms.map(item).join('')}
+        <div class="ch-sec">Messages privés</div>${dms.map(c => item(c)).join('')}
         <button class="btn soft wide" id="newDm">${I.plus}<span>Écrire à un éducateur</span></button>
       </aside>
       <section class="conv">${ch ? `
