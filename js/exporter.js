@@ -309,5 +309,5 @@ const Exporter = (() => {
   }
   async function json(text, name) { return deliver(new Blob([text], { type: 'application/json' }), safeName(name) + '.raincy.json'); }
 
-  return { frameCanvas, png, video, canVideo, mp4Writer, pickMime,pdfSchema, pdfTraining, pdfMatch, json, deliver };
+  return { pdfDoc: Doc, latin, crestData, frameCanvas, png, video, canVideo, mp4Writer, pickMime, pdfSchema, pdfTraining, pdfMatch, json, deliver };
 })();

@@ -61,7 +61,7 @@ const Prepa = (() => {
     return `<section class="card prep-card"><div class="row-head"><h2>🎯 Préparation du match</h2><b class="prep-pc">${pc} %</b></div>
       <div class="prep-bar"><i style="width:${pc}%"></i></div>
       <div class="prep-steps-mini">${STEPS.map(([k, ic, l]) => `<a href="#/prepa/${m.id}/${k}" class="${d[k] ? 'ok' : ''}">${ic}<span>${l}</span></a>`).join('')}</div>
-      <div class="chips"><a class="btn primary" href="#/prepa/${m.id}">${I.edit}<span>Préparer le match</span></a><button class="btn soft" data-prep-show="${m.id}">${I.play}<span>Lancer la causerie</span></button></div></section>`;
+      <div class="chips"><a class="btn primary" href="#/prepa/${m.id}">${I.edit}<span>Préparer le match</span></a><button class="btn soft" data-prep-show="${m.id}">${I.play}<span>Lancer la causerie</span></button><button class="btn soft" data-prep-print="${m.id}">${I.pdf}<span>Imprimer</span></button></div></section>`;
   }
 
   /* ---------- the sessions of the week before the match ---------- */
@@ -87,7 +87,7 @@ const Prepa = (() => {
     const save = (now) => { clearTimeout(t); m.editedBy = (Auth.current() || {}).id; if (now) Store.upsert('matches', m); else t = setTimeout(() => Store.upsert('matches', m), 500); };
     const d = done(m), pc = score(m), ix = STEPS.findIndex(s => s[0] === step);
     root.innerHTML = `<header class="page-head"><div><h1>🎯 Préparation</h1><p class="sub">${title(m)} · ${esc(UI.fmtDate(m.date, { weekday: 'long', day: 'numeric', month: 'long' }))}${m.time ? ' · ' + esc(m.time.replace(':', 'h')) : ''}</p></div>
-      <div class="head-actions"><a class="btn" href="#/match/${m.id}">${I.back}<span>Le match</span></a><button class="btn" data-pa="share">${I.share}<span>Résumé aux joueurs</span></button><button class="btn primary" data-pa="show">${I.play}<span>Lancer la causerie</span></button></div></header>
+      <div class="head-actions"><a class="btn" href="#/match/${m.id}">${I.back}<span>Le match</span></a><button class="btn" data-pa="share">${I.share}<span>Résumé aux joueurs</span></button><button class="btn" data-pa="print">${I.pdf}<span>Imprimer</span></button><button class="btn primary" data-pa="show">${I.play}<span>Lancer la causerie</span></button></div></header>
       <div class="prep-top"><div class="prep-bar"><i style="width:${pc}%"></i></div><b>${pc} %</b></div>
       <nav class="prep-steps" aria-label="Étapes">${STEPS.map(([k, ic, l], i) => `<a href="#/prepa/${m.id}/${k}" class="${k === step ? 'on' : ''} ${d[k] ? 'ok' : ''}" ${k === step ? 'aria-current="step"' : ''}><b>${d[k] ? '✓' : i + 1}</b><span>${ic} ${l}</span></a>`).join('')}</nav>
       <div id="prepBody">${({ semaine: stWeek, adversaire: stOpp, plan: stPlan, causerie: stTalk, jourj: stDay, mitemps: stHalf, apres: stAfter })[step](m)}</div>
@@ -104,6 +104,7 @@ const Prepa = (() => {
       const b = e.target.closest('button'); if (!b) return;
       if (b.dataset.pa === 'show') return show(m);
       if (b.dataset.pa === 'share') return share(m);
+      if (b.dataset.pa === 'print') return printDialog(m);
       // a proposition added as a new line of a text box, or put in the first empty key
       if (b.dataset.add) {
         const [path, txt] = [b.dataset.add, b.dataset.txt];
@@ -309,6 +310,118 @@ const Prepa = (() => {
     if (!keys.length && !t.objective) toast('Astuce : remplis l\'étape « Causerie » (objectif et 3 clés) pour une causerie complète');
   }
 
+  /* ---------- everything on paper (no screen in the locker room) ----------
+     a poster in big letters to pin up, the coach's sheets, and the half-time / after-match sheets to fill in by hand */
+  const PARTS = [['poster', 'Affiche du vestiaire (objectif, 3 clés, slogan en grand)'], ['talk', 'Causerie et plan de jeu (composition, 4 moments, CPA, rôles)'],
+    ['opp', 'Fiche adversaire'], ['week', 'Semaine d\'entraînement'], ['day', 'Jour J : horaires, échauffement, matériel à cocher'],
+    ['half', 'Feuille de mi-temps à remplir'], ['after', 'Feuille d\'après-match à remplir']];
+  function printDialog(m) {
+    const last = S().ui.prepPrint || PARTS.map(x => x[0]);
+    modal({ title: 'Imprimer la préparation', body: `<p class="muted small">Un PDF à imprimer ou à garder sur le téléphone, pour tout avoir sur papier au stade.</p>
+      <div class="prep-checks">${PARTS.map(([k, l]) => `<label class="prep-check"><input type="checkbox" data-part="${k}" ${last.includes(k) ? 'checked' : ''}><span>${esc(l)}</span></label>`).join('')}</div>`,
+      actions: [{ label: 'Annuler' }, { label: 'Créer le PDF', kind: 'primary', icon: I.pdf, onClick: (c, r) => {
+        const parts = $$('[data-part]', r).filter(x => x.checked).map(x => x.dataset.part);
+        if (!parts.length) { toast('Choisis au moins une partie', 'err'); return false; }
+        S().ui.prepPrint = parts; Store.persistNow();
+        setTimeout(async () => { const b = UI.busy('Création du PDF…'); try { const res = await pdf(m, parts); if (res === 'downloaded') toast('PDF enregistré dans Téléchargements'); } catch (e) { console.error(e); toast('PDF impossible : ' + (e.message || e), 'err'); } finally { b.done(); } }, 60);
+      } }] });
+  }
+  async function pdf(m, parts) {
+    const club = S().club, P = Exporter.pdfDoc(club), doc = P.doc, L = Exporter.latin;
+    const pp = m.prep || {}, t = pp.talk || {}, o = pp.opp || {}, pl = pp.plan || {}, dy = pp.day || {}, half = pp.half || {}, af = pp.after || {};
+    const team = teamOf(m), who = `${(team || {}).name || club.name} ${m.home ? 'contre' : 'chez'} ${m.opponent || '?'}`;
+    const date = UI.fmtDate(m.date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }), hh = s => String(s || '').replace(':', 'h');
+    const keys = (t.keys || []).filter(Boolean), final = lines(t.final).join(' ') || Supporters.SLOGAN;
+    let first = true;
+    const page = (title) => { if (!first) doc.addPage(); first = false; P.header(title, `${(team || {}).name || ''} · ${UI.fmtDate(m.date)}`); };
+    // lines to write on by hand
+    const writeLines = (n, label) => { if (label) P.label(label); for (let i = 0; i < n; i++) { P.ensure(9); doc.setDrawColor(190, 196, 190); doc.setLineWidth(.2); doc.line(P.M, P.y + 7, P.M + P.CW, P.y + 7); P.y += 9; } P.y += 2; };
+    // boxes to tick by hand
+    const ticks = (items) => { doc.setFont('helvetica', 'normal'); doc.setFontSize(11); items.forEach(it => { P.ensure(8); doc.setDrawColor(80, 90, 85); doc.setLineWidth(.35); doc.rect(P.M, P.y + .6, 4.6, 4.6); doc.text(L(it), P.M + 8, P.y + 4.4, { maxWidth: P.CW - 8 }); P.y += 7.5; }); P.y += 2; };
+    const text = (label, v) => { if (!lines(v).length) return; P.label(label); P.bullets(lines(v)); };
+
+    if (parts.includes('poster')) {
+      // the poster: navy page, crest, the match, the objective, the 3 keys, the slogan, all in big letters
+      if (!first) doc.addPage(); first = false;
+      const W = 210, H = 297;
+      doc.setFillColor(14, 29, 69); doc.rect(0, 0, W, H, 'F'); doc.setFillColor(140, 16, 36); doc.rect(0, H - 12, W, 12, 'F');
+      const logo = Exporter.crestData(); if (logo) doc.addImage(logo, 'PNG', W / 2 - 22, 14, 44, 44);
+      doc.setTextColor(226, 194, 125); doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.text(L(`${date}${m.time ? ' · ' + hh(m.time) : ''}`.toUpperCase()), W / 2, 68, { align: 'center' });
+      doc.setTextColor(255, 255, 255); doc.setFontSize(28); doc.text(doc.splitTextToSize(L(who), W - 30), W / 2, 81, { align: 'center' });
+      let y = 100;
+      if (t.objective) { doc.setDrawColor(226, 194, 125); doc.setLineWidth(.8); const ls = doc.splitTextToSize(L(t.objective), W - 50); doc.roundedRect(18, y - 7, W - 36, ls.length * 9 + 8, 3, 3); doc.setFontSize(19); doc.text(ls, W / 2, y, { align: 'center' }); y += ls.length * 9 + 14; }
+      if (keys.length) {
+        doc.setTextColor(226, 194, 125); doc.setFontSize(15); doc.text(L('NOS 3 CLÉS'), W / 2, y, { align: 'center' }); y += 11;
+        keys.forEach((k, i) => { doc.setFillColor(140, 16, 36); doc.circle(26, y - 2.5, 6, 'F'); doc.setTextColor(255, 255, 255); doc.setFontSize(16); doc.text(String(i + 1), 26, y + .5, { align: 'center' });
+          doc.setFontSize(18); const ls = doc.splitTextToSize(L(k), W - 54); doc.text(ls, 38, y); y += ls.length * 8.5 + 7; });
+      }
+      doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bolditalic'); doc.setFontSize(15);
+      const fl = doc.splitTextToSize(L(final), W - 40); doc.text(fl, W / 2, Math.max(y + 8, H - 52 - fl.length * 7), { align: 'center' });
+      doc.setFont('helvetica', 'bold'); doc.setTextColor(226, 194, 125); doc.setFontSize(26); doc.text(L('ALLEZ RAINCY !'), W / 2, H - 24, { align: 'center' });
+      doc.setTextColor(20, 30, 25);
+    }
+    if (parts.includes('talk')) {
+      page('Causerie et plan de jeu'); P.h2(who);
+      P.facts([['Date', UI.fmtDate(m.date)], ['Coup d\'envoi', hh(m.time) || '-'], ['Rendez-vous', hh(m.rdv) || '-'], ['Système', pl.system || '-']]);
+      if (m.place) { P.label('Lieu'); P.para(m.place); }
+      if (t.hook) { P.label('1 · L\'accroche'); P.para(t.hook, 11.5); }
+      if (t.objective) { P.label('Objectif du match'); P.para(t.objective, 13); }
+      if (keys.length) { P.label('2 · Les 3 clés'); keys.forEach((k, i) => P.para(`${i + 1}.  ${k}`, 13)); }
+      P.label('3 · Le mot de la fin'); P.para(final, 11.5);
+      const lineup = m.lineupId && Store.get('schemas', m.lineupId), cap = pl.captain && Store.get('players', pl.captain);
+      if (lineup) { await Board.ensureBg(lineup); P.label('Composition' + (cap ? ' · capitaine : ' + Store.fullName(cap) : '')); P.image(Exporter.frameCanvas(lineup, 0, 0, { w: 1500, h: 980, names: true, homeBib: club.homeBib }), P.CW * .85); }
+      else if (cap) { P.label('Capitaine'); P.para(Store.fullName(cap)); }
+      if (MOMENTS.some(([k]) => lines(pl[k]).length)) { P.h2('Les 4 moments du match'); MOMENTS.forEach(([k, l]) => text(l.replace(/^\S+\s/, ''), pl[k])); }
+      const cpa = [['Corners pour nous', pl.cpaFor], ['Corners contre nous', pl.cpaAgainst], ['Coups francs', pl.freeKicks], ['Penalty', pl.penalty]].filter(([, v]) => v);
+      if (cpa.length) { P.h2('Coups de pied arrêtés'); cpa.forEach(([l, v]) => text(l, v)); }
+      const roles = Object.entries(pl.roles || {}).filter(([, v]) => v).map(([id, v]) => [Store.get('players', id), v]).filter(([x]) => x);
+      if (roles.length) { P.h2('Rôles individuels'); P.table(['Joueur', 'Consigne'], roles.map(([x, v]) => [Store.fullName(x), v]), [.35, .65]); }
+    }
+    if (parts.includes('opp')) {
+      page('Adversaire : ' + (m.opponent || '?'));
+      const k = norm(m.opponent), past = S().matches.filter(x => x.id !== m.id && x.played && k && norm(x.opponent) === k).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6);
+      if (past.length) { P.label('Nos derniers matchs contre eux'); P.table(['Date', 'Équipe', 'Score'], past.map(x => [UI.fmtDate(x.date), (teamOf(x) || {}).name || '', `${x.gf} - ${x.ga}`]), [.35, .4, .25]); }
+      P.facts([['Leur système', o.system || '?']]);
+      text('Leurs forces', o.strengths); text('Leurs faiblesses', o.weaknesses); text('Joueurs à surveiller', o.players); text('Leurs coups de pied arrêtés', o.cpa); text('Notes', o.notes);
+      writeLines(4, 'À compléter');
+    }
+    if (parts.includes('week')) {
+      page('Semaine d\'entraînement');
+      if (pp.week && pp.week.theme) { P.label('Thème de la semaine'); P.para(lines(pp.week.theme).join(' · '), 12); }
+      const list = weekSessions(m);
+      if (list.length) {
+        P.table(['Jour', 'Date', 'Séance', 'Durée'], list.map(x => { const j = daysBefore(m, x.date); return [DAYS[j] ? DAYS[j][0] : 'J-' + j, UI.fmtDate(x.date) + (x.time ? ' ' + x.time : ''), x.title || 'Entraînement', x.exercises.reduce((a, e) => a + (+e.duration || 0), 0) + ' min']; }), [.12, .28, .45, .15]);
+        list.forEach(x => { const j = daysBefore(m, x.date); P.h2(`${DAYS[j] ? DAYS[j][0] + ' · ' : ''}${x.title || 'Entraînement'}`); if (x.goal) P.para(x.goal); if (x.exercises.length) P.bullets(x.exercises.map(e => `${e.title || 'Exercice'} (${e.duration || 0} min)`)); });
+      } else P.para('Pas de séance enregistrée avant ce match.');
+      P.h2('Repères de la semaine'); P.bullets([1, 2, 3, 4].map(j => `${DAYS[j][0]} : ${DAYS[j][1]}`));
+    }
+    if (parts.includes('day')) {
+      page('Jour J');
+      const tl = timeline(m);
+      if (tl.length) { P.label('Le déroulé'); P.table(['Heure', 'Moment'], tl.map(([mn, l]) => [hm(mn), l.replace(/^\S+\s/, '')]), [.2, .8]); }
+      const k = +(dy.warmMin || 25) / 25;
+      P.h2(`Échauffement (${dy.warmMin || 25} min)`); ticks(WARMUP.map(([l, n]) => `${Math.max(1, Math.round(n * k))} min · ${l}`)); if (dy.warmNotes) P.para(dy.warmNotes);
+      P.h2('Matériel'); ticks([...KIT, ...lines(dy.other)]);
+      const conv = (m.convoked || []).map(id => Store.get('players', id)).filter(Boolean).sort((a, b) => (a.number || 99) - (b.number || 99));
+      if (conv.length) { P.h2(`Joueurs convoqués (${conv.length}) · présents`); ticks(conv.map(x => `${x.number ? x.number + '. ' : ''}${Store.fullName(x)}`)); }
+    }
+    if (parts.includes('half')) {
+      page('Mi-temps');
+      P.para('0-3 min : calme, s\'hydrater, souffler  ·  3-10 min : 3 points maximum  ·  10-13 min : message positif  ·  13-15 min : reprise', 10);
+      P.label('Score à la mi-temps'); writeLines(1);
+      [['Le point défensif', half.def], ['Le point offensif', half.off], ['Le point collectif', half.coll], ['Changements', half.subs]].forEach(([l, v]) => { if (v) { P.label(l); P.para(v, 11.5); writeLines(1); } else writeLines(2, l); });
+      if (half.notes) { P.label('Notes'); P.para(half.notes); }
+      writeLines(8, 'Notes de la 1re période');
+    }
+    if (parts.includes('after')) {
+      page('Après-match');
+      P.label('Score final'); if (m.played) P.para(`${club.name}  ${m.gf} - ${m.ga}  ${m.opponent || ''}`, 13); else writeLines(1);
+      [['Ce qui a marché', af.good], ['Ce qu\'on travaille cette semaine', af.work], ['Thème du prochain entraînement', af.next]].forEach(([l, v]) => { if (lines(v).length) { P.label(l); P.bullets(lines(v)); writeLines(1); } else writeLines(3, l); });
+      writeLines(6, 'Notes');
+    }
+    return Exporter.deliver(P.blob(), `preparation-${norm(m.opponent || 'match').toLowerCase()}-${m.date || ''}.pdf`);
+  }
+
   // after-match: the match videos, to analyse them
   async function mountAfter(root, m) {
     const box = $('#prepVideos', root); if (!box) return;
@@ -319,6 +432,10 @@ const Prepa = (() => {
   function route(root, id, step) { page(root, id, step); if ((step || (S().ui.prepStep || {})[id]) === 'apres') mountAfter(root, Store.get('matches', id)); }
 
   // « Lancer la causerie » from the match page
-  document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('[data-prep-show]'); if (!b) return; const m = Store.get('matches', b.dataset.prepShow); if (m) show(m); });
-  return { page: route, card, show, summary, done, score };
+  document.addEventListener('click', e => {
+    const b = e.target.closest && e.target.closest('[data-prep-show], [data-prep-print]'); if (!b) return;
+    const m = Store.get('matches', b.dataset.prepShow || b.dataset.prepPrint); if (!m) return;
+    if (b.dataset.prepShow) show(m); else printDialog(m);
+  });
+  return { page: route, card, show, summary, done, score, pdf };
 })();
