@@ -73,8 +73,10 @@ const Planning = (() => {
 
   async function load(from, to) {
     [slots, bookings] = await Promise.all([Cloud.slots(), Cloud.bookings(from, to)]);
+    slots = slots.filter(s => onPitch(s)); bookings = bookings.filter(onPitch);
     loaded = from;
   }
+  const onPitch = b => !b.field || b.field === 'T1'; // T1 = the pitch; V1, V2, VK1, VK2 = the locker rooms (js/vestiaires.js)
   const slotsOf = dateStr => slots.filter(s => s.weekday === parse(dateStr).getDay());
   function range(days) {
     // Phone, week view: only the hours that are used this week (at least 4 hours), so the whole week fits on the screen
@@ -98,7 +100,7 @@ const Planning = (() => {
     ui.planDay = ui.planDay || today;
     const week = ui.planWeek, days = Array.from({ length: 7 }, (_, i) => addDays(week, i)), wk = ui.planView !== 'day';
     if (!days.includes(ui.planDay)) ui.planDay = days[0];
-    root.innerHTML = `<header class="page-head"><div><h1>Planning · ${esc(fieldName())}</h1><p class="sub">Grand terrain ou demi-terrain, sans chevauchement</p></div>
+    root.innerHTML = `${placeTabs('pitch')}<header class="page-head"><div><h1>Planning · ${esc(fieldName())}</h1><p class="sub">Grand terrain ou demi-terrain, sans chevauchement</p></div>
       <div class="head-actions plan-actions"><a class="btn" href="#/encadrement" aria-label="Qui encadre ?">${I.whistle}<span>Qui encadre ?</span></a>${Auth.isAdmin() ? `<button class="btn" data-p="slots" aria-label="Créneaux disponibles">${I.clock}<span>Créneaux disponibles</span></button>` : ''}
       <button class="btn" data-p="bookHome" id="bookHome" hidden aria-label="Réserver les matchs à domicile">${I.match}<span>Réserver les matchs à domicile</span></button>
       <button class="btn" data-p="recur" aria-label="Chaque semaine">${I.rotate}<span>Chaque semaine</span></button>
@@ -232,7 +234,7 @@ const Planning = (() => {
         const pick = id => $$(`#${id} .chip`, r).forEach(b => b.onclick = () => { $$(`#${id} .chip`, r).forEach(x => x.classList.remove('on')); b.classList.add('on'); check(); });
         const check = async () => {
           const d = $('#bDate', r).value;
-          if (d && !bookings.some(b => b.date === d) && (d < loaded || d > addDays(loaded, 6))) { try { bookings = bookings.concat(await Cloud.bookings(d, d)); } catch (e) {} }
+          if (d && !bookings.some(b => b.date === d) && (d < loaded || d > addDays(loaded, 6))) { try { bookings = bookings.concat((await Cloud.bookings(d, d)).filter(onPitch)); } catch (e) {} }
           const [k, t] = status(d, +$('#bStart', r).value, +$('#bEnd', r).value, $('#bPart .on', r).dataset.v);
           const el = $('#bStatus', r); el.className = 'plan-status ' + k; el.textContent = (k === 'ok' ? '✓ ' : '✗ ') + t;
         };
@@ -348,13 +350,15 @@ const Planning = (() => {
     if (!Cloud.ready()) { el.innerHTML = '<p class="muted">Le planning partagé n\'est pas encore connecté.</p>'; return; }
     const today = iso(new Date());
     try {
-      const list = (await Cloud.bookings(today, addDays(today, 7))).filter(b => !myTeams().length || myTeams().includes(b.team_id)).slice(0, 4);
+      const list = (await Cloud.bookings(today, addDays(today, 7))).filter(b => onPitch(b) && (!myTeams().length || myTeams().includes(b.team_id))).slice(0, 4);
       el.innerHTML = list.length ? `<ul class="res-list plan-mini">${list.map(b => `<li><a href="#/planning"><span class="d">${esc(parse(b.date).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric' }))}</span><span class="o">${esc(b.team_name || '')} · ${KINDS[b.kind][0]}</span><span class="s">${hm(b.start_min)}</span></a></li>`).join('')}</ul>`
         : '<p class="muted">Rien de réservé pour tes catégories cette semaine.</p>';
     } catch (e) { el.innerHTML = `<p class="muted">${esc(e.message)}</p>`; }
   }
 
+  // Pitch or locker rooms: the two plannings share the same look
+  const placeTabs = cur => `<div class="seg place-tabs"><a class="seg-b ${cur === 'pitch' ? 'on' : ''}" href="#/planning">⚽ Terrain</a><a class="seg-b ${cur === 'rooms' ? 'on' : ''}" href="#/vestiaires">🚪 Vestiaires</a></div>`;
   // Colour of a category (results page, legend…)
   const teamColor = teamId => colorOf({ team_id: teamId }) || '#0e1d45';
-  return { page, upcoming, teamColor };
+  return { page, upcoming, teamColor, colorOf, placeTabs };
 })();

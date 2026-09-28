@@ -486,9 +486,16 @@ begin
   begin
     if b.team_id is null or b.date < current_date or b.date > current_date + 60 then return null; end if;
     t := array(select x from unnest(raincy_team_staff(b.team_id)) x where tg_op = 'DELETE' or x <> coalesce(b.author_id, ''));
-    perform raincy_notify(t, 'planning', 'plan:' || b.team_id, '📅 Planning · ' || coalesce(b.team_name, ''),
-      case when tg_op = 'DELETE' then 'Créneau libéré : ' else 'Créneau réservé : ' end || raincy_day(b.date) || ' ' || raincy_hm(b.start_min) || '–' || raincy_hm(b.end_min)
-        || case when b.part = 'full' then '' else ' (demi-terrain ' || b.part || ')' end || case when b.kind = 'match' then ' · match' else '' end, '#/planning');
+    if coalesce(b.field, 'T1') = 'T1' then
+      perform raincy_notify(t, 'planning', 'plan:' || b.team_id, '📅 Planning · ' || coalesce(b.team_name, ''),
+        case when tg_op = 'DELETE' then 'Créneau libéré : ' else 'Créneau réservé : ' end || raincy_day(b.date) || ' ' || raincy_hm(b.start_min) || '–' || raincy_hm(b.end_min)
+          || case when b.part = 'full' then '' else ' (demi-terrain ' || b.part || ')' end || case when b.kind = 'match' then ' · match' else '' end, '#/planning');
+    else -- (3.16) les vestiaires
+      perform raincy_notify(t, 'planning', 'plan:' || b.team_id, '🚪 Vestiaires · ' || coalesce((select data->>'name' from items where col = 'teams' and id = b.team_id), b.team_name, ''),
+        case b.field when 'V1' then 'Vestiaire 1' when 'V2' then 'Vestiaire 2' when 'VK1' then 'Vestiaire Karaté 1' when 'VK2' then 'Vestiaire Karaté 2' else b.field end
+          || case when tg_op = 'DELETE' then ' libéré : ' else ' : ' end || case when b.kind = 'adversaire' then coalesce(b.team_name, 'adversaire') || ', ' else '' end
+          || raincy_day(b.date) || ' ' || raincy_hm(b.start_min) || '–' || raincy_hm(b.end_min), '#/vestiaires');
+    end if;
   exception when others then raise notice 'notification du planning : %', sqlerrm; end;
   return null;
 end $$;

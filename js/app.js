@@ -58,7 +58,7 @@ const App = (() => {
     document.body.dataset.page = name;
     const full = name === 'schema' || name === 'tableau';
     document.body.classList.toggle('editing', full);
-    const navKey = { equipe: 'equipes', joueurs: 'equipes', joueur: 'equipes', dirigeants: 'equipes', licences: 'president', encadrement: 'planning', schema: 'schemas', tableau: 'schemas', entrainement: 'entrainements', match: 'matchs' }[name] || name;
+    const navKey = { equipe: 'equipes', joueurs: 'equipes', joueur: 'equipes', dirigeants: 'equipes', licences: 'president', encadrement: 'planning', vestiaires: 'planning', schema: 'schemas', tableau: 'schemas', entrainement: 'entrainements', match: 'matchs' }[name] || name;
     renderNav(navKey);
     // Whiteboard: a blank board, never saved (id = format of the pitch)
     if (name === 'tableau') { Help.button(); return Editor.open(root, Templates.blank(id || '11'), { scratch: true }); }
@@ -71,7 +71,7 @@ const App = (() => {
       matchs: Views.matches, match: Views.match, stats: Views.stats, reglages: Views.settings,
       planning: r => Planning.page(r), resultats: r => Results.page(r), club: (r, x) => ClubLife.page(r, x), messages: (r, x) => Messages.page(r, x),
       bibliotheque: r => Library.page(r), joueurs: r => People.listPage(r, 'player'), dirigeants: r => People.listPage(r, 'staff'),
-      joueur: (r, x) => People.playerPage(r, x), president: r => President.page(r), licences: r => ClubAdmin.licencesPage(r), encadrement: r => ClubAdmin.staffingPage(r) }[name] || Views.home;
+      joueur: (r, x) => People.playerPage(r, x), president: r => President.page(r), licences: r => ClubAdmin.licencesPage(r), encadrement: r => ClubAdmin.staffingPage(r), vestiaires: r => Rooms.page(r) }[name] || Views.home;
     fn(root, id);
     if (keep) { root.scrollTop = st; window.scrollTo(0, sy); } else { releaseHeight(); root.scrollTop = 0; window.scrollTo(0, 0); }
     Help.button();
@@ -93,7 +93,7 @@ const App = (() => {
   })();
   /* Updates: version.json on the site says which build is online. When it is newer than this one,
      the app empties its offline copy and reloads (an iPhone can keep an old copy open for days). */
-  const BUILD = 55, UPD = 'raincy-update-tried';
+  const BUILD = 56, UPD = 'raincy-update-tried';
   async function onlineBuild() {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
     return (await r.json()).build || 0;

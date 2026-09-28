@@ -597,6 +597,7 @@ const Views = (() => {
           </div>
           <div class="chips"><button class="chip ch-home ${m.home ? 'on' : ''}" data-home="1">🏠 Domicile</button><button class="chip ch-away ${!m.home ? 'on' : ''}" data-home="0">🚌 Extérieur</button></div>
         </section>
+        ${m.home && !m.exempt && Cloud.ready() ? '<div id="roomsBox"></div>' : ''}
         <div class="row-head"><h2 class="section">Convoqués (${conv.length})</h2>${conv.length ? `<button class="btn primary" data-act="convoc">${I.share}<span>Envoyer la convocation</span></button>` : ''}</div>
         ${t ? rosterChips(t.id, p => `<button class="chip ${(m.convoked || []).includes(p.id) ? 'on' : ''}" data-conv="${p.id}">${chipLabel(p)}</button>`) : '<p class="muted">Choisis une équipe.</p>'}
         ${!m.played && t ? (() => { const low = People.lowPlaytime(t.id); return low.length ? `<p class="tip playtime-tip">⏱️ Peu de temps de jeu cette saison : ${low.slice(0, 8).map(x => `<b>${esc(Store.shortName(x.p))}</b> (${x.min}')`).join(', ')}${low.length > 8 ? '…' : ''} · moyenne de l'équipe ${low[0].avg}'.</p>` : ''; })() : ''}
@@ -624,7 +625,7 @@ const Views = (() => {
         ${Media.placeholder('match:' + m.id, 'Photos et vidéos du match')}
         ${Cloud.ready() ? '<div id="parentPhotos"></div>' : ''}
         <div class="danger-zone"><button class="btn danger" data-act="delete">${I.trash}<span>Supprimer le match</span></button></div>`;
-      Parents.mountMatch(root, m, conv);
+      Parents.mountMatch(root, m, conv); Rooms.matchBox($('#roomsBox', root), m);
       const box = $('#rateBox', root); box.innerHTML = Ratings.section(m, conv, 'match'); Ratings.bind(box, m, save);
       Media.mount(root); Library.mountDocs($('#docsBox', root), m, save);
     };
