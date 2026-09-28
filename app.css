@@ -1381,3 +1381,43 @@ h2.section svg { width: 22px; height: 22px; vertical-align: -4px; margin-right: 
 .pp-clock { font: 700 14px var(--round); font-variant-numeric: tabular-nums; padding: 4px 10px; border-radius: 99px; background: rgba(34,197,94,.25); }
 .pp-clock.soon { background: rgba(250,204,21,.35); } .pp-clock.late { background: rgba(239,68,68,.55); }
 @media (prefers-reduced-motion: reduce) { .pp-slide, .pp-keys p, .pp-go { animation: none; } }
+
+/* 3.32 : le match en direct */
+.lv-card { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; color: inherit; text-decoration: none; border-left: 5px solid var(--navy, #0e1d45); margin-bottom: 14px; }
+.lv-card b { font-size: 16px; } .lv-card .btn { margin-left: auto; }
+.lv-card.on { border-left-color: #dc2626; background: color-mix(in srgb, #dc2626 7%, var(--surface)); }
+.lv-card.on b { color: #dc2626; animation: lvBlink 1.4s ease-in-out infinite; }
+@keyframes lvBlink { 50% { opacity: .45; } }
+.lv-board { position: sticky; top: 0; z-index: 5; margin: 0 0 14px; padding: 14px; border-radius: 18px; color: #fff; background: linear-gradient(120deg, var(--navy, #0e1d45), #1b2d63 60%, var(--bordeaux, #8c1024)); box-shadow: 0 10px 24px -14px rgba(0,0,0,.6); }
+.lv-teams { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; text-align: center; font-weight: 800; }
+.lv-teams span { font-size: 14px; line-height: 1.2; overflow-wrap: anywhere; }
+.lv-teams b { font: 800 clamp(34px, 9vw, 52px)/1 var(--round); font-variant-numeric: tabular-nums; }
+.lv-clock { display: flex; justify-content: center; align-items: baseline; gap: 10px; margin: 6px 0 10px; }
+.lv-clock span { color: var(--gold-soft, #e2c27d); font-weight: 700; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; }
+.lv-clock b { font: 800 24px var(--round); font-variant-numeric: tabular-nums; }
+.lv-board.on .lv-clock span::before { content: '● '; color: #f87171; animation: lvBlink 1.4s ease-in-out infinite; }
+.lv-ctl { display: flex; justify-content: center; align-items: center; gap: 10px; flex-wrap: wrap; }
+.lv-big { min-height: 52px; font-size: 17px; padding: 0 24px; }
+.lv-done { font-weight: 700; font-size: 14px; }
+.lv-ctl .linkish { color: var(--gold-soft, #e2c27d); }
+.lv-count { font: 800 18px var(--round); color: var(--bordeaux); } .lv-count.ok { color: #15803d; }
+.lv-pick { display: flex; flex-wrap: wrap; gap: 6px; }
+.lv-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
+.lv-act { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 78px; padding: 6px; border-radius: 14px; border: 2px solid var(--c); background: color-mix(in srgb, var(--c) 10%, var(--surface)); color: inherit; font: inherit; font-size: 12.5px; font-weight: 700; line-height: 1.15; text-align: center; cursor: pointer; }
+.lv-act b { font-size: 26px; }
+.lv-act:active { transform: scale(.94); background: var(--c); color: #fff; }
+.lv-act:disabled { opacity: .4; }
+.lv-field { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+.lv-field > div { padding: 10px; border-radius: 12px; background: var(--surface2); }
+.lv-field h3 { margin: 0 0 6px; font-size: 13px; color: var(--muted); }
+.lv-field p { margin: 0; display: flex; flex-wrap: wrap; gap: 4px; }
+.lv-field p span { font-size: 12.5px; padding: 2px 8px; border-radius: 99px; background: var(--surface); }
+.lv-feed { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.lv-ev { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); border-left: 5px solid var(--c); }
+.lv-ev > b { min-width: 44px; font: 800 16px var(--round); color: var(--c); }
+.lv-ev > span { flex: 1; min-width: 0; }
+.lv-mintable { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; margin-top: 8px; }
+.lv-mins summary { cursor: pointer; font-weight: 700; }
+.hero-live { background: #dc2626; color: #fff; margin-right: 6px; }
+@media (max-width: 520px) { .lv-actions { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; } .lv-act { min-height: 70px; font-size: 11px; } .lv-act b { font-size: 22px; } .lv-field { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { .lv-card.on b, .lv-board.on .lv-clock span::before { animation: none; } }

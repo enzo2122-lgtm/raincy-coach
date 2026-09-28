@@ -90,6 +90,7 @@ const Analyse = (() => {
       <div id="teleBox" class="tele-box"></div>
       <section class="card"><div class="row-head"><h2>Marquer une action</h2><button class="linkish" data-a="pref">Séquence : ${pref().before} s avant, ${pref().after} s après</button></div>
         <div class="an-tags">${TAGS.map(([k, ic, l, c]) => `<button class="an-tag" data-tag="${k}" style="--c:${c}"><b>${ic}</b><span>${esc(l)}</span></button>`).join('')}</div></section>
+      <div id="anLive"></div>
       <div id="anStats"></div>
       <h2 class="section">Séquences</h2><div id="anClips"></div>`;
     const bar = $('#anBar', root);
@@ -126,6 +127,18 @@ const Analyse = (() => {
       drawBar(); drawStats();
     };
     drawClips();
+    // the match was followed live: its events become sequences once the kick-off is found in the video
+    const drawLive = () => {
+      const box = $('#anLive', root), m = match(); if (!box) return;
+      if (!m || !m.live || !m.live.events.length || !m.live.periods.length) { box.innerHTML = ''; return; }
+      const n = rec.ko1 != null ? Live.videoClips(m, rec, rec.ko1, rec.ko2).length : m.live.events.length;
+      box.innerHTML = `<section class="card an-livebox"><h2>📱 Séquences du match en direct</h2>
+        <p class="muted small">Ce match a été suivi en direct (${m.live.events.length} événement${m.live.events.length > 1 ? 's' : ''}). Mets la vidéo sur le coup d'envoi et touche le bouton : l'appli place chaque but, occasion ou carton au bon moment de la vidéo.</p>
+        <div class="chips"><button class="btn soft" data-ko="1">⏱ C'est le coup d'envoi${rec.ko1 != null ? ' (' + mmss(rec.ko1) + ')' : ''}</button>
+        ${m.live.periods[1] ? `<button class="btn soft" data-ko="2">⏱ C'est la reprise${rec.ko2 != null ? ' (' + mmss(rec.ko2) + ')' : ' (facultatif)'}</button>` : ''}
+        <button class="btn primary" data-livegen ${rec.ko1 == null || !n ? 'disabled' : ''}>🎬 Créer les séquences (${n})</button></div></section>`;
+    };
+    drawLive();
     let stopAt = null;
     // a video recorded in a browser may not know its length until the end has been read once
     v.onloadedmetadata = () => { if (v.duration === Infinity) { v.currentTime = 1e7; v.ondurationchange = () => { if (isFinite(v.duration)) { v.ondurationchange = null; v.currentTime = 0; drawBar(); } }; } drawBar(); };
@@ -136,7 +149,7 @@ const Analyse = (() => {
     };
     v.onplay = v.onpause = () => { $('#anPlay', root).innerHTML = v.paused ? `${I.play}<span>Lecture</span>` : `${I.pause}<span>Pause</span>`; };
     bar.onclick = e => { const m = e.target.closest('[data-seek]'); if (m) { v.currentTime = +m.dataset.seek; return; } const r = bar.getBoundingClientRect(); if (isFinite(v.duration) && v.duration) v.currentTime = (e.clientX - r.left) / r.width * v.duration; };
-    $('#anMatch', root).onchange = async e => { rec.matchId = e.target.value || null; await save(); drawClips(); };
+    $('#anMatch', root).onchange = async e => { rec.matchId = e.target.value || null; await save(); drawClips(); drawLive(); };
     root.oninput = e => { const n = e.target.dataset.note; if (n) { const c = rec.clips.find(x => x.id === n); c.note = e.target.value; clearTimeout(page.t); page.t = setTimeout(save, 500); } };
     root.onchange = async e => { const t = e.target.dataset.retag; if (t) { rec.clips.find(x => x.id === t).tag = e.target.value; await save(); drawClips(); } };
     root.onclick = async e => {
@@ -160,6 +173,11 @@ const Analyse = (() => {
       if (b.dataset.out) { const c = clip(b.dataset.out); if (v.currentTime <= c.start) return toast('La fin doit être après le début', 'err'); c.end = v.currentTime; await save(); return drawClips(); }
       if (b.dataset.pl) { const [cid, pid] = b.dataset.pl.split('|'), c = clip(cid); c.players = (c.players || []).includes(pid) ? c.players.filter(x => x !== pid) : [...(c.players || []), pid]; b.classList.toggle('on'); return save(); }
       if (b.dataset.del) { if (await confirmBox('Supprimer cette séquence ?', 'Supprimer')) { rec.clips = rec.clips.filter(c => c.id !== b.dataset.del); await save(); drawClips(); } return; }
+      if (b.dataset.ko) { rec['ko' + b.dataset.ko] = +v.currentTime.toFixed(1); await save(); toast(b.dataset.ko === '1' ? 'Coup d\'envoi placé à ' + mmss(v.currentTime) : 'Reprise placée à ' + mmss(v.currentTime)); return drawLive(); }
+      if (b.hasAttribute('data-livegen')) {
+        const cs = Live.videoClips(match(), rec, rec.ko1, rec.ko2); if (!cs.length) return toast('Les séquences du direct sont déjà créées');
+        rec.clips.push(...cs); await save(); drawClips(); drawLive(); return toast(`${cs.length} séquence${cs.length > 1 ? 's' : ''} créée${cs.length > 1 ? 's' : ''} depuis le direct`);
+      }
       if (b.dataset.teleclip) {
         // drawing on a sequence: the video stops inside it, the tools open under the player
         const c = clip(b.dataset.teleclip); stopAt = null; v.pause();
