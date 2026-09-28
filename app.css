@@ -1134,3 +1134,12 @@ h2.section svg { width: 22px; height: 22px; vertical-align: -4px; margin-right: 
 .ch-dot { position: absolute; top: -2px; right: -2px; width: 9px; height: 9px; border-radius: 50%; background: var(--bordeaux); }
 .ch-fam .ch-subs { display: none; }
 .ch-fam.open .ch-subs { display: block; }
+/* 3.22 : fichiers récupérés en arrière-plan */
+.bg-tasks { position: fixed; left: 50%; top: calc(env(safe-area-inset-top) + 8px); transform: translateX(-50%); z-index: 90; display: flex; flex-direction: column; gap: 6px; width: min(420px, calc(100vw - 32px)); pointer-events: none; }
+.bg-task { position: relative; overflow: hidden; display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-radius: 12px; background: var(--ink); color: var(--bg); font-size: 13.5px; font-weight: 600; box-shadow: 0 6px 20px rgba(0,0,0,.18); }
+.bg-txt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.spinner.sm { width: 16px; height: 16px; margin: 0; border-width: 2px; flex: none; }
+.bg-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: rgba(255,255,255,.15); }
+.bg-bar b { display: block; height: 100%; width: 0; background: var(--gold, #e2c27d); transition: width .3s; }
+.bg-task:not(.known) .bg-bar b { width: 30%; animation: bgslide 1.4s ease-in-out infinite; }
+@keyframes bgslide { from { transform: translateX(-100%); } to { transform: translateX(340%); } }

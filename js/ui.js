@@ -41,6 +41,24 @@ const UI = (() => {
     return { progress: p => { const i = root.querySelector('.bar i'); if (i) i.style.width = Math.round(p * 100) + '%'; }, done: () => { root.hidden = true; root.innerHTML = ''; } };
   }
 
+  // Work that goes on in the background (a file coming from a link, a big video being saved): a small line at the bottom
+  // of the screen, the app stays usable meanwhile. bgTask(text) → { step(text, fraction), done() }
+  function bgTask(text) {
+    let box = document.getElementById('bgTasks');
+    if (!box) { box = document.createElement('div'); box.id = 'bgTasks'; box.className = 'bg-tasks'; box.setAttribute('role', 'status'); box.setAttribute('aria-live', 'polite'); document.body.appendChild(box); }
+    const el = document.createElement('div'); el.className = 'bg-task';
+    el.innerHTML = `<span class="spinner sm"></span><span class="bg-txt">${esc(text)}</span><i class="bg-bar"><b></b></i>`;
+    box.appendChild(el);
+    const leave = () => { if (!unloadWarn.size) window.removeEventListener('beforeunload', warn); };
+    const warn = e => { e.preventDefault(); e.returnValue = ''; };
+    unloadWarn.add(el); window.addEventListener('beforeunload', warn);
+    return {
+      step: (t, f) => { el.querySelector('.bg-txt').textContent = t; const b = el.querySelector('.bg-bar b'); b.style.width = f == null ? '' : Math.round(f * 100) + '%'; el.classList.toggle('known', f != null); },
+      done: () => { unloadWarn.delete(el); el.remove(); leave(); },
+    };
+  }
+  const unloadWarn = new Set();
+
   // Thumbnails of schemas, cached per update
   const thumbCache = new Map();
   function thumb(sc, w = 480, h = 312) {
@@ -110,5 +128,5 @@ const UI = (() => {
 
   // mouse/trackpad (computer): fields can take the focus; touch screens: no keyboard popping up on its own
   const finePointer = () => matchMedia('(pointer: fine)').matches;
-  return { finePointer, esc, $, $$, toast, modal, confirmBox, busy, thumb, fmtDate, today, accentFor, pickFiles, chooseFiles, motto, mottoIdea, MOTTO_MAX };
+  return { finePointer, esc, $, $$, toast, modal, confirmBox, busy, bgTask, thumb, fmtDate, today, accentFor, pickFiles, chooseFiles, motto, mottoIdea, MOTTO_MAX };
 })();

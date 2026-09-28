@@ -76,12 +76,25 @@ const Library = (() => {
     return u;
   }
   // Tries to get the file itself (so the app can read the PDF or draw on the picture); many sites refuse, then the link is kept
-  async function fetchFile(u, name) {
-    const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 30000);
+  async function fetchFile(u, name, onProgress = () => {}) {
+    // 30 s to get an answer; then the download goes on as long as it needs (a match video is big)
+    const ctl = new AbortController(); let t = setTimeout(() => ctl.abort(), 30000);
     try {
       const r = await fetch(directUrl(u), { signal: ctl.signal }); if (!r.ok) throw new Error('refusé');
-      const blob = await r.blob(), type = blob.type || '';
-      if (!/pdf|image\/|video\//.test(type)) throw new Error('pas un fichier');
+      if (!/pdf|image\/|video\/|octet-stream/.test(r.headers.get('content-type') || '')) throw new Error('pas un fichier');
+      clearTimeout(t);
+      const total = +r.headers.get('content-length') || 0, parts = []; let got = 0;
+      // no news from the site for 60 s: given up
+      const idle = () => { clearTimeout(t); t = setTimeout(() => ctl.abort(), 60000); };
+      if (r.body && r.body.getReader) {
+        const rd = r.body.getReader(); idle();
+        for (;;) { const { done, value } = await rd.read(); if (done) break; parts.push(value); got += value.length; idle(); onProgress(got, total); }
+      } else { parts.push(await r.blob()); }
+      // « application/octet-stream » (Google Drive, OneDrive): the kind of file comes from its name
+      let type = (r.headers.get('content-type') || '').split(';')[0];
+      if (!/pdf|image\/|video\//.test(type)) type = /\.pdf$/i.test(name) ? 'application/pdf' : /\.(jpe?g|png|webp)$/i.test(name) ? 'image/jpeg' : /\.(mp4|m4v|mov)$/i.test(name) ? 'video/mp4' : '';
+      if (!type) throw new Error('pas un fichier');
+      const blob = new Blob(parts, { type });
       const ext = type.includes('pdf') ? '.pdf' : type.startsWith('image/') ? '.jpg' : '.mp4';
       return new File([blob], /\.[a-z0-9]{2,4}$/i.test(name) ? name : name + ext, { type });
     } finally { clearTimeout(t); }
@@ -94,25 +107,33 @@ const Library = (() => {
         actions: [{ label: 'Annuler', onClick: () => res() }, { label: 'Ajouter', kind: 'primary', onClick: (close, r) => {
           const url = $('#lkUrl', r).value.trim(); let host = '';
           try { const x = new URL(url); if (!/^https?:$/.test(x.protocol)) throw 0; host = x.hostname.replace(/^www\./, ''); } catch (e) { toast('Colle un lien qui commence par https://', 'err'); return false; }
-          const name = $('#lkName', r).value.trim() || decodeURIComponent((url.split(/[?#]/)[0].split('/').pop() || '')).slice(0, 60) || host;
+          const typed = $('#lkName', r).value.trim(), name = typed || decodeURIComponent((url.split(/[?#]/)[0].split('/').pop() || '')).slice(0, 60) || host;
           close();
+          const me = Auth.current();
+          // a YouTube video stays a link, played by YouTube in the analysis (its thumbnail comes from YouTube): nothing to download
+          const yt = /(?:youtube\.com\/(?:watch\?(?:[^#]*&)?v=|embed\/|shorts\/|live\/|v\/)|youtu\.be\/)([\w-]{11})/.exec(url);
+          if (yt) {
+            const id = Store.uid();
+            Media.put({ id, ref: 'lib', kind: 'link', url, name: typed || 'Vidéo YouTube', host, thumb: `https://i.ytimg.com/vi/${yt[1]}/hqdefault.jpg`, createdAt: Date.now(), by: me ? me.id : null })
+              .then(() => { toast('Vidéo YouTube ajoutée : ouvre-la puis « Analyser le match »'); cb && cb([id]); }, () => toast('Impossible d\'enregistrer le lien sur cet appareil', 'err'));
+            return res();
+          }
+          // other sites: the file comes in the background, the app stays usable meanwhile
+          res();
+          const task = UI.bgTask(`Récupération de « ${name} »…`);
           (async () => {
-            const b = busy('Récupération du fichier…'), step = t => { const p = document.querySelector('#busy p'); if (p) p.textContent = t; };
             let ids = [];
-            // a YouTube video stays a link, played by YouTube in the analysis (its thumbnail comes from YouTube)
-            const yt = /(?:youtube\.com\/(?:watch\?(?:[^#]*&)?v=|embed\/|shorts\/|live\/|v\/)|youtu\.be\/)([\w-]{11})/.exec(url);
-            if (yt) {
-              const me = Auth.current(), id = Store.uid();
-              await Media.put({ id, ref: 'lib', kind: 'link', url, name: $('#lkName', r).value.trim() || 'Vidéo YouTube', host, thumb: `https://i.ytimg.com/vi/${yt[1]}/hqdefault.jpg`, createdAt: Date.now(), by: me ? me.id : null });
-              b.done(); toast('Vidéo YouTube ajoutée : ouvre-la puis « Analyser le match »'); cb && cb([id]); return res();
-            }
-            try { ids = await importFiles([await fetchFile(url, name)], step); toast('Fichier récupéré depuis le lien'); }
-            catch (e) {
-              const me = Auth.current(), id = Store.uid();
-              await Media.put({ id, ref: 'lib', kind: 'link', url, name, host, createdAt: Date.now(), by: me ? me.id : null });
+            try {
+              const f = await fetchFile(url, name, (got, total) => task.step(`« ${name} » : ${Math.round(got / 1048576)} Mo${total ? ' sur ' + Math.round(total / 1048576) + ' Mo' : ''}`, total ? got / total : null));
+              task.step(`Enregistrement de « ${name} »…`);
+              ids = await importFiles([f], t => task.step(t));
+              toast(`« ${name} » est dans la Bibliothèque`);
+            } catch (e) {
+              const id = Store.uid();
+              await Media.put({ id, ref: 'lib', kind: 'link', url, name, host, createdAt: Date.now(), by: me ? me.id : null }).catch(() => {});
               ids = [id]; toast('Lien enregistré : il s\'ouvre dans ' + host);
-            } finally { b.done(); }
-            cb && cb(ids); res();
+            } finally { task.done(); }
+            cb && cb(ids);
           })();
         } }] });
     });
@@ -120,11 +141,11 @@ const Library = (() => {
   function pickFiles(cb) {
     UI.chooseFiles({ accept: 'video/*,image/*,application/pdf', multiple: true, link: () => addLink(cb) }).then(async files => {
       if (!files.length) return;
-      const b = busy('Import en cours…');
-      const step = t => { const p = document.querySelector('#busy p'); if (p) p.textContent = t; };
-      try { const ids = await importFiles(files, step); if (ids.length) toast(`${ids.length} fichier${ids.length > 1 ? 's' : ''} importé${ids.length > 1 ? 's' : ''}`); cb && cb(ids); }
+      // in the background: the app stays usable while a big video is being saved
+      const task = UI.bgTask(`Import de ${files.length > 1 ? files.length + ' fichiers' : '« ' + (files[0].name || 'fichier') + ' »'}…`);
+      try { const ids = await importFiles(files, t => task.step(t)); if (ids.length) toast(`${ids.length} fichier${ids.length > 1 ? 's' : ''} importé${ids.length > 1 ? 's' : ''} dans la Bibliothèque`); cb && cb(ids); }
       catch (e) { toast(e.message || "Import impossible : l'appareil manque peut-être de place", 'err'); }
-      finally { b.done(); }
+      finally { task.done(); }
     });
   }
 
