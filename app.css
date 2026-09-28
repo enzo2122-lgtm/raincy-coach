@@ -1579,3 +1579,70 @@ h2.section svg { width: 22px; height: 22px; vertical-align: -4px; margin-right: 
 .lg-table tr.own td { background: color-mix(in srgb, var(--bordeaux) 12%, var(--surface)); font-weight: 700; }
 .lg-table tr.up td:first-child { box-shadow: inset 4px 0 0 #16a34a; } .lg-table tr.down td:first-child { box-shadow: inset 4px 0 0 #dc2626; }
 .pre { white-space: pre-wrap; }
+
+/* ---------- 3.42 : small screens ---------- */
+/* Schema editor on a narrow phone: every button of the top bar stays on screen (Exporter was cut off) */
+@media (max-width: 440px) {
+  .ed-top { gap: 2px; padding-left: calc(env(safe-area-inset-left) + 4px); padding-right: 4px; }
+  .ed-top .icon-btn { width: 34px; height: 38px; border-radius: 10px; }
+  .ed-top .btn { padding: 0 9px; min-height: 38px; }
+  .ed-top .grow { display: none; }
+  .ed-title { flex: 1 1 0; }
+}
+/* A long button label goes on two lines instead of making the whole page wider than the phone */
+.btn { max-width: 100%; }
+@media (max-width: 600px) { .btn > span { white-space: normal; text-align: center; line-height: 1.2; } }
+@media (max-width: 380px) {
+  .ed-top [data-act="fullscreen"] { display: none; }
+  .ed-top { overflow-x: auto; scrollbar-width: none; }
+  .ed-top .icon-btn { width: 32px; }
+}
+/* iPhone (app added to the home screen): the status bar is transparent, so the page scrolled under the time and battery looked blurred.
+   An opaque band now sits behind the status bar. */
+body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: env(safe-area-inset-top, 0px); background: var(--navy, #0e1d45); z-index: 70; pointer-events: none; }
+
+/* ---------- 3.42 : codes personnels ---------- */
+.codes-stat { margin: 4px 0 10px; font-size: 14px; } .codes-stat .ok, .code-row .ok { color: var(--good, #16a34a); } .codes-stat .wait, .code-row .wait { color: #b45309; }
+.codes-acts { margin: 10px 0; }
+.codes-list { display: flex; flex-direction: column; }
+.code-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 0; border-top: 1px solid var(--line); }
+.code-row.given { opacity: .75; }
+.cr-name { flex: 1 1 180px; display: flex; flex-direction: column; min-width: 0; }
+.cr-code { font: 800 18px/1 ui-monospace, "SF Mono", Consolas, monospace; letter-spacing: .08em; padding: 6px 10px; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); }
+.cr-given { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; cursor: pointer; }
+.cr-given input { width: 22px; height: 22px; accent-color: var(--good, #16a34a); }
+.btn.small { min-height: 38px; padding: 0 12px; font-size: 14px; }
+.qr-big { width: min(280px, 80vw); margin: 4px auto 8px; background: #fff; padding: 8px; border-radius: 12px; }
+.qr-big svg { display: block; width: 100%; height: auto; }
+.qr-url { text-align: center; word-break: break-all; }
+#printArea .pc-sheet, #printArea .pl-sheet, #printArea .qr-poster { color: #000; background: #fff; font-family: system-ui, "Segoe UI", Roboto, sans-serif; }
+@media print {
+  @page { size: A4; margin: 10mm; }
+  #printArea .pc-sheet { display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: 66mm; gap: 4mm; break-after: page; page-break-after: always; }
+  #printArea .pc-sheet:last-child { break-after: auto; page-break-after: auto; }
+  #printArea .pc { border: 1.2px dashed #777; border-radius: 4mm; padding: 4mm 5mm; display: flex; flex-direction: column; gap: 1.5mm; overflow: hidden; }
+  #printArea .pc-top { display: flex; align-items: center; gap: 3mm; font-size: 9pt; line-height: 1.2; }
+  #printArea .pc-top img { width: 11mm; height: 11mm; }
+  #printArea .pc-name { font-size: 13pt; font-weight: 800; margin-top: 1mm; }
+  #printArea .pc-team { font-size: 10pt; color: #444; }
+  #printArea .pc-mid { display: flex; gap: 4mm; align-items: center; margin-top: 1mm; }
+  #printArea .pc-qr { width: 26mm; flex: none; } #printArea .pc-qr svg { width: 100%; height: auto; display: block; }
+  #printArea .pc-lbl { font-size: 8pt; text-transform: uppercase; letter-spacing: .06em; color: #555; }
+  #printArea .pc-code { font: 800 17pt/1.1 ui-monospace, Consolas, monospace; letter-spacing: .08em; margin: 1mm 0 2mm; }
+  #printArea .pc-how { font-size: 8pt; line-height: 1.35; }
+  #printArea .pc-note { font-size: 7.5pt; color: #555; margin-top: auto; }
+  #printArea .pl-sheet h1 { font-size: 16pt; margin: 0 0 2mm; } #printArea .pl-sheet p { font-size: 10pt; margin: 0 0 3mm; }
+  #printArea .pl-sheet table { width: 100%; border-collapse: collapse; font-size: 11pt; }
+  #printArea .pl-sheet th, #printArea .pl-sheet td { border: 1px solid #999; padding: 2.2mm 3mm; text-align: left; }
+  #printArea .pl-sheet td:last-child { width: 45mm; }
+  #printArea .pl-code { font-family: ui-monospace, Consolas, monospace; font-weight: 800; letter-spacing: .06em; }
+  #printArea .pl-note { margin-top: 4mm; font-style: italic; }
+  #printArea .qr-poster { text-align: center; padding-top: 10mm; }
+  #printArea .qr-poster img { width: 30mm; height: 30mm; }
+  #printArea .qr-poster h1 { font-size: 26pt; margin: 4mm 0 2mm; }
+  #printArea .qp-sub { font-size: 15pt; margin: 0 0 8mm; }
+  #printArea .qp-qr { width: 120mm; margin: 0 auto; } #printArea .qp-qr svg { width: 100%; height: auto; display: block; }
+  #printArea .qp-url { font-size: 11pt; margin-top: 6mm; word-break: break-all; }
+  #printArea .qp-note { font-size: 12pt; margin-top: 6mm; }
+}
+@media print { #printArea .pc img, #printArea .qr-poster img { display: inline-block; break-after: auto; page-break-after: auto; } }

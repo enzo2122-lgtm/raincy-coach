@@ -41,6 +41,8 @@ const Auth = (() => {
   const PREVIEW = 'raincy-preview';
   const preview = () => { if (!realAdmin()) return null; try { const v = JSON.parse(sessionStorage.getItem(PREVIEW)); return v && Array.isArray(v.teamIds) ? v : null; } catch (e) { return null; } };
   const isAdmin = () => realAdmin() && !preview();
+  // a responsable looking at the app as a volunteer: only the volunteers' tasks and the club's events
+  const volView = () => { const p = preview(); return !!p && p.role === 'benevole'; };
   // A category and its teams A / B go together: a coach of « U15 » also sees « U15 A » and « U15 B », and the other way round
   const famKey = t => String(t.category || t.name || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/\s+/g, '');
   const myIds = () => {
@@ -58,9 +60,9 @@ const Auth = (() => {
   function stopPreview() { try { sessionStorage.removeItem(PREVIEW); } catch (e) {} App.refreshChrome(); App.route(); toast('Retour en responsable'); }
   // « Voir l'appli comme… » : un coach (ses catégories), un parent ou un joueur (leur vraie page), un bénévole (l'appli réduite)
   const ROLES = [['coach', '🧢 Un coach', 'L\'appli exactement comme lui : ses catégories seulement, sans les réglages du responsable.'],
-    ['parent', '👨‍👩‍👧 Un parent', 'La vraie page des parents de la catégorie : matchs, convocations, covoiturage, bénévoles, photos.'],
-    ['joueur', '⚽ Un joueur', 'La vraie page des joueurs de la catégorie : convocation, causerie du match, temps de jeu, classements.'],
-    ['benevole', '🙋 Un bénévole', 'L\'appli réduite à ce qu\'utilise un bénévole : accueil, planning, vie du club, bénévoles, messages.']];
+    ['parent', '👨‍👩‍👧 Un parent', 'La vraie page d\'un parent (avec le code d\'un enfant de la catégorie) : ses matchs, sa convocation, covoiturage, bénévoles, photos. Rien sur les autres enfants.'],
+    ['joueur', '⚽ Un joueur', 'La vraie page d\'un joueur de la catégorie (avec son code) : sa convocation, la causerie du match, son temps de jeu. Rien sur les autres joueurs.'],
+    ['benevole', '🙋 Un bénévole', 'L\'appli réduite à ce qu\'utilise un bénévole : les tâches des jours de match (il s\'y inscrit) et les événements du club. Ni joueurs, ni messages, ni résultats.']];
   function previewDialog() {
     let role = 'coach';
     const body = () => `<div class="chips pv-roles">${ROLES.map(([k, l]) => `<button class="chip ${k === role ? 'on' : ''}" data-role="${k}">${l}</button>`).join('')}</div>
@@ -86,9 +88,14 @@ const Auth = (() => {
   async function viewPage(role, teamId) {
     if (!Cloud.ready()) return toast('Il faut être connecté au serveur du club', 'err');
     let url; const b = UI.busy('Ouverture de la page…');
-    try { url = role === 'parent' ? await Parents.linkOf(teamId) : await Parents.playerLinkOf(teamId); } catch (e) { return toast(e.message || 'Page indisponible', 'err'); } finally { b.done(); }
+    const t = Store.get('teams', teamId), ids = Store.teamGroups([t]).flat().map(x => x.id);
+    const pl = Store.state.players.filter(p => (p.teamIds || []).some(id => id === teamId || ids.includes(id))).sort((a, c) => String(a.lastName || '').localeCompare(String(c.lastName || ''), 'fr'))[0];
+    if (!pl) { b.done(); return toast('Aucun joueur dans cette catégorie', 'err'); }
+    try { const map = await Cloud.memberCodes([pl.id]) || {}, c = (map[pl.id] || {}).code; if (!c) throw new Error('Code indisponible');
+      url = `${location.href.split('#')[0].replace(/index\.html$/, '')}${role === 'parent' ? 'parents' : 'joueurs'}.html#c=${c}&preview=1`; }
+    catch (e) { return toast(e.message || 'Page indisponible', 'err'); } finally { b.done(); }
     const ov = document.createElement('div'); ov.className = 'pv-frame';
-    ov.innerHTML = `<div class="pv-bar"><b>${role === 'parent' ? '👨‍👩‍👧 Vue parent' : '⚽ Vue joueur'} · ${esc((Store.get('teams', teamId) || {}).name || '')}</b><button class="btn" data-pvx>${I.x}<span>Fermer</span></button></div><iframe src="${esc(url)}" title="Aperçu"></iframe>`;
+    ov.innerHTML = `<div class="pv-bar"><b>${role === 'parent' ? '👨‍👩‍👧 Vue parent' : '⚽ Vue joueur'} · ${esc(Store.shortName(pl))} (${esc((t || {}).name || '')})</b><button class="btn" data-pvx>${I.x}<span>Fermer</span></button></div><iframe src="${esc(url)}" title="Aperçu"></iframe>`;
     document.body.appendChild(ov); ov.querySelector('[data-pvx]').onclick = () => ov.remove();
   }
   const hasAccounts = () => Object.values(A().users).some(u => u.hash);
@@ -155,7 +162,7 @@ const Auth = (() => {
     const el = lock(); el.hidden = false;
     el.innerHTML = `<div class="lock-card">${Supporters.coin('lock-crest')}<p class="eyebrow">Espace éducateurs</p><h1>${esc(Store.state.club.name)}</h1>${inner}
       <button class="btn wide link how-btn" id="howTo">${I.help}<span>Comment utiliser l'appli ?</span></button>
-      <p class="lock-version">Version ${Help.VERSION} · <button class="linkish" id="updApp">Mettre à jour l'appli</button></p></div>`;
+      <p class="lock-version">Appli créée par <b>Coach Enzo</b> · version ${Help.VERSION} · <button class="linkish" id="updApp">Mettre à jour l'appli</button></p></div>`;
     el.querySelector('#howTo').onclick = () => Help.tour();
     el.querySelector('#updApp').onclick = () => App.checkUpdate(true);
     el.scrollTop = 0;
@@ -611,5 +618,5 @@ const Auth = (() => {
     if (serverMode() && isAdmin()) Cloud.accountSet({ staff_id: staffId, delete: true }).catch(() => {});
   }
 
-  return { gate, current, isAdmin, realAdmin, preview, stopPreview, teams, sees, seesPerson, logout, localOnly, connectServer, expired, settingsSection, mountSettings, onSettingsClick, onSettingsChange, forget, setInvite, nkey, firstKeys };
+  return { gate, current, isAdmin, realAdmin, preview, volView, stopPreview, teams, sees, seesPerson, logout, localOnly, connectServer, expired, settingsSection, mountSettings, onSettingsClick, onSettingsChange, forget, setInvite, nkey, firstKeys };
 })();

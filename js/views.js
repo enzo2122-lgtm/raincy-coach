@@ -350,7 +350,7 @@ const Views = (() => {
     const item = t => { const tm = teamOf(t.teamId), dur = t.exercises.reduce((a, e) => a + (+e.duration || 0), 0);
       return `<a class="list-item" href="#/entrainement/${t.id}"><div class="date-box"><b>${new Date(t.date + 'T12:00').getDate()}</b><span>${esc(fmtDate(t.date, { month: 'short' }))}</span></div>
         <div class="li-main"><b>${esc(t.title || 'Entraînement')}</b><span class="muted">${tm ? esc(tm.name) + ' · ' : ''}${t.exercises.length} exercice${t.exercises.length > 1 ? 's' : ''} · ${dur} min</span></div>${I.next}</a>`; };
-    root.innerHTML = `${header('Entraînements', 'Séances, exercices et présences', `<button class="btn" data-act="import">${I.upload}<span>Recevoir</span></button><button class="btn" data-act="ics">${I.calendar}<span>Agenda (.ics)</span></button><a class="btn" href="#/bibliotheque">${I.pdf}<span>PDF (AssistCoachAI…)</span></a><a class="btn" href="#/exercices">📚<span>Exercices du club</span></a><button class="btn" data-exgen>✨<span>Générer une séance</span></button><button class="btn primary" data-act="new">${I.plus}<span>Nouvel entraînement</span></button>`)}
+    root.innerHTML = `${header('Entraînements', 'Séances, exercices et présences', `<button class="btn" data-act="import">${I.upload}<span>Recevoir</span></button><button class="btn" data-act="ics">${I.calendar}<span>Agenda (.ics)</span></button><a class="btn" href="#/bibliotheque">${I.pdf}<span>Importer une fiche PDF</span></a><a class="btn" href="#/exercices">📚<span>Exercices du club</span></a><button class="btn" data-exgen>✨<span>Générer une séance</span></button><button class="btn primary" data-act="new">${I.plus}<span>Nouvel entraînement</span></button>`)}
       ${teamSwitch()}
       <details class="card models-card" ${S().ui.modelsOpen ? 'open' : ''}><summary><b>📚 Séances types du club (${models.length})</b><span class="muted small"> · des séances prêtes, pour toutes les catégories</span></summary>
         ${models.length ? `<div class="list">${models.map(t => `<div class="list-item model-item"><a class="li-main" href="#/entrainement/${t.id}"><b>${esc(t.title || 'Séance type')}</b><span class="muted">${t.exercises.length} exercice${t.exercises.length > 1 ? 's' : ''} · ${t.exercises.reduce((a, e) => a + (+e.duration || 0), 0)} min${t.goal ? ' · ' + esc(String(t.goal).slice(0, 60)) : ''}</span></a><button class="btn primary" data-use="${t.id}">${I.plus}<span>Utiliser</span></button></div>`).join('')}</div>`
@@ -567,8 +567,8 @@ const Views = (() => {
       onOpen: r => { const lb = $('#convLink', r); if (lb) lb.onclick = async () => {
         lb.disabled = true;
         try {
-          const url = await Parents.linkOf(m.teamId), ta = $('#convTxt', r);
-          ta.value = ta.value.replace('Merci de confirmer la présence de votre enfant en répondant à ce message.', `👉 Répondez présent ou absent pour votre enfant ici : ${url}`);
+          const t = Store.get('teams', m.teamId), url = Codes.catUrl(Parents.familyName ? Parents.familyName(m.teamId) : (t || {}).name || ''), ta = $('#convTxt', r); // the category's page: each family types its personal code
+          ta.value = ta.value.replace('Merci de confirmer la présence de votre enfant en répondant à ce message.', `👉 Répondez présent ou absent pour votre enfant ici (avec son code personnel) : ${url}`);
           if (!ta.value.includes(url)) ta.value += `\n👉 Présent ou absent : ${url}`;
           lb.hidden = true; toast('Lien ajouté au message');
         } catch (e) { lb.disabled = false; toast(e.code === 'MISE_A_JOUR' ? 'Le serveur doit être mis à jour par le responsable (Réglages → Serveur du club)' : e.message, 'err'); }
@@ -813,7 +813,7 @@ const Views = (() => {
         <p class="muted">${Cloud.ready() ? 'Efface les données de cet appareil seulement (elles restent sur le serveur du club et reviennent à la prochaine connexion).' : 'Les données sont enregistrées sur cet appareil uniquement. Pense à envoyer une copie avant d\'effacer.'}</p>
         <button class="btn danger" data-act="reset">${I.trash}<span>Effacer les données de cet appareil</span></button>
       </section>` : ''}
-      <p class="muted small">Raincy Coach · version ${Help.VERSION} · <button class="linkish" onclick="App.checkUpdate(true)">Mettre à jour l'appli</button></p>`;
+      <p class="muted small">Raincy Coach · appli créée par <b>Coach Enzo</b> · version ${Help.VERSION} · <button class="linkish" onclick="App.checkUpdate(true)">Mettre à jour l'appli</button></p>`;
     Help.onSettings(root, () => settings(root));
     Auth.mountSettings(root); Notify.mountAccount(root); Notify.mountAdmin(root);
     root.onchange = e => { if (e.target.dataset.notifpref) return Notify.onChange(e.target); Auth.onSettingsChange(e.target); };

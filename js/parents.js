@@ -27,55 +27,19 @@ const Parents = (() => {
   // Explanation shown when the server has not been updated yet (3.8 functions missing)
   const needUpdate = e => e && e.code === 'MISE_A_JOUR'
     ? 'Le serveur du club doit d\'abord être mis à jour par le responsable : Réglages → Serveur du club → Mettre à jour le serveur.' : (e && e.message) || 'Erreur';
-  async function shareDialog(teamId, renew) {
+  // (3.42) The pages of the players and of the parents are opened with each licensee's personal code: the category has a QR code
+  // that leads to the page where the code is typed, and the codes are handed out from « Codes personnels ».
+  function shareDialog(teamId) {
     if (!Cloud.ready()) return toast('Il faut être connecté au serveur du club', 'err');
-    const f = family(teamId); let url;
-    const b = UI.busy('Préparation du lien…');
-    try { url = await linkOf(teamId, renew); } catch (e) { return toast(needUpdate(e), 'err'); } finally { b.done(); }
-    const text = `${S().club.name} · ${f.name}\nToutes les infos de l'équipe pour les parents (matchs, horaires, lieux, convocations, covoiturage). Répondez présent ou absent pour votre enfant ici :\n${url}`;
-    modal({ title: `Page des parents · ${f.name}`, noFocus: true,
-      body: `<p>Envoie ce lien dans le groupe WhatsApp des parents. Ils y voient les matchs et séances de la catégorie, et répondent <b>présent</b> ou <b>absent</b> aux convocations, sans compte ni mot de passe.</p>
-        <label class="fld"><span>Lien de la page des parents</span><input id="parLink" value="${esc(url)}" readonly></label>
-        <p class="muted small">La page ne montre que le prénom et l'initiale du nom des enfants convoqués : ni date de naissance, ni téléphone. Ne publie pas ce lien en dehors des parents de l'équipe. « Nouveau lien » annule l'ancien (si le lien a circulé trop loin).</p>`,
-      onOpen: r => { const i = $('#parLink', r); i.onclick = () => i.select(); },
-      actions: [
-        { label: 'Nouveau lien', onClick: () => { setTimeout(() => UI.confirmBox('Créer un nouveau lien ? L\'ancien ne marchera plus : il faudra renvoyer le nouveau aux parents.', 'Nouveau lien').then(ok => ok && shareDialog(teamId, true)), 60); } },
-        { label: 'Ouvrir', icon: I.next, onClick: () => { window.open(url, '_blank'); return false; } },
-        { label: 'Copier', icon: I.copy, onClick: () => { navigator.clipboard.writeText(url).then(() => toast('Lien copié')).catch(() => toast('Sélectionne le lien et copie-le')); return false; } },
-        { label: 'WhatsApp', kind: 'primary', icon: I.share, onClick: () => { window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank'); return false; } }] });
+    const t = Store.get('teams', teamId); if (!t) return;
+    Codes.qrDialog('cat', t);
   }
-  /* ---------- the players' page (seniors, U17, U18…): its own secret link ---------- */
-  const playersUrl = token => `${location.origin}${location.pathname.replace(/index\.html$/, '')}joueurs.html#t=${encodeURIComponent(token)}`;
-  async function playerLinkOf(teamId, renew) {
-    const f = family(teamId); if (!f) throw new Error('Choisis d\'abord une catégorie.');
-    const links = S().ui.playerLinks = S().ui.playerLinks || {};
-    if (!renew && links[f.key]) return playersUrl(links[f.key]);
-    const token = await Cloud.playerLink(f.key, f.ids, f.name, renew);
-    links[f.key] = token; Store.persistNow();
-    return playersUrl(token);
-  }
-  async function sharePlayers(teamId, renew) {
-    if (!Cloud.ready()) return toast('Il faut être connecté au serveur du club', 'err');
-    const f = family(teamId); let url;
-    const b = UI.busy('Préparation du lien…');
-    try { url = await playerLinkOf(teamId, renew); } catch (e) { return toast(needUpdate(e), 'err'); } finally { b.done(); }
-    const text = `${S().club.name} · ${f.name}\nL'espace des joueurs : matchs, convocations (réponds présent ou absent), la causerie du match, ton temps de jeu et tes stats de la saison.\n${url}`;
-    modal({ title: `Page des joueurs · ${f.name}`, noFocus: true,
-      body: `<p>Envoie ce lien dans le groupe WhatsApp des joueurs. Ils y voient les matchs, répondent <b>présent</b> ou <b>absent</b>, lisent la causerie du prochain match (objectif, 3 clés, vidéo) et suivent leur temps de jeu et leurs stats.</p>
-        <label class="fld"><span>Lien de la page des joueurs</span><input id="plLink" value="${esc(url)}" readonly></label>
-        <p class="muted small">Pour les grands (seniors, U17, U18). Seuls le prénom et l'initiale du nom apparaissent. « Nouveau lien » annule l'ancien.</p>`,
-      onOpen: r => { const i = $('#plLink', r); i.onclick = () => i.select(); },
-      actions: [
-        { label: 'Nouveau lien', onClick: () => { setTimeout(() => UI.confirmBox('Créer un nouveau lien ? L\'ancien ne marchera plus : il faudra renvoyer le nouveau aux joueurs.', 'Nouveau lien').then(ok => ok && sharePlayers(teamId, true)), 60); } },
-        { label: 'Ouvrir', icon: I.next, onClick: () => { window.open(url, '_blank'); return false; } },
-        { label: 'Copier', icon: I.copy, onClick: () => { navigator.clipboard.writeText(url).then(() => toast('Lien copié')).catch(() => toast('Sélectionne le lien et copie-le')); return false; } },
-        { label: 'WhatsApp', kind: 'primary', icon: I.share, onClick: () => { window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank'); return false; } }] });
-  }
+  const sharePlayers = shareDialog;
   // Card on a category page
   function teamCard(t) {
-    return `<section class="card parents-card"><div class="row-head"><h2>${I.team}Page des parents</h2>
-      <div class="chips"><button class="btn primary" data-parents="${t.id}">${I.share}<span>Lien pour les parents</span></button><button class="btn soft" data-players="${t.id}">${I.share}<span>Lien pour les joueurs</span></button></div></div>
-      <p class="muted small">Parents : matchs, horaires, lieux, séances, covoiturage, et leurs réponses présent / absent. Joueurs (seniors, U17, U18) : en plus la causerie du match, leur temps de jeu et leurs stats de la saison.</p></section>`;
+    return `<section class="card parents-card"><div class="row-head"><h2>${I.team}Espace joueurs et parents</h2>
+      <div class="chips"><a class="btn primary" href="#/codes/${t.id}">🔑<span>Codes personnels</span></a><button class="btn soft" data-parents="${t.id}">📱<span>QR code de la catégorie</span></button></div></div>
+      <p class="muted small">Chaque licencié a son code : il ouvre sa page (convocations, présent / absent, temps de jeu, covoiturage, causerie du match) et seulement la sienne. Remets les codes, coche « Remis », et suis qui a activé son espace.</p></section>`;
   }
 
   /* ---------- answers to a convocation (on the match page) ---------- */
@@ -264,5 +228,5 @@ const Parents = (() => {
     }).catch(e => { if (ab.isConnected) drawAnswers(ab, m, conv, e.code === 'MISE_A_JOUR' ? needUpdate(e) : ''); });
   }
 
-  return { shareDialog, sharePlayers, teamCard, linkOf, playerLinkOf, mountMatch, carText };
+  return { shareDialog, sharePlayers, teamCard, linkOf, familyName: id => (family(id) || {}).name || '', mountMatch, carText };
 })();

@@ -100,7 +100,7 @@ const People = (() => {
   function editPlayer(p, opts = {}) {
     const isNew = !p;
     p = p || { id: Store.uid(), lastName: '', firstName: '', birth: '', subcat: '', number: '', pos: '', phone: '', email: '', parents: [], notes: '', teamIds: opts.teamId ? [opts.teamId] : [] };
-    const par = i => p.parents[i] || { name: '', rel: i ? 'Père' : 'Mère', phone: '' };
+    const par = i => (p.parents || [])[i] || { name: '', rel: i ? 'Père' : 'Mère', phone: '' };
     const parentBlock = i => `<fieldset class="parent"><legend>Parent ${i + 1}</legend>
       <div class="row2"><label class="fld"><span>Nom et prénom</span><input id="par${i}n" value="${esc(par(i).name)}"></label>
       <label class="fld"><span>Lien</span><select id="par${i}r">${opt(RELS, par(i).rel)}</select></label></div>

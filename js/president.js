@@ -45,7 +45,7 @@ const President = (() => {
       noBirth && `<li><b>${pl(noBirth, 'joueur')} sans date de naissance</b> (catégorie impossible à calculer)</li>`,
     ].filter(Boolean);
     root.innerHTML = `<header class="page-head"><div><h1>Tableau de bord</h1><p class="sub">Le club en un coup d'œil · saison ${esc(People.seasonLabel())}</p></div>
-      <div class="head-actions"><a class="btn" href="#/licences">${I.check}<span>Licences et cotisations</span></a><a class="btn" href="#/encadrement">${I.whistle}<span>Qui encadre ?</span></a>
+      <div class="head-actions"><a class="btn" href="#/codes">🔑<span>Codes personnels</span></a><a class="btn" href="#/licences">${I.check}<span>Licences et cotisations</span></a><a class="btn" href="#/encadrement">${I.whistle}<span>Qui encadre ?</span></a>
         <button class="btn" data-act="excel">${I.download}<span>Excel (présences, temps de jeu)</span></button><button class="btn" data-act="backup">${I.shield}<span>Sauvegardes</span></button></div></header>
       <div class="tiles">
         ${tile(S().players.length, 'Licenciés')}${tile(S().staff.length, 'Dirigeants')}${tile(f.rows.length, 'Équipes actives')}

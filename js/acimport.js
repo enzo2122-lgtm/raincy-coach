@@ -136,7 +136,7 @@ const ACImport = (() => {
       if (att.length) { tr.presents = [...new Set([...(tr.presents || []), ...att.filter(a => a.status === 'present').map(a => pid(a.player_id)).filter(Boolean)])]; tr.absents = att.filter(a => a.status === 'absent').map(a => pid(a.player_id)).filter(Boolean); }
       (rpeBy[e.id] || []).forEach(l => { const id = pid(l.player_id); if (id) { (tr.rpe = tr.rpe || {})[id] = +l.rpe; st.rpe++; } });
       const ses = sessions.find(x => x.date === date);
-      if (ses && !tr.exercises.length) { tr.exercises = parseSession(ses.s.text); tr.title = ses.s.title || tr.title; if (ses.s.theme) tr.goal = [tr.goal, 'Thème : ' + ses.s.theme].filter(Boolean).join('\n'); if (ses.s.cWorked || ses.s.cAdjust) tr.review = [ses.s.cWorked && 'Ce qui a marché : ' + ses.s.cWorked, ses.s.cAdjust && 'À ajuster : ' + ses.s.cAdjust].filter(Boolean).join('\n'); st.sessions++; }
+      if (ses && !(tr.exercises || []).length) { tr.exercises = parseSession(ses.s.text); tr.title = ses.s.title || tr.title; if (ses.s.theme) tr.goal = [tr.goal, 'Thème : ' + ses.s.theme].filter(Boolean).join('\n'); if (ses.s.cWorked || ses.s.cAdjust) tr.review = [ses.s.cWorked && 'Ce qui a marché : ' + ses.s.cWorked, ses.s.cAdjust && 'À ajuster : ' + ses.s.cAdjust].filter(Boolean).join('\n'); st.sessions++; }
       Store.upsert('trainings', tr);
     });
     /* injuries, absences */

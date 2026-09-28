@@ -32,9 +32,9 @@ const Vol = (() => {
   function taskRow(m, t) {
     const people = list(m, t.key), u = me(), inMe = u && people.some(p => p.staffId === u.id), full = people.length >= t.need;
     return `<div class="vol-task ${full ? 'full' : ''}"><div class="vol-head"><b>${t.icon} ${esc(t.label)}</b><span class="vol-count">${people.length}/${t.need}</span></div>
-      <div class="vol-people">${people.map(p => `<span class="vol-p ${p.parent ? 'par' : ''}">${esc(p.name)}${p.parent ? ' <i>(parent)</i>' : ''}<button class="vol-x" data-vrm="${m.id}|${t.key}|${p.id}" aria-label="Retirer ${esc(p.name)}">×</button></span>`).join('')}
+      <div class="vol-people">${people.map(p => `<span class="vol-p ${p.parent ? 'par' : ''}">${esc(p.name)}${p.parent ? ' <i>(parent)</i>' : ''}${!Auth.volView() || (u && p.staffId === u.id) ? `<button class="vol-x" data-vrm="${m.id}|${t.key}|${p.id}" aria-label="Retirer ${esc(p.name)}">×</button>` : ''}</span>`).join('')}
         ${Array.from({ length: Math.max(0, t.need - people.length) }, () => '<span class="vol-free">place libre</span>').join('')}</div>
-      <div class="chips">${u && !inMe ? `<button class="btn ${full ? 'soft' : 'primary'} vol-btn" data-vme="${m.id}|${t.key}">🙋 Je m'inscris</button>` : ''}<button class="btn soft vol-btn" data-vadd="${m.id}|${t.key}">${I.plus}<span>Inscrire quelqu'un</span></button></div></div>`;
+      <div class="chips">${u && !inMe ? `<button class="btn ${full ? 'soft' : 'primary'} vol-btn" data-vme="${m.id}|${t.key}">🙋 Je m'inscris</button>` : ''}${Auth.volView() ? '' : `<button class="btn soft vol-btn" data-vadd="${m.id}|${t.key}">${I.plus}<span>Inscrire quelqu'un</span></button>`}</div></div>`;
   }
   function matchBlock(m) {
     const f = filled(m), n = needed(m);

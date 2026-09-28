@@ -756,6 +756,171 @@ do $cron$ begin
   exception when others then raise notice 'Sauvegarde automatique non programmée : %', sqlerrm;
   end;
 end $cron$;
+-- (3.42) Un code personnel par licencié : le joueur (ou ses parents) n'y voit que ses propres informations, jamais celles des autres joueurs.
+-- Seuls les responsables du club voient et impriment les codes. Les anciens liens d'équipe (parents, joueurs) ne donnent plus accès à rien.
+create table if not exists member_codes (player_id text primary key, code text not null unique, created_at timestamptz not null default now(), used_at timestamptz);
+alter table member_codes enable row level security;
+-- 8 caractères sans I, L, O, 0, 1 (qu'on confond à la lecture)
+create or replace function raincy_code() returns text language sql volatile as $$
+  select string_agg(substr('ABCDEFGHJKMNPQRSTUVWXYZ23456789', 1 + get_byte(decode(replace(gen_random_uuid()::text, '-', ''), 'hex'), i) % 31, 1), '')
+  from unnest(array[0, 1, 2, 3, 4, 5, 10, 11]) i $$;
+create or replace function raincy_member(p_code text) returns items language plpgsql stable security definer set search_path = public as $$
+declare c text := upper(regexp_replace(coalesce(p_code, ''), '[^A-Za-z0-9]', '', 'g')); pl items;
+begin
+  if length(c) <> 8 then raise exception 'CODE_PERSO'; end if;
+  select i.* into pl from member_codes mc join items i on i.col = 'players' and i.id = mc.player_id and not i.deleted where mc.code = c;
+  if pl.id is null then raise exception 'CODE_PERSO'; end if;
+  return pl; end $$;
+create or replace function raincy_member_teams(pl items) returns text[] language sql immutable as $$
+  select array(select jsonb_array_elements_text(case when jsonb_typeof(pl.data->'teamIds') = 'array' then pl.data->'teamIds' else '[]'::jsonb end)) $$;
+-- les codes des joueurs demandés (créés s'il le faut). Le responsable voit tous les codes et peut en refaire un (« p_renew » : l'ancien ne marche plus).
+-- Un coach ne voit que les joueurs de ses catégories, et seulement les codes qu'il n'a pas encore remis (case « remis ») ; le responsable les garde tous.
+alter table member_codes add column if not exists given_at timestamptz;
+alter table member_codes add column if not exists given_by text;
+alter table member_codes add column if not exists first_at timestamptz;
+create or replace function club_member_codes(k text, admin_k text, p_players text[], p_renew text[] default '{}') returns jsonb language plpgsql security definer set search_path = public as $$
+declare pid text; c text; adm boolean := admin_ok(admin_k); sid text := session_staff(k); st items; tids text[];
+begin if not club_ok(k) then raise exception 'CLE_CLUB'; end if;
+  if not adm then
+    if sid is null then raise exception 'ADMIN'; end if;
+    select * into st from items where col = 'staff' and id = sid and not deleted;
+    tids := array(select jsonb_array_elements_text(case when jsonb_typeof(st.data->'teamIds') = 'array' then st.data->'teamIds' else '[]'::jsonb end));
+  end if;
+  foreach pid in array coalesce(p_players, '{}') loop
+    if not exists (select 1 from items where col = 'players' and id = pid and not deleted and (adm or raincy_member_teams(items) && tids)) then continue; end if;
+    if adm and pid = any(coalesce(p_renew, '{}')) then delete from member_codes where player_id = pid; end if;
+    if not exists (select 1 from member_codes where player_id = pid) then
+      loop c := raincy_code(); exit when not exists (select 1 from member_codes where code = c); end loop;
+      insert into member_codes (player_id, code) values (pid, c);
+    end if;
+  end loop;
+  return (select coalesce(jsonb_object_agg(mc.player_id, jsonb_build_object('code', case when adm or mc.given_at is null then mc.code else null end, 'used', mc.used_at, 'first', mc.first_at,
+      'given', mc.given_at, 'by', case when adm then mc.given_by else null end)), '{}'::jsonb)
+    from member_codes mc join items i on i.col = 'players' and i.id = mc.player_id and not i.deleted
+    where mc.player_id = any(coalesce(p_players, '{}')) and (adm or raincy_member_teams(i) && tids));
+end $$;
+-- « remis » : le coach a donné le code à la famille (le responsable seul peut revenir en arrière)
+create or replace function club_member_given(k text, admin_k text, p_player text, p_given boolean) returns jsonb language plpgsql security definer set search_path = public as $$
+declare adm boolean := admin_ok(admin_k); sid text := session_staff(k); st items; pl items;
+begin if not club_ok(k) then raise exception 'CLE_CLUB'; end if;
+  if not adm and sid is null then raise exception 'ADMIN'; end if;
+  select * into pl from items where col = 'players' and id = p_player and not deleted;
+  if pl.id is null then raise exception 'DONNEES'; end if;
+  if not adm then
+    select * into st from items where col = 'staff' and id = sid and not deleted;
+    if not (raincy_member_teams(pl) && array(select jsonb_array_elements_text(case when jsonb_typeof(st.data->'teamIds') = 'array' then st.data->'teamIds' else '[]'::jsonb end))) then raise exception 'DONNEES'; end if;
+    if not coalesce(p_given, false) then raise exception 'ADMIN'; end if;
+  end if;
+  update member_codes set given_at = case when coalesce(p_given, false) then now() else null end,
+    given_by = case when coalesce(p_given, false) then coalesce((select trim(coalesce(s.data->>'firstName', '') || ' ' || coalesce(s.data->>'lastName', '')) from items s where s.col = 'staff' and s.id = sid), 'Responsable') else null end
+    where player_id = p_player;
+  return to_jsonb(true); end $$;
+-- ce que voit le licencié : ses matchs (sa convocation, sa réponse, son temps de jeu, ses buts), ses séances, les coachs ; rien sur les autres joueurs
+drop function if exists member_view(text);
+-- (« p_preview » : un responsable qui regarde la page « comme un parent » ne compte pas comme une activation)
+create or replace function member_view(p_code text, p_preview boolean default false) returns jsonb language plpgsql security definer set search_path = public as $$
+declare pl items := raincy_member(p_code); tids text[] := raincy_member_teams(pl); today text := to_char(current_date, 'YYYY-MM-DD'); first boolean;
+  season text := case when extract(month from current_date) >= 8 then to_char(current_date, 'YYYY') else to_char(current_date - interval '1 year', 'YYYY') end || '-08-01';
+begin
+  if not coalesce(p_preview, false) then
+    select first_at is null into first from member_codes where player_id = pl.id;
+    update member_codes set used_at = now(), first_at = coalesce(first_at, now()) where player_id = pl.id;
+    -- la première fois : « code activé » pour les responsables et les coachs de la catégorie (pour savoir qui relancer)
+    if first then begin
+      perform raincy_notify(array(select distinct x from (select a.staff_id x from accounts a where a.admin
+          union select st.id from items st join accounts a on a.staff_id = st.id where st.col = 'staff' and not st.deleted
+            and exists (select 1 from jsonb_array_elements_text(case when jsonb_typeof(st.data->'teamIds') = 'array' then st.data->'teamIds' else '[]'::jsonb end) y where y = any(tids))) z),
+        'codes', 'codes', '✅ Code activé', raincy_short(pl.data) || ' a ouvert son espace (joueur / parents)', '#/codes/' || coalesce(tids[1], ''));
+    exception when others then raise notice 'notification code : %', sqlerrm; end; end if;
+  end if;
+  return jsonb_build_object(
+    'team', coalesce((select string_agg(t.data->>'name', ' · ' order by t.data->>'name') from items t where t.col = 'teams' and not t.deleted and t.id = any(tids)), ''),
+    'me', jsonb_build_object('id', pl.id, 'name', raincy_short(pl.data), 'firstName', pl.data->>'firstName', 'number', pl.data->>'number', 'birth', pl.data->>'birth',
+      'wb', (select max(w->>'day') from jsonb_array_elements(case when jsonb_typeof(pl.data->'wellness') = 'array' then pl.data->'wellness' else '[]'::jsonb end) w)),
+    'club', (select jsonb_build_object('name', data->>'name', 'fieldName', data->>'fieldName') from items where col = 'club' and id = 'club' and not deleted),
+    'volTasks', (select data->'volTasks' from items where col = 'club' and id = 'club' and not deleted),
+    'coaches', (select coalesce(jsonb_agg(jsonb_build_object('name', trim(coalesce(st.data->>'firstName', '') || ' ' || coalesce(st.data->>'lastName', '')), 'role', st.data->>'role', 'phone', st.data->>'phone')
+        order by st.data->>'lastName'), '[]'::jsonb) from items st where st.col = 'staff' and not st.deleted and st.data->>'phoneShow' = 'parents' and coalesce(st.data->>'phone', '') <> ''
+        and exists (select 1 from jsonb_array_elements_text(case when jsonb_typeof(st.data->'teamIds') = 'array' then st.data->'teamIds' else '[]'::jsonb end) x where x = any(tids))),
+    'matches', (select coalesce(jsonb_agg(x order by x->>'date', x->>'time'), '[]'::jsonb) from (
+      select jsonb_build_object('id', i.id, 'date', i.data->>'date', 'time', i.data->>'time', 'rdv', i.data->>'rdv', 'opponent', i.data->>'opponent',
+        'home', coalesce((i.data->>'home')::boolean, false), 'place', i.data->>'place', 'competition', i.data->>'competition',
+        'exempt', coalesce((i.data->>'exempt')::boolean, false), 'played', coalesce((i.data->>'played')::boolean, false), 'gf', i.data->'gf', 'ga', i.data->'ga',
+        'team', (select t.data->>'name' from items t where t.col = 'teams' and t.id = i.data->>'teamId'),
+        'open', not coalesce((i.data->>'played')::boolean, false) and i.data->>'date' >= today,
+        'convoked', coalesce(i.data->'convoked', '[]'::jsonb) ? pl.id, 'published', jsonb_array_length(coalesce(i.data->'convoked', '[]'::jsonb)) > 0,
+        'answer', (select a.status from answers a where a.match_id = i.id and a.player_id = pl.id),
+        'seats', (select a.seats from answers a where a.match_id = i.id and a.player_id = pl.id),
+        'talk', case when not coalesce((i.data->>'played')::boolean, false) and i.data->>'date' >= today then jsonb_build_object(
+          'objective', i.data#>>'{prep,talk,objective}', 'keys', coalesce(i.data#>'{prep,talk,keys}', '[]'::jsonb), 'final', i.data#>>'{prep,talk,final}',
+          'video', i.data#>>'{prep,talk,videoUrl}', 'system', i.data#>>'{prep,plan,system}') else null end,
+        'my', case when coalesce((i.data->>'played')::boolean, false) and coalesce(i.data->'convoked', '[]'::jsonb) ? pl.id then jsonb_build_object(
+          'min', i.data#>>array['minutes', pl.id], 'g', i.data#>>array['stats', pl.id, 'g'], 'a', i.data#>>array['stats', pl.id, 'a']) else null end,
+        'photos', (select coalesce(jsonb_agg(ph.id order by ph.created_at), '[]'::jsonb) from match_photos ph where ph.match_id = i.id),
+        -- bénévoles : combien sont inscrits à chaque tâche, et si c'est moi (sans les noms des autres familles)
+        'vol', case when i.data->>'date' >= today and jsonb_typeof(i.data->'vol') = 'object' then (select coalesce(jsonb_object_agg(v.key,
+            (select coalesce(jsonb_agg(jsonb_build_object('mine', coalesce(e->>'pid', '') = pl.id, 'name', case when coalesce(e->>'pid', '') = pl.id then e->>'name' else null end)), '[]'::jsonb)
+             from jsonb_array_elements(case when jsonb_typeof(v.value) = 'array' then v.value else '[]'::jsonb end) e)), '{}'::jsonb) from jsonb_each(i.data->'vol') v) else '{}'::jsonb end,
+        -- covoiturage : les voitures et leurs places ; le nom du conducteur seulement pour la voiture de mon enfant
+        'carpool', (select coalesce(jsonb_agg(jsonb_build_object('seats', coalesce((c->>'seats')::int, 0), 'from', c->>'from', 'time', c->>'time',
+            'n', jsonb_array_length(case when jsonb_typeof(c->'kids') = 'array' then c->'kids' else '[]'::jsonb end),
+            'mine', coalesce(c->'kids', '[]'::jsonb) ? pl.id, 'driver', case when coalesce(c->'kids', '[]'::jsonb) ? pl.id then c->>'driver' else null end)), '[]'::jsonb)
+          from jsonb_array_elements(case when jsonb_typeof(i.data->'carpool') = 'array' then i.data->'carpool' else '[]'::jsonb end) c)) x
+      from items i where i.col = 'matches' and not i.deleted and i.data->>'teamId' = any(tids)
+        and i.data->>'date' between season and to_char(current_date + 60, 'YYYY-MM-DD')) s),
+    'trainings', (select coalesce(jsonb_agg(jsonb_build_object('date', i.data->>'date', 'time', i.data->>'time', 'title', i.data->>'title') order by i.data->>'date', i.data->>'time'), '[]'::jsonb)
+      from items i where i.col = 'trainings' and not i.deleted and not coalesce((i.data->>'model')::boolean, false) and i.data->>'teamId' = any(tids)
+        and i.data->>'date' between today and to_char(current_date + 14, 'YYYY-MM-DD')));
+end $$;
+-- présent / absent pour un match où il est convoqué (et les places libres dans la voiture)
+create or replace function member_answer(p_code text, p_match text, p_status text, p_seats int default 0) returns jsonb language plpgsql security definer set search_path = public as $$
+declare pl items := raincy_member(p_code); m items;
+begin
+  select * into m from items where col = 'matches' and id = p_match and not deleted;
+  if m.id is null or not (m.data->>'teamId' = any(raincy_member_teams(pl))) or not (coalesce(m.data->'convoked', '[]'::jsonb) ? pl.id) then raise exception 'DONNEES'; end if;
+  if coalesce((m.data->>'played')::boolean, false) or m.data->>'date' < to_char(current_date, 'YYYY-MM-DD') then raise exception 'MATCH_PASSE'; end if;
+  if coalesce(p_status, '') = '' then delete from answers where match_id = p_match and player_id = pl.id; return to_jsonb(true); end if;
+  if p_status not in ('oui', 'non') then raise exception 'DONNEES'; end if;
+  insert into answers (match_id, player_id, status, seats, by_coach) values (p_match, pl.id, p_status, greatest(0, least(coalesce(p_seats, 0), 8)), false)
+    on conflict (match_id, player_id) do update set status = excluded.status, seats = excluded.seats, by_coach = false, updated_at = now();
+  return to_jsonb(true); end $$;
+-- le questionnaire de bien-être du jour
+create or replace function member_wellness(p_code text, p_mood int, p_mental int, p_sleep int, p_legs int, p_sore int, p_note text) returns jsonb language plpgsql security definer set search_path = public as $$
+declare pl items := raincy_member(p_code); w jsonb; d text := to_char(current_date, 'YYYY-MM-DD');
+begin
+  if least(p_mood, p_mental, p_sleep, p_legs, p_sore) < 1 or greatest(p_mood, p_mental, p_sleep, p_legs, p_sore) > 10 then raise exception 'DONNEES'; end if;
+  w := (select coalesce(jsonb_agg(e), '[]'::jsonb) from (select e from jsonb_array_elements(case when jsonb_typeof(pl.data->'wellness') = 'array' then pl.data->'wellness' else '[]'::jsonb end) e where e->>'day' <> d order by e->>'day' desc limit 119) q)
+    || jsonb_build_array(jsonb_build_object('day', d, 'mood', p_mood, 'mental', p_mental, 'sleep', p_sleep, 'legs', p_legs, 'sore', p_sore, 'note', left(coalesce(p_note, ''), 200), 'self', true));
+  update items set data = jsonb_set(data, '{wellness}', w), updated_at = (extract(epoch from now()) * 1000)::bigint, rev = nextval('items_rev') where col = 'players' and id = pl.id;
+  return to_jsonb(true); end $$;
+-- un parent s'inscrit (ou se retire) pour une tâche de bénévole d'un match de la catégorie de son enfant
+create or replace function member_volunteer(p_code text, p_match text, p_task text, p_label text, p_name text, p_remove boolean) returns jsonb language plpgsql security definer set search_path = public as $$
+declare pl items := raincy_member(p_code); m items; v jsonb; lst jsonb; nm text := left(trim(coalesce(p_name, '')), 40);
+begin
+  if coalesce(p_task, '') !~ '^[A-Za-z0-9_-]{1,30}$' or (nm = '' and not coalesce(p_remove, false)) then raise exception 'DONNEES'; end if;
+  select * into m from items where col = 'matches' and id = p_match and not deleted;
+  if m.id is null or not (m.data->>'teamId' = any(raincy_member_teams(pl))) then raise exception 'DONNEES'; end if;
+  if m.data->>'date' < to_char(current_date, 'YYYY-MM-DD') then raise exception 'MATCH_PASSE'; end if;
+  v := case when jsonb_typeof(m.data->'vol') = 'object' then m.data->'vol' else '{}'::jsonb end;
+  lst := case when jsonb_typeof(v->p_task) = 'array' then v->p_task else '[]'::jsonb end;
+  if coalesce(p_remove, false) then
+    lst := (select coalesce(jsonb_agg(e), '[]'::jsonb) from jsonb_array_elements(lst) e where coalesce(e->>'pid', '') <> pl.id);
+  elsif not exists (select 1 from jsonb_array_elements(lst) e where coalesce(e->>'pid', '') = pl.id) then
+    if jsonb_array_length(lst) >= 8 then raise exception 'COMPLET'; end if;
+    lst := lst || jsonb_build_array(jsonb_build_object('id', substr(md5(random()::text), 1, 12), 'name', nm, 'parent', true, 'pid', pl.id, 'label', left(coalesce(p_label, ''), 40)));
+  end if;
+  update items set data = jsonb_set(data, '{vol}', v || jsonb_build_object(p_task, lst)), updated_at = (extract(epoch from now()) * 1000)::bigint, rev = nextval('items_rev')
+    where col = 'matches' and id = p_match;
+  return (select coalesce(jsonb_agg(jsonb_build_object('mine', coalesce(e->>'pid', '') = pl.id, 'name', case when coalesce(e->>'pid', '') = pl.id then e->>'name' else null end)), '[]'::jsonb) from jsonb_array_elements(lst) e); end $$;
+create or replace function member_photo(p_code text, p_id uuid) returns text language plpgsql stable security definer set search_path = public as $$
+declare pl items := raincy_member(p_code);
+begin return (select ph.data from match_photos ph join items i on i.col = 'matches' and i.id = ph.match_id and not i.deleted where ph.id = p_id and i.data->>'teamId' = any(raincy_member_teams(pl))); end $$;
+revoke all on function raincy_member(text), raincy_code() from public, anon, authenticated;
+grant execute on function club_member_codes(text, text, text[], text[]), club_member_given(text, text, text, boolean), member_view(text, boolean), member_answer(text, text, text, int), member_wellness(text, int, int, int, int, int, text),
+  member_volunteer(text, text, text, text, text, boolean), member_photo(text, uuid) to anon, authenticated;
+-- les anciens liens d'équipe montraient les noms, réponses et temps de jeu de toute l'équipe : ils sont fermés
+revoke execute on function parent_view(text), parent_answer(text, text, text, text, int, text), parent_volunteer(text, text, text, text, text, boolean), parent_photo(text, uuid),
+  player_view(text), player_answer(text, text, text, text, text), player_wellness(text, text, int, int, int, int, int, text) from public, anon, authenticated;
 notify pgrst, 'reload schema';
 `;
   }
@@ -793,6 +958,8 @@ notify pgrst, 'reload schema';
     pull: since => rpc('club_pull', { p_since: since || 0 }),
     push: list => rpc('club_push', { p: list }),
     // parents (3.8)
+    memberCodes: (ids, renew) => rpc('club_member_codes', { admin_k: adminKey() || null, p_players: ids, p_renew: renew || [] }),
+    memberGiven: (id, given) => rpc('club_member_given', { admin_k: adminKey() || null, p_player: id, p_given: !!given }),
     parentLink: (teamKey, teamIds, teamName, renew) => rpc('club_parent_link', { p_team_key: teamKey, p_team_ids: teamIds, p_team_name: teamName, p_new: !!renew }),
     playerLink: (teamKey, teamIds, teamName, renew) => rpc('club_player_link', { p_team_key: teamKey, p_team_ids: teamIds, p_team_name: teamName, p_new: !!renew }),
     answers: matchIds => rpc('club_answers', { p_matches: matchIds }),
