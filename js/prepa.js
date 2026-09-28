@@ -105,6 +105,7 @@ const Prepa = (() => {
       if (b.dataset.pa === 'show') return show(m);
       if (b.dataset.pa === 'share') return share(m);
       if (b.dataset.pa === 'print') return printDialog(m);
+      if (b.dataset.players) return Parents.sharePlayers(b.dataset.players);
       // a proposition added as a new line of a text box, or put in the first empty key
       if (b.dataset.add) {
         const [path, txt] = [b.dataset.add, b.dataset.txt];
@@ -191,9 +192,11 @@ const Prepa = (() => {
       ${[0, 1, 2].map(i => `<label class="fld inline prep-key"><b>${i + 1}</b><input data-p="talk.keys.${i}" value="${esc(keys[i] || '')}" placeholder="Clé n°${i + 1}"></label>`).join('')}
       ${chipsAdd('talk.keys', KEY_CHIPS)}
       <label class="fld"><span>3 · Le mot de la fin</span>${area('talk.final', t.final, Supporters.SLOGAN, 2)}</label>
+      <label class="fld"><span>🔗 Lien vidéo pour les joueurs (YouTube, Drive…)</span><input data-p="talk.videoUrl" value="${esc(t.videoUrl || '')}" placeholder="https://youtu.be/…  (visible sur la page des joueurs)" inputmode="url"></label>
       <label class="fld"><span>🎬 Briefing vidéo à montrer (sur cet appareil)</span><select data-p="talk.briefing"><option value="">Aucun</option>${bs.map(b => `<option value="${b.id}" ${t.briefing === b.id ? 'selected' : ''}>${esc(b.name)} (${b.items.length})</option>`).join('')}</select></label>
       <label class="fld inline"><span>Durée visée</span><select data-p="talk.minutes">${[5, 8, 10, 12].map(n => `<option value="${n}" ${+(t.minutes || 8) === n ? 'selected' : ''}>${n} min</option>`).join('')}</select></label>
-      <button class="btn primary wide" data-pa="show">${I.play}<span>Lancer la causerie en plein écran</span></button></section>`;
+      <div class="chips"><button class="btn primary" data-pa="show">${I.play}<span>Lancer la causerie en plein écran</span></button>${Cloud.ready() ? `<button class="btn soft" data-players="${m.teamId}">${I.share}<span>Page des joueurs</span></button>` : ''}</div>
+      <p class="muted small">L'objectif, les 3 clés, le mot de la fin et le lien vidéo apparaissent sur la page des joueurs (seniors, U17, U18).</p></section>`;
   }
 
   // 5 · match day: the times, the warm-up, the kit

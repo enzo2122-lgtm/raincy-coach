@@ -255,6 +255,7 @@ const Views = (() => {
     root.onclick = async e => {
       const b = e.target.closest('button'); if (!b || b.closest('#teamPeople')) return;
       if (b.dataset.parents) return Parents.shareDialog(b.dataset.parents);
+      if (b.dataset.players) return Parents.sharePlayers(b.dataset.players);
       if (b.dataset.fmt) { t.format = b.dataset.fmt; save(); return render(); }
       if (b.dataset.act === 'delete' && await confirmBox(`Supprimer la catégorie ${t.name} ? Les joueurs et dirigeants restent dans le club.`)) {
         [...S().players, ...S().staff].forEach(p => p.teamIds = (p.teamIds || []).filter(x => x !== t.id));

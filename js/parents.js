@@ -44,11 +44,38 @@ const Parents = (() => {
         { label: 'Copier', icon: I.copy, onClick: () => { navigator.clipboard.writeText(url).then(() => toast('Lien copié')).catch(() => toast('Sélectionne le lien et copie-le')); return false; } },
         { label: 'WhatsApp', kind: 'primary', icon: I.share, onClick: () => { window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank'); return false; } }] });
   }
+  /* ---------- the players' page (seniors, U17, U18…): its own secret link ---------- */
+  const playersUrl = token => `${location.origin}${location.pathname.replace(/index\.html$/, '')}joueurs.html#t=${encodeURIComponent(token)}`;
+  async function playerLinkOf(teamId, renew) {
+    const f = family(teamId); if (!f) throw new Error('Choisis d\'abord une catégorie.');
+    const links = S().ui.playerLinks = S().ui.playerLinks || {};
+    if (!renew && links[f.key]) return playersUrl(links[f.key]);
+    const token = await Cloud.playerLink(f.key, f.ids, f.name, renew);
+    links[f.key] = token; Store.persistNow();
+    return playersUrl(token);
+  }
+  async function sharePlayers(teamId, renew) {
+    if (!Cloud.ready()) return toast('Il faut être connecté au serveur du club', 'err');
+    const f = family(teamId); let url;
+    const b = UI.busy('Préparation du lien…');
+    try { url = await playerLinkOf(teamId, renew); } catch (e) { return toast(needUpdate(e), 'err'); } finally { b.done(); }
+    const text = `${S().club.name} · ${f.name}\nL'espace des joueurs : matchs, convocations (réponds présent ou absent), la causerie du match, ton temps de jeu et tes stats de la saison.\n${url}`;
+    modal({ title: `Page des joueurs · ${f.name}`, noFocus: true,
+      body: `<p>Envoie ce lien dans le groupe WhatsApp des joueurs. Ils y voient les matchs, répondent <b>présent</b> ou <b>absent</b>, lisent la causerie du prochain match (objectif, 3 clés, vidéo) et suivent leur temps de jeu et leurs stats.</p>
+        <label class="fld"><span>Lien de la page des joueurs</span><input id="plLink" value="${esc(url)}" readonly></label>
+        <p class="muted small">Pour les grands (seniors, U17, U18). Seuls le prénom et l'initiale du nom apparaissent. « Nouveau lien » annule l'ancien.</p>`,
+      onOpen: r => { const i = $('#plLink', r); i.onclick = () => i.select(); },
+      actions: [
+        { label: 'Nouveau lien', onClick: () => { setTimeout(() => UI.confirmBox('Créer un nouveau lien ? L\'ancien ne marchera plus : il faudra renvoyer le nouveau aux joueurs.', 'Nouveau lien').then(ok => ok && sharePlayers(teamId, true)), 60); } },
+        { label: 'Ouvrir', icon: I.next, onClick: () => { window.open(url, '_blank'); return false; } },
+        { label: 'Copier', icon: I.copy, onClick: () => { navigator.clipboard.writeText(url).then(() => toast('Lien copié')).catch(() => toast('Sélectionne le lien et copie-le')); return false; } },
+        { label: 'WhatsApp', kind: 'primary', icon: I.share, onClick: () => { window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank'); return false; } }] });
+  }
   // Card on a category page
   function teamCard(t) {
     return `<section class="card parents-card"><div class="row-head"><h2>${I.team}Page des parents</h2>
-      <button class="btn primary" data-parents="${t.id}">${I.share}<span>Lien pour les parents</span></button></div>
-      <p class="muted small">Une page en lecture seule pour les parents de la catégorie : matchs, horaires, lieux, séances, covoiturage, et leurs réponses présent / absent aux convocations.</p></section>`;
+      <div class="chips"><button class="btn primary" data-parents="${t.id}">${I.share}<span>Lien pour les parents</span></button><button class="btn soft" data-players="${t.id}">${I.share}<span>Lien pour les joueurs</span></button></div></div>
+      <p class="muted small">Parents : matchs, horaires, lieux, séances, covoiturage, et leurs réponses présent / absent. Joueurs (seniors, U17, U18) : en plus la causerie du match, leur temps de jeu et leurs stats de la saison.</p></section>`;
   }
 
   /* ---------- answers to a convocation (on the match page) ---------- */
@@ -219,6 +246,7 @@ const Parents = (() => {
     ab.onclick = async e => {
       const b = e.target.closest('button'); if (!b) return;
       if (b.dataset.parents) return shareDialog(b.dataset.parents);
+      if (b.dataset.players) return sharePlayers(b.dataset.players);
       if (b.hasAttribute('data-remind')) return remind(m, conv);
       if (b.dataset.ans) {
         const c = cache[m.id] = cache[m.id] || { at: 0, rows: {} }, cur = c.rows[b.dataset.ans], next = !cur ? 'oui' : cur.status === 'oui' ? 'non' : '';
@@ -236,5 +264,5 @@ const Parents = (() => {
     }).catch(e => { if (ab.isConnected) drawAnswers(ab, m, conv, e.code === 'MISE_A_JOUR' ? needUpdate(e) : ''); });
   }
 
-  return { shareDialog, teamCard, linkOf, mountMatch, carText };
+  return { shareDialog, sharePlayers, teamCard, linkOf, mountMatch, carText };
 })();

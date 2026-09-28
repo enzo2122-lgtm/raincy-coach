@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>FA Le Raincy · Parents</title>
-<meta name="description" content="Matchs, horaires et convocations de l'équipe, pour les parents">
+<title>FA Le Raincy · Joueurs</title>
+<meta name="description" content="Matchs, convocations, causerie et stats de l'équipe, pour les joueurs">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#0e1d45">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Raincy Parents">
+<meta name="apple-mobile-web-app-title" content="Raincy Joueurs">
 <link rel="icon" href="icons/crest.png">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <style>
@@ -74,13 +74,40 @@ button, select { font: inherit; }
 .ph-view { position: fixed; inset: 0; background: rgba(0,0,0,.92); display: grid; place-items: center; z-index: 9; padding: 16px; color: #fff; text-align: center; }
 .ph-view[hidden] { display: none; }
 .ph-view img { max-width: 100%; max-height: 85vh; border-radius: 8px; }
+.who { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.who label { display: flex; flex-direction: column; gap: 6px; width: 100%; font-weight: 700; }
+.who select { min-height: 46px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 0 10px; font-weight: 600; }
+.b.small { min-height: 36px; font-size: 14px; }
+.tiles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.tiles div { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 10px 6px; text-align: center; }
+.tiles b { display: block; font-size: 22px; } .tiles span { font-size: 12px; color: var(--muted); }
+.card.next { border: 2px solid var(--brand); }
+.mine-box { margin: 10px 0; padding: 12px; border-radius: 12px; background: color-mix(in srgb, var(--brand) 9%, var(--surface)); display: flex; flex-direction: column; gap: 8px; }
+.mine-box.off { color: var(--muted); }
+.mine-box .b { flex: 1; min-height: 50px; font-size: 16px; }
+.talk { margin: 12px 0; padding: 14px; border-radius: 14px; background: var(--navy); color: #fff; }
+.talk h3 { margin: 0 0 6px; font-size: 17px; color: #e2c27d; }
+.talk .obj { font-weight: 800; font-size: 17px; margin: 4px 0 8px; }
+.talk .info, .talk .info b { color: #dbe2f5; }
+.keys { margin: 6px 0; padding-left: 22px; font-weight: 700; font-size: 16px; } .keys li + li { margin-top: 4px; }
+.final { font-style: italic; opacity: .92; margin: 8px 0 0; }
+.b.vid { display: inline-flex; align-items: center; text-decoration: none; background: #e2c27d; color: #0e1d45; border: 0; }
+.conv summary { cursor: pointer; margin-top: 8px; }
+.me-line { margin: 4px 0; } .me-line b { color: var(--brand); }
+.grid2 { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; font-size: 14px; margin-top: 6px; }
+.grid2 .mine, .board .mine { color: var(--brand); font-weight: 800; }
+.boards { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; }
+.board { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; }
+.board h3 { margin: 0 0 6px; font-size: 15px; }
+.board p { display: flex; justify-content: space-between; margin: 3px 0; font-size: 14px; }
+@media (max-width: 480px) { .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 </style>
 </head>
 <body>
-<header class="top"><div class="top-in"><img src="icons/crest.png" alt=""><div><p id="club">FA Le Raincy · Espace parents</p><h1 id="team">Chargement…</h1></div></div></header>
+<header class="top"><div class="top-in"><img src="icons/crest.png" alt=""><div><p id="club">FA Le Raincy · Espace joueurs</p><h1 id="team">Chargement…</h1></div></div></header>
 <main id="page"><p class="empty">Chargement des informations de l'équipe…</p></main>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 <script src="js/config.js?v=75"></script>
-<script src="js/parents-page.js?v=75"></script>
+<script src="js/players-page.js?v=75"></script>
 </body>
 </html>

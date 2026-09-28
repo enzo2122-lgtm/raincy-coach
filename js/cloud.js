@@ -363,6 +363,78 @@ begin if not club_ok(k) then raise exception 'CLE_CLUB'; end if;
   insert into answers (match_id, player_id, status, by_coach) values (p_match, p_player, p_status, true)
     on conflict (match_id, player_id) do update set status = excluded.status, by_coach = true, updated_at = now();
   return to_jsonb(true); end $$;
+-- Joueurs (version 3.35) : la page des joueurs d'une catégorie (seniors, U17, U18…), avec son propre lien secret.
+-- En plus de la page des parents : la causerie du prochain match (objectif, 3 clés, mot du coach, vidéo), et pour chaque match joué
+-- le temps de jeu, les buts et les passes de chacun (prénom et initiale seulement), sur toute la saison.
+create table if not exists player_links (token text primary key, team_key text not null unique, team_ids text[] not null default '{}',
+  team_name text not null default '', created_at timestamptz not null default now());
+alter table player_links enable row level security;
+create or replace function club_player_link(k text, p_team_key text, p_team_ids text[], p_team_name text, p_new boolean) returns jsonb language plpgsql security definer set search_path = public as $$
+declare t text;
+begin if not club_ok(k) then raise exception 'CLE_CLUB'; end if;
+  if coalesce(p_team_key, '') = '' or coalesce(array_length(p_team_ids, 1), 0) = 0 then raise exception 'DONNEES'; end if;
+  select token into t from player_links where team_key = p_team_key;
+  if t is null or p_new then
+    t := substr(raincy_token(), 1, 24);
+    insert into player_links (token, team_key, team_ids, team_name) values (t, p_team_key, p_team_ids, coalesce(p_team_name, ''))
+      on conflict (team_key) do update set token = excluded.token, team_ids = excluded.team_ids, team_name = excluded.team_name, created_at = now();
+  else update player_links set team_ids = p_team_ids, team_name = coalesce(p_team_name, team_name) where team_key = p_team_key;
+  end if;
+  return to_jsonb(t); end $$;
+create or replace function player_view(p_token text) returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare l player_links; today text := to_char(current_date, 'YYYY-MM-DD');
+  season text := case when extract(month from current_date) >= 8 then to_char(current_date, 'YYYY') else to_char(current_date - interval '1 year', 'YYYY') end || '-08-01';
+begin
+  select * into l from player_links where coalesce(p_token, '') <> '' and token = p_token;
+  if l.token is null then raise exception 'LIEN_JOUEURS'; end if;
+  return jsonb_build_object('team', l.team_name,
+    'club', (select jsonb_build_object('name', data->>'name', 'fieldName', data->>'fieldName') from items where col = 'club' and id = 'club' and not deleted),
+    'coaches', (select coalesce(jsonb_agg(jsonb_build_object('name', trim(coalesce(st.data->>'firstName', '') || ' ' || coalesce(st.data->>'lastName', '')), 'role', st.data->>'role', 'phone', st.data->>'phone')
+        order by st.data->>'lastName'), '[]'::jsonb) from items st where st.col = 'staff' and not st.deleted and st.data->>'phoneShow' = 'parents' and coalesce(st.data->>'phone', '') <> ''
+        and exists (select 1 from jsonb_array_elements_text(case when jsonb_typeof(st.data->'teamIds') = 'array' then st.data->'teamIds' else '[]'::jsonb end) x where x = any(l.team_ids))),
+    'roster', (select coalesce(jsonb_agg(jsonb_build_object('id', p.id, 'name', raincy_short(p.data), 'number', p.data->>'number') order by p.data->>'firstName'), '[]'::jsonb)
+      from items p where p.col = 'players' and not p.deleted
+        and exists (select 1 from jsonb_array_elements_text(case when jsonb_typeof(p.data->'teamIds') = 'array' then p.data->'teamIds' else '[]'::jsonb end) x where x = any(l.team_ids))),
+    'matches', (select coalesce(jsonb_agg(x order by x->>'date', x->>'time'), '[]'::jsonb) from (
+      select jsonb_build_object('id', i.id, 'date', i.data->>'date', 'time', i.data->>'time', 'rdv', i.data->>'rdv', 'opponent', i.data->>'opponent',
+        'home', coalesce((i.data->>'home')::boolean, false), 'place', i.data->>'place', 'competition', i.data->>'competition',
+        'exempt', coalesce((i.data->>'exempt')::boolean, false), 'played', coalesce((i.data->>'played')::boolean, false), 'gf', i.data->'gf', 'ga', i.data->'ga',
+        'team', (select t.data->>'name' from items t where t.col = 'teams' and t.id = i.data->>'teamId'),
+        'open', not coalesce((i.data->>'played')::boolean, false) and i.data->>'date' >= today,
+        -- la causerie du match à venir : ce que le coach veut que les joueurs retiennent
+        'talk', case when not coalesce((i.data->>'played')::boolean, false) and i.data->>'date' >= today then jsonb_build_object(
+          'objective', i.data#>>'{prep,talk,objective}', 'keys', coalesce(i.data#>'{prep,talk,keys}', '[]'::jsonb), 'final', i.data#>>'{prep,talk,final}',
+          'video', i.data#>>'{prep,talk,videoUrl}', 'system', i.data#>>'{prep,plan,system}') else null end,
+        'players', case when not coalesce((i.data->>'played')::boolean, false) and i.data->>'date' >= today then (
+          select coalesce(jsonb_agg(jsonb_build_object('id', p.id, 'name', raincy_short(p.data), 'answer', a.status) order by p.data->>'firstName'), '[]'::jsonb)
+          from items p left join answers a on a.match_id = i.id and a.player_id = p.id
+          where p.col = 'players' and not p.deleted and p.id in (select jsonb_array_elements_text(coalesce(i.data->'convoked', '[]'::jsonb)))) else '[]'::jsonb end,
+        -- match joué : temps de jeu, buts, passes de chaque convoqué
+        'stats', case when coalesce((i.data->>'played')::boolean, false) then (
+          select coalesce(jsonb_agg(jsonb_build_object('id', p.id, 'min', i.data#>>array['minutes', p.id], 'g', i.data#>>array['stats', p.id, 'g'], 'a', i.data#>>array['stats', p.id, 'a'])), '[]'::jsonb)
+          from items p where p.col = 'players' and p.id in (select jsonb_array_elements_text(coalesce(i.data->'convoked', '[]'::jsonb)))) else '[]'::jsonb end,
+        'duration', i.data->'duration') x
+      from items i where i.col = 'matches' and not i.deleted and i.data->>'teamId' = any(l.team_ids)
+        and i.data->>'date' between season and to_char(current_date + 60, 'YYYY-MM-DD')) s),
+    'trainings', (select coalesce(jsonb_agg(jsonb_build_object('date', i.data->>'date', 'time', i.data->>'time', 'title', i.data->>'title') order by i.data->>'date', i.data->>'time'), '[]'::jsonb)
+      from items i where i.col = 'trainings' and not i.deleted and not coalesce((i.data->>'model')::boolean, false) and i.data->>'teamId' = any(l.team_ids)
+        and i.data->>'date' between today and to_char(current_date + 14, 'YYYY-MM-DD')));
+end $$;
+-- Un joueur répond présent / absent à sa convocation (les coachs voient la réponse avec celles des parents)
+create or replace function player_answer(p_token text, p_match text, p_player text, p_status text, p_note text default null) returns jsonb language plpgsql security definer set search_path = public as $$
+declare l player_links; m items;
+begin
+  select * into l from player_links where coalesce(p_token, '') <> '' and token = p_token;
+  if l.token is null then raise exception 'LIEN_JOUEURS'; end if;
+  select * into m from items where col = 'matches' and id = p_match and not deleted;
+  if m.id is null or not (m.data->>'teamId' = any(l.team_ids)) or not (coalesce(m.data->'convoked', '[]'::jsonb) ? p_player) then raise exception 'DONNEES'; end if;
+  if coalesce((m.data->>'played')::boolean, false) or m.data->>'date' < to_char(current_date, 'YYYY-MM-DD') then raise exception 'MATCH_PASSE'; end if;
+  if coalesce(p_status, '') = '' then delete from answers where match_id = p_match and player_id = p_player; return to_jsonb(true); end if;
+  if p_status not in ('oui', 'non') then raise exception 'DONNEES'; end if;
+  insert into answers (match_id, player_id, status, seats, note, by_coach) values (p_match, p_player, p_status, 0, left(p_note, 200), false)
+    on conflict (match_id, player_id) do update set status = excluded.status, note = excluded.note, by_coach = false, updated_at = now();
+  return to_jsonb(true); end $$;
+grant execute on function club_player_link(text, text, text[], text, boolean), player_view(text), player_answer(text, text, text, text, text) to anon, authenticated;
 grant execute on function club_parent_link(text, text, text[], text, boolean), parent_view(text), parent_answer(text, text, text, text, int, text),
   club_answers(text, text[]), club_set_answer(text, text, text, text) to anon, authenticated;
 create or replace function club_photo_add(k text, p_match text, p_src text, p_data text, p_by text) returns jsonb language plpgsql security definer set search_path = public as $$
@@ -654,6 +726,7 @@ notify pgrst, 'reload schema';
     push: list => rpc('club_push', { p: list }),
     // parents (3.8)
     parentLink: (teamKey, teamIds, teamName, renew) => rpc('club_parent_link', { p_team_key: teamKey, p_team_ids: teamIds, p_team_name: teamName, p_new: !!renew }),
+    playerLink: (teamKey, teamIds, teamName, renew) => rpc('club_player_link', { p_team_key: teamKey, p_team_ids: teamIds, p_team_name: teamName, p_new: !!renew }),
     answers: matchIds => rpc('club_answers', { p_matches: matchIds }),
     // notifications and read receipts (3.15)
     pushKey: () => rpc('club_push_key'),
