@@ -201,9 +201,82 @@ const Analyse = (() => {
   }
   function briefingsDialog() {
     const list = briefings();
-    const close = modal({ title: 'Briefings vidéo', noFocus: true, body: list.length ? `<div class="list">${list.map(b => `<div class="list-item bf-item"><span class="li-main"><b>${esc(b.name)}</b><span class="muted">${b.items.length} séquence${b.items.length > 1 ? 's' : ''}</span></span>
-        <button class="btn primary" data-bopen="${b.id}">${I.play}<span>Ouvrir</span></button></div>`).join('')}</div>` : '<p class="muted">Pas encore de briefing. Dans une analyse, touche « Ajouter à un briefing » sous une séquence.</p>',
-      onOpen: r => $$('[data-bopen]', r).forEach(x => x.onclick = () => { close(); location.hash = '#/briefing/' + x.dataset.bopen; }) });
+    const close = modal({ title: 'Briefings vidéo', noFocus: true, body: `${list.length ? `<div class="list">${list.map(b => `<div class="list-item bf-item"><span class="li-main"><b>${esc(b.name)}</b><span class="muted">${b.items.length} séquence${b.items.length > 1 ? 's' : ''}</span></span>
+        <button class="icon-btn" data-bdl="${b.id}" aria-label="Télécharger ${esc(b.name)}" title="Télécharger">${I.download}</button><button class="btn primary" data-bopen="${b.id}">${I.play}<span>Ouvrir</span></button></div>`).join('')}</div>` : '<p class="muted">Pas encore de briefing. Dans une analyse, touche « Ajouter à un briefing » sous une séquence.</p>'}
+        <button class="btn soft wide" data-bimport style="margin-top:12px">${I.upload}<span>Importer un briefing (fichier .raincy-briefing)</span></button>
+        <p class="muted small">Un briefing téléchargé depuis un autre téléphone, une tablette ou un ordinateur se rouvre ici, avec ses vidéos et ses séquences.</p>`,
+      onOpen: r => {
+        $$('[data-bopen]', r).forEach(x => x.onclick = () => { close(); location.hash = '#/briefing/' + x.dataset.bopen; });
+        $$('[data-bdl]', r).forEach(x => x.onclick = () => { const b = briefings().find(y => y.id === x.dataset.bdl); close(); if (b) setTimeout(() => downloadDialog(b), 60); });
+        $('[data-bimport]', r).onclick = () => { close(); pickBriefingFile(); };
+      } });
+  }
+
+  /* ---------- a briefing on another device: one file with the briefing, its sequences and its videos ----------
+     « RAINCYBRIEF1 », the size of the description, the description (JSON), then the videos one after the other.
+     The file is shared like any other (Fichiers, Drive, WhatsApp, AirDrop, clé USB, ordinateur) and imported with « Importer un briefing ». */
+  const MAGIC = 'RAINCYBRIEF1\n';
+  const mo = n => n > 1048576 ? Math.round(n / 1048576) + ' Mo' : Math.max(1, Math.round(n / 1024)) + ' Ko';
+  async function mediaOf(b) {
+    const ids = [...new Set(b.items.map(it => it.mediaId))], out = [];
+    for (const id of ids) { const r = await Media.get(id); if (r) out.push(r); }
+    return out;
+  }
+  async function downloadDialog(b) {
+    const recs = await mediaOf(b), size = recs.reduce((a, r) => a + (r.blob ? r.blob.size : 0), 0), nYT = recs.filter(isYT).length;
+    modal({ title: `Télécharger « ${b.name} »`, noFocus: true, body: `<div class="src-list">
+      <button class="src-btn" data-dl="file">${I.layers}<span><b>Briefing à rouvrir dans l'appli</b><span class="muted small">Un fichier (${mo(size)}) avec les vidéos, les séquences, les commentaires et les joueurs. Enregistre-le dans Fichiers, Google Drive, sur une clé USB ou un ordinateur, puis rouvre-le sur un autre appareil avec « Briefings → Importer un briefing ».${nYT ? ' Les vidéos YouTube restent des liens : il faudra internet pour les voir.' : ''}</span></span></button>
+      <button class="src-btn" data-dl="video">${I.video}<span><b>Vidéo à regarder partout</b><span class="muted small">Un seul fichier vidéo avec les titres et les commentaires, lisible sur n'importe quel téléphone, ordinateur ou télé. Il ne se modifie plus.${nYT ? ' Les séquences YouTube n\'y seront pas.' : ''}</span></span></button></div>`,
+      onOpen: (r, close) => $$('[data-dl]', r).forEach(x => x.onclick = async () => {
+        close();
+        if (x.dataset.dl === 'video') { const items = await resolve(b); return items.length ? exportVideo(items, b.name) : toast('Aucune séquence à mettre dans la vidéo', 'err'); }
+        packBriefing(b, recs);
+      }),
+      actions: [{ label: 'Fermer' }] });
+  }
+  async function packBriefing(b, recs) {
+    const withBlob = recs.filter(r => r.blob);
+    const head = JSON.stringify({ v: 1, name: b.name, at: Date.now(), club: S().club.name || '', items: b.items,
+      media: recs.map(r => ({ id: r.id, ref: r.ref, kind: r.kind, name: r.name, mime: r.mime, url: r.url, host: r.host, thumb: r.thumb, clips: r.clips || [], matchId: r.matchId || null, createdAt: r.createdAt, size: r.blob ? r.blob.size : 0 })) });
+    const headBytes = new TextEncoder().encode(head);
+    const file = new Blob([MAGIC, String(headBytes.length).padStart(12, '0') + '\n', headBytes, ...withBlob.map(r => r.blob)], { type: 'application/octet-stream' });
+    const res = await Exporter.deliver(file, `${b.name.replace(/[^\wÀ-ÿ -]+/g, ' ').replace(/\s+/g, ' ').trim() || 'briefing'}.raincy-briefing`);
+    if (res === 'downloaded') toast('Briefing enregistré dans Téléchargements');
+  }
+  function pickBriefingFile() {
+    const inp = document.createElement('input'); inp.type = 'file';
+    inp.onchange = () => { const f = inp.files && inp.files[0]; if (f) importBriefing(f); };
+    inp.click();
+  }
+  async function importBriefing(file) {
+    const task = UI.bgTask(`Import du briefing « ${file.name} »…`);
+    try {
+      const top = await file.slice(0, MAGIC.length + 13).text();
+      if (!top.startsWith(MAGIC)) throw new Error('Ce fichier n\'est pas un briefing de l\'appli (fichier .raincy-briefing)');
+      const len = parseInt(top.slice(MAGIC.length, MAGIC.length + 12), 10), start = MAGIC.length + 13;
+      const head = JSON.parse(await file.slice(start, start + len).text());
+      let off = start + len, n = 0;
+      for (const m of head.media) {
+        task.step(`Import des vidéos du briefing : ${++n} sur ${head.media.length}`, n / head.media.length);
+        const blob = m.size ? file.slice(off, off + m.size, m.mime || 'video/mp4') : null; off += m.size || 0;
+        const have = await Media.get(m.id);
+        if (have) {
+          // already on this device: only the missing sequences are added
+          const ids = new Set((have.clips || []).map(c => c.id));
+          have.clips = [...(have.clips || []), ...(m.clips || []).filter(c => !ids.has(c.id))];
+          await Media.put(have); continue;
+        }
+        const rec = { id: m.id, ref: m.ref || 'lib', kind: m.kind, name: m.name, mime: m.mime, thumb: m.thumb, clips: m.clips || [], matchId: m.matchId, createdAt: m.createdAt || Date.now() };
+        if (m.kind === 'link') Object.assign(rec, { url: m.url, host: m.host });
+        else if (blob) rec.blob = new Blob([blob], { type: m.mime || 'video/mp4' });
+        await Media.put(rec);
+      }
+      const all = briefings(), name = all.some(x => x.name === head.name) ? head.name + ' (importé)' : head.name;
+      const b = { id: Store.uid(), name, items: head.items || [], at: Date.now() };
+      all.unshift(b); saveBriefings(all);
+      task.done(); toast(`Briefing « ${name} » importé`);
+      location.hash = '#/briefing/' + b.id;
+    } catch (e) { task.done(); toast(e.message && !/JSON/.test(e.message) ? e.message : 'Ce fichier de briefing est abîmé ou incomplet', 'err'); }
   }
   async function briefingPage(root, id) {
     freeUrl();
@@ -211,7 +284,7 @@ const Analyse = (() => {
     if (!b) { root.innerHTML = `<div class="empty"><p>Briefing introuvable sur cet appareil.</p><a class="btn" href="#/bibliotheque">${I.back}<span>Bibliothèque</span></a></div>`; return; }
     const items = await resolve(b);
     root.innerHTML = `<header class="page-head"><div><h1>🎬 ${esc(b.name)}</h1><p class="sub">Briefing vidéo · ${items.length} séquence${items.length > 1 ? 's' : ''} · ${mmss(items.reduce((a, x) => a + x.clip.end - x.clip.start, 0))}</p></div>
-      <div class="head-actions"><button class="btn" data-b="back">${I.back}<span>Retour</span></button><button class="btn" data-b="export" ${items.length ? '' : 'disabled'}>${I.download}<span>Exporter en vidéo</span></button><button class="btn primary" data-b="present" ${items.length ? '' : 'disabled'}>${I.play}<span>Présenter</span></button></div></header>
+      <div class="head-actions"><button class="btn" data-b="back">${I.back}<span>Retour</span></button><button class="btn" data-b="export" ${items.length ? '' : 'disabled'}>${I.download}<span>Télécharger</span></button><button class="btn primary" data-b="present" ${items.length ? '' : 'disabled'}>${I.play}<span>Présenter</span></button></div></header>
       <label class="fld"><span>Nom</span><input id="bfName" value="${esc(b.name)}" maxlength="60"></label>
       <div class="list">${items.map(({ rec, clip }, i) => { const t = tagOf(clip.tag), ps = (clip.players || []).map(pid => Store.get('players', pid)).filter(Boolean);
         return `<div class="list-item bf-row" style="--c:${t[3]}"><span class="bf-n">${i + 1}</span><span class="li-main"><b>${t[1]} ${esc(t[2])}${clip.note ? ' · ' + esc(clip.note) : ''}</b>
@@ -225,7 +298,7 @@ const Analyse = (() => {
       const x = e.target.closest('button'); if (!x) return;
       if (x.dataset.b === 'back') return history.length > 1 ? history.back() : (location.hash = '#/bibliotheque');
       if (x.dataset.b === 'present') return present(items, b.name);
-      if (x.dataset.b === 'export') return exportVideo(items, b.name);
+      if (x.dataset.b === 'export') return downloadDialog(b);
       if (x.dataset.b === 'delete') { if (await confirmBox(`Supprimer le briefing « ${b.name} » ? Les séquences restent dans leurs vidéos.`)) { saveBriefings(briefings().filter(y => y.id !== b.id)); location.hash = '#/bibliotheque'; } return; }
       if (x.dataset.mv) { const [i, d] = x.dataset.mv.split('|').map(Number); [b.items[i], b.items[i + d]] = [b.items[i + d], b.items[i]]; persist(); return briefingPage(root, id); }
       if (x.dataset.rm) { b.items.splice(+x.dataset.rm, 1); persist(); return briefingPage(root, id); }
@@ -360,5 +433,5 @@ const Analyse = (() => {
     return `<section class="card"><div class="row-head"><h2>${I.video}Briefings vidéo</h2><button class="btn soft" data-anbrief>${I.layers}<span>Mes briefings (${list.length})</span></button></div>
       <p class="muted small">Ouvre une vidéo de match puis « Analyser » : marque les actions (but, occasion, perte de balle…), puis rassemble les séquences dans un briefing à présenter ou à envoyer en vidéo.</p></section>`;
   }
-  return { page, briefingPage, briefingsDialog, libraryCard, TAGS, isYT, leave: freeUrl };
+  return { page, briefingPage, briefingsDialog, libraryCard, importBriefing, TAGS, isYT, leave: freeUrl };
 })();
