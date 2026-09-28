@@ -87,6 +87,7 @@ const Media = (() => {
       body: `<div class="viewer">${m.kind === 'video' ? `<video src="${url}" controls playsinline></video>` : `<img alt="" src="${url}">`}</div>
         <p class="muted small">Ajoutée le ${esc(date)}${by ? ' par ' + esc(Store.fullName(by)) : ''}</p>`,
       actions: [
+        ...(m.kind === 'video' ? [{ label: 'Analyser', icon: I.video, onClick: () => { location.hash = '#/analyse/' + m.id; } }] : []),
         ...(canDelete(m) ? [{ label: 'Supprimer', kind: 'danger', icon: I.trash, onClick: () => { setTimeout(async () => { if (await confirmBox('Supprimer ce fichier ?')) { await del(m.id); toast('Supprimé'); after && after(); } }, 60); } }] : []),
         { label: 'Enregistrer / partager', icon: I.share, onClick: () => { Exporter.deliver(m.blob, `raincy-${m.id}.${m.kind === 'video' ? (m.mime.includes('quicktime') ? 'mov' : 'mp4') : 'jpg'}`); return false; } },
         { label: 'Fermer', kind: 'primary' },

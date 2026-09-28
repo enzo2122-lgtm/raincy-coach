@@ -256,11 +256,12 @@ const Library = (() => {
       <p class="muted small">Pour dessiner dessus ou en faire une séance, télécharge le fichier sur l'appareil depuis ${esc(rec.host || 'le site')}, puis importe-le avec « Fichiers ».</p>`;
     if (rec.kind === 'image') body += `<div class="viewer"><img alt="" src="${url(rec.blob)}"></div>`;
     if (rec.kind === 'video') body += `<div class="viewer"><video id="docVideo" src="${url(rec.blob)}" controls playsinline></video></div>
-      <p class="tip">Mets la vidéo sur pause au bon moment, puis touche « Dessiner sur cette image » pour analyser l'action avec les flèches et les joueurs.</p>`;
+      <p class="tip">« Analyser le match » : marque les actions pendant la lecture et prépare un briefing vidéo. Ou mets la vidéo sur pause au bon moment, puis touche « Dessiner sur cette image » pour analyser l'action avec les flèches et les joueurs.</p>`;
     if (rec.kind === 'pdf') body += `<p class="muted small">${rec.pages.length} page${rec.pages.length > 1 ? 's' : ''}</p><div class="pdf-pages">${rec.pages.map((p, i) => `
       <figure><img alt="Page ${i + 1}" src="${url(p.blob)}"><figcaption><span>Page ${i + 1}</span><button class="btn soft" data-page="${i}">${I.edit}<span>Dessiner dessus</span></button><button class="btn soft" data-clean="${i}">${I.board}<span>Mettre au propre</span></button></figcaption></figure>`).join('')}</div>`;
     const actions = [];
     if (rec.kind === 'image') actions.push({ label: 'Dessiner dessus', kind: 'primary', icon: I.board, onClick: () => { (async () => { const img = await Media.loadImage(URL.createObjectURL(rec.blob)); const c = await canvasBlob(img, img.naturalWidth, img.naturalHeight); const sc = await drawOn(c.blob, c.w, c.h, cleanName(rec.name)); location.hash = '#/schema/' + sc.id; })(); } });
+    if (rec.kind === 'video') actions.push({ label: 'Analyser le match', kind: 'primary', icon: I.video, onClick: () => { location.hash = '#/analyse/' + rec.id; } });
     if (rec.kind === 'video') actions.push({ label: 'Dessiner sur cette image', kind: 'primary', icon: I.board, onClick: (close, r) => {
       const v = $('#docVideo', r); if (!v.videoWidth) { toast('Lance la vidéo puis mets-la sur pause', 'err'); return false; }
       v.pause(); (async () => { const c = await canvasBlob(v, v.videoWidth, v.videoHeight); const t = Math.floor(v.currentTime); close();
@@ -298,11 +299,12 @@ const Library = (() => {
     root.innerHTML = `<header class="page-head"><div><h1>Bibliothèque</h1><p class="sub">Vidéos, montages, PDF et images venant d'autres applis</p></div>
       <div class="head-actions"><a class="btn" href="#/schemas">${I.board}<span>Schémas</span></a><button class="btn primary" data-act="import">${I.upload}<span>Importer</span></button></div></header>
       <section class="card how"><ul>
-        <li>${I.video}<span><b>Vidéo ou montage</b> : mets sur pause et dessine sur l'image avec les flèches et les joueurs.</span></li>
+        <li>${I.video}<span><b>Vidéo de match</b> : « Analyser le match » pour marquer les actions et en faire un briefing vidéo, ou mets sur pause et dessine sur l'image.</span></li>
         <li>${I.pdf}<span><b>PDF</b> (séance, exercice, fiche) : l'appli le lit page par page, en fait une séance ou te laisse dessiner sur une page.</span></li>
         <li>${I.image}<span><b>Image ou capture d'écran</b> : dessine dessus comme sur le tableau tactique.</span></li>
         <li>${I.share}<span><b>OneDrive, Google Drive, Dropbox</b> : « Importer » → « Fichiers », ou colle un lien de partage.</span></li>
         <li>${I.layers}<span>Joins n'importe quel fichier à un entraînement ou un match : il apparaît sur sa page et dans son PDF.</span></li></ul></section>
+      ${Analyse.libraryCard()}
       <div class="chips filter">${[['', 'Tout'], ['video', 'Vidéos'], ['pdf', 'PDF'], ['image', 'Images'], ['link', 'Liens']].map(([v, l]) => `<button class="chip ${v === filt ? 'on' : ''}" data-f="${v}">${l}</button>`).join('')}</div>
       <div class="lib-grid" id="libGrid"><p class="muted">Chargement…</p></div>`;
     const grid = $('#libGrid', root);
@@ -314,6 +316,7 @@ const Library = (() => {
     root.onclick = e => {
       const b = e.target.closest('button'); if (!b) return;
       if (b.dataset.act === 'import') return pickFiles(() => fill());
+      if (b.hasAttribute('data-anbrief')) return Analyse.briefingsDialog();
       if (b.dataset.f !== undefined && b.classList.contains('chip')) { S().ui.libFilter = b.dataset.f; Store.save(); return page(root); }
       if (b.dataset.doc) open(b.dataset.doc, fill);
     };
@@ -392,5 +395,5 @@ const Library = (() => {
     return out;
   }
 
-  return { page, open, pickFiles, importFiles, docsPlaceholder, mountDocs, withBackgrounds, withBackground, saveBackground, restoreBackgrounds, docImages };
+  return { drawOnFrame: drawOn, page, open, pickFiles, importFiles, docsPlaceholder, mountDocs, withBackgrounds, withBackground, saveBackground, restoreBackgrounds, docImages };
 })();
