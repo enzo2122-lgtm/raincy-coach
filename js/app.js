@@ -75,9 +75,21 @@ const App = (() => {
       joueur: (r, x) => People.playerPage(r, x), president: r => President.page(r), licences: r => ClubAdmin.licencesPage(r), encadrement: r => ClubAdmin.staffingPage(r), vestiaires: r => Rooms.page(r),
       analyse: (r, x) => Analyse.page(r, x), briefing: (r, x) => Analyse.briefingPage(r, x) }[name] || Views.home;
     fn(root, id);
-    if (keep) { root.scrollTop = st; window.scrollTo(0, sy); } else { releaseHeight(); root.scrollTop = 0; window.scrollTo(0, 0); }
+    if (keep) { root.scrollTop = st; window.scrollTo(0, sy); } else { releaseHeight(); root.scrollTop = 0; window.scrollTo(0, 0); enter(root); }
     Help.button();
   }
+  /* A new page slides in, its blocks one after the other (only when changing page: a page redrawn with new data
+     from the server stays still). The club's crest turns round when touched. */
+  let enterT = null;
+  function enter(root) {
+    root.classList.remove('page-enter'); void root.offsetWidth; root.classList.add('page-enter');
+    clearTimeout(enterT); enterT = setTimeout(() => root.classList.remove('page-enter'), 1200);
+  }
+  document.addEventListener('click', e => {
+    const c = e.target.closest && e.target.closest('.crest-live'); if (!c) return;
+    c.classList.remove('spin'); void c.offsetWidth; c.classList.add('spin');
+    setTimeout(() => c.classList.remove('spin'), 1000);
+  });
   /* A page redrawn in place (a tap, or new data from the server) is first shorter than before: photos, documents, weather,
      parents' answers or pitch slots arrive a moment later. On a phone scrolled down, the page then jumped up.
      So while a page is redrawn, it keeps at least its previous height for a moment. */
@@ -95,7 +107,7 @@ const App = (() => {
   })();
   /* Updates: version.json on the site says which build is online. When it is newer than this one,
      the app empties its offline copy and reloads (an iPhone can keep an old copy open for days). */
-  const BUILD = 63, UPD = 'raincy-update-tried';
+  const BUILD = 64, UPD = 'raincy-update-tried';
   async function onlineBuild() {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
     return (await r.json()).build || 0;
