@@ -75,8 +75,9 @@ const Editor = (() => {
   }
   function resize() {
     if (!E) return;
-    const st = E.root.querySelector('.ed-stage'), dpr = Math.min(2, window.devicePixelRatio || 1);
-    E.dpr = dpr; E.canvas.width = Math.max(10, st.clientWidth * dpr); E.canvas.height = Math.max(10, st.clientHeight * dpr);
+    // the canvas's own size (on touch screens it keeps a margin from the screen edges, see app.css)
+    const cv = E.canvas, dpr = Math.min(2, window.devicePixelRatio || 1);
+    E.dpr = dpr; cv.width = Math.max(10, cv.clientWidth * dpr); cv.height = Math.max(10, cv.clientHeight * dpr);
     draw();
   }
 
@@ -172,7 +173,8 @@ const Editor = (() => {
   function select(h) { E.sel = h; renderPanel(); draw(); }
 
   /* ---------- pointer ---------- */
-  function wpos(e) { const r = E.canvas.getBoundingClientRect(); return E.cam.toW((e.clientX - r.left) * E.dpr, (e.clientY - r.top) * E.dpr); }
+  // finger → pitch: from the canvas as it is shown (right even if its size changed since the last drawing)
+  function wpos(e) { const c = E.canvas, r = c.getBoundingClientRect(); return E.cam.toW((e.clientX - r.left) * c.width / (r.width || 1), (e.clientY - r.top) * c.height / (r.height || 1)); }
   function onDown(e) {
     if (!E || !E.cam || (e.pointerType === 'mouse' && e.button !== 0)) return;
     if (E.playing) stopPlay();
