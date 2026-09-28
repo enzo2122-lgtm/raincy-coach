@@ -93,13 +93,15 @@ const App = (() => {
   })();
   /* Updates: version.json on the site says which build is online. When it is newer than this one,
      the app empties its offline copy and reloads (an iPhone can keep an old copy open for days). */
-  const BUILD = 54, UPD = 'raincy-update-tried';
+  const BUILD = 55, UPD = 'raincy-update-tried';
   async function onlineBuild() {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
     return (await r.json()).build || 0;
   }
   async function forceUpdate() {
-    try { const regs = await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map(r => r.unregister())); } catch (e) {}
+    // with notifications on, the service worker is updated rather than removed (removing it would cancel the notifications)
+    try { const regs = await navigator.serviceWorker.getRegistrations(), keep = Store.state && Store.state.ui && Store.state.ui.notifOn;
+      await Promise.all(regs.map(r => keep ? r.update().catch(() => {}) : r.unregister())); } catch (e) {}
     try { const keys = await caches.keys(); await Promise.all(keys.map(k => caches.delete(k))); } catch (e) {}
     location.reload();
   }
@@ -115,7 +117,11 @@ const App = (() => {
     if (manual) { UI.busy('Rechargement de l\'appli…'); forceUpdate(); }
   }
   async function start() {
-    if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
+    if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+      // a notification touched while the app is open: go to its page
+      navigator.serviceWorker.addEventListener('message', e => { const u = e.data && e.data.raincyOpen; if (u) { const h = u.slice(u.indexOf('#')); if (h.startsWith('#/')) location.hash = h; } });
+    }
     if (location.protocol !== 'file:') { checkUpdate(); document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkUpdate(); }); }
     await Store.load();
     // Invitation link sent by the responsable: …#rejoindre=CODE
@@ -138,6 +144,7 @@ const App = (() => {
       if (redraw) route(true);
     });
     Messages.start();
+    Notify.refresh(); // the phone's subscription to the notifications, sent again at each start
   }
   return { start, route, refreshChrome, checkUpdate };
 })();

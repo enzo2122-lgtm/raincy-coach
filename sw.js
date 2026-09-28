@@ -1,9 +1,9 @@
 /* Service worker: keeps the app working without internet. Bump VERSION after each update. */
-const VERSION = 'raincy-coach-v54';
+const VERSION = 'raincy-coach-v55';
 const JSPDF = 'https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js';
 const FILES = [
   './', 'index.html', 'app.css', 'manifest.webmanifest',
-  'js/config.js', 'js/icons.js', 'js/board.js', 'js/store.js', 'js/ui.js', 'js/clubs.js', 'js/exporter.js', 'js/auth.js', 'js/media.js', 'js/ratings.js', 'js/library.js', 'js/importer.js', 'js/help.js', 'js/cloud.js', 'js/sync.js', 'js/planning.js', 'js/results.js', 'js/messages.js', 'js/people.js', 'js/templates.js', 'js/editor.js', 'js/clublife.js', 'js/weather.js', 'js/clubadmin.js', 'js/parents.js', 'js/president.js', 'js/views.js', 'js/app.js',
+  'js/config.js', 'js/icons.js', 'js/board.js', 'js/store.js', 'js/ui.js', 'js/clubs.js', 'js/exporter.js', 'js/auth.js', 'js/media.js', 'js/ratings.js', 'js/library.js', 'js/importer.js', 'js/help.js', 'js/cloud.js', 'js/sync.js', 'js/planning.js', 'js/results.js', 'js/messages.js', 'js/people.js', 'js/templates.js', 'js/editor.js', 'js/clublife.js', 'js/weather.js', 'js/notify.js', 'js/clubadmin.js', 'js/parents.js', 'js/president.js', 'js/views.js', 'js/app.js',
   'icons/crest.png', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png',
 ];
 self.addEventListener('install', e => {
@@ -29,4 +29,48 @@ self.addEventListener('fetch', e => {
       return res;
     }).catch(() => caches.match(e.request, { ignoreSearch: true }).then(r => r || caches.match('index.html')))
   );
+});
+
+/* ---------- notifications (3.15) ----------
+   The club server wakes the phone with an empty push; the phone then reads its notifications on the club server
+   with the dirigeant's login (kept in the app's local database) and shows them. */
+try { importScripts('js/config.js'); } catch (e) {}
+function session() {
+  return new Promise(res => {
+    try {
+      const rq = indexedDB.open('raincy-coach', 1);
+      rq.onerror = () => res(null);
+      rq.onsuccess = () => { try { const g = rq.result.transaction('kv').objectStore('kv').get('state'); g.onsuccess = () => { const s = g.result; res(s && s.auth && s.auth.session); }; g.onerror = () => res(null); } catch (e) { res(null); } };
+    } catch (e) { res(null); }
+  });
+}
+async function pending() {
+  const s = await session(), c = typeof CLUB_SERVER !== 'undefined' ? CLUB_SERVER : null;
+  if (!s || !s.token || !c) return [];
+  const headers = { apikey: c.key, 'Content-Type': 'application/json' };
+  if (!String(c.key).startsWith('sb_')) headers.Authorization = 'Bearer ' + c.key;
+  const r = await fetch(c.url.replace(/\/+$/, '') + '/rest/v1/rpc/club_notifs', { method: 'POST', headers, body: JSON.stringify({ k: s.token }) });
+  return r.ok ? (await r.json()) || [] : [];
+}
+self.addEventListener('push', e => {
+  e.waitUntil((async () => {
+    let list = [];
+    try { list = await pending(); } catch (err) {}
+    // a phone must always show something when it is woken up
+    if (!list.length) list = [{ title: 'Raincy Coach', body: 'Nouvelle information du club', url: '#/', tag: 'raincy' }];
+    for (const n of list.slice(0, 4)) {
+      await self.registration.showNotification(n.title || 'Raincy Coach', {
+        body: (n.body || '') + (n.n > 1 ? ` (+${n.n - 1})` : ''), tag: n.tag || undefined, renotify: !!n.tag,
+        icon: 'icons/icon-192.png', badge: 'icons/icon-192.png', data: { url: n.url || '#/' } });
+    }
+  })());
+});
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const url = new URL('./' + ((e.notification.data && e.notification.data.url) || '#/'), self.registration.scope).href;
+  e.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true }).then(ws => {
+    const w = ws.find(x => x.url.startsWith(self.registration.scope));
+    if (w) { w.postMessage({ raincyOpen: url }); return w.focus(); }
+    return clients.openWindow(url);
+  }));
 });

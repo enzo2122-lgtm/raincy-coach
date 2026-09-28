@@ -32,6 +32,7 @@ const Cloud = (() => {
     LIEN_PARENTS: 'Ce lien n\'est plus valable : demande le nouveau lien au coach.',
     MATCH_PASSE: 'Ce match est passé : les réponses sont fermées.',
     PHOTOS_MAX: '12 photos au plus par match pour les parents.',
+    DONNEES_PUSH: 'Abonnement aux notifications refusé par le serveur.',
   };
   function nice(msg) {
     const k = Object.keys(ERRORS).find(x => String(msg).includes(x));
@@ -388,6 +389,190 @@ begin select * into l from parent_links where coalesce(p_token, '') <> '' and to
   return (select ph.data from match_photos ph join items i on i.col = 'matches' and i.id = ph.match_id and not i.deleted where ph.id = p_id and i.data->>'teamId' = any(l.team_ids)); end $$;
 grant execute on function club_photo_add(text, text, text, text, text), club_photos(text, text), club_photo_get(text, uuid), club_photo_del(text, uuid), parent_photo(text, uuid) to anon, authenticated;
 
+-- (3.15) Notifications sur les téléphones, mentions « @ » et accusés de lecture.
+-- La base prépare les notifications de chaque dirigeant (table notifs) puis appelle la fonction « raincy-push »
+-- (Edge Function) qui réveille les téléphones ; chaque téléphone lit ensuite ses notifications ici.
+do $pg$ begin
+  begin create extension if not exists pg_net with schema extensions;
+  exception when others then raise notice 'pg_net indisponible : %', sqlerrm; end;
+end $pg$;
+create table if not exists push_config (id int primary key default 1, secret text not null default replace(gen_random_uuid()::text, '-', ''),
+  fn_url text, vapid_public text, vapid_private jsonb);
+insert into push_config (id) values (1) on conflict (id) do nothing;
+create table if not exists push_subs (id uuid primary key default gen_random_uuid(), staff_id text not null, endpoint text not null unique,
+  prefs jsonb not null default '{}'::jsonb, created_at timestamptz not null default now());
+create table if not exists notifs (id bigserial primary key, staff_id text not null, created_at timestamptz not null default now(),
+  kind text, tag text, title text, body text, url text, n int not null default 1, delivered boolean not null default false);
+create index if not exists notifs_staff on notifs (staff_id, delivered);
+create table if not exists message_reads (channel text not null, staff_id text not null, at timestamptz not null, primary key (channel, staff_id));
+alter table push_config enable row level security;
+alter table push_subs enable row level security;
+alter table notifs enable row level security;
+alter table message_reads enable row level security;
+
+-- Les dirigeants d'une catégorie (la catégorie et ses équipes A / B vont ensemble)
+create or replace function raincy_team_staff(p_team text) returns text[] language sql stable security definer set search_path = public as $$
+  with k as (select upper(replace(coalesce(data->>'category', data->>'name', ''), ' ', '')) as key from items where col = 'teams' and id = p_team),
+  fam as (select t.id from items t, k where t.col = 'teams' and not t.deleted and upper(replace(coalesce(t.data->>'category', t.data->>'name', ''), ' ', '')) = k.key)
+  select coalesce(array_agg(distinct st.id), '{}') from items st where st.col = 'staff' and not st.deleted
+    and exists (select 1 from jsonb_array_elements_text(case when jsonb_typeof(st.data->'teamIds') = 'array' then st.data->'teamIds' else '[]'::jsonb end) x
+                where x = p_team or x in (select id from fam)) $$;
+create or replace function raincy_day(d date) returns text language sql immutable as $$
+  select (array['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.'])[extract(dow from d)::int + 1] || ' ' || to_char(d, 'DD/MM') $$;
+create or replace function raincy_hm(m int) returns text language sql immutable as $$ select lpad((m / 60)::text, 2, '0') || 'h' || lpad((m % 60)::text, 2, '0') $$;
+create or replace function raincy_coach(n text) returns text language sql immutable as $$
+  select coalesce('Coach ' || (select w from regexp_split_to_table(coalesce(n, ''), '\\s+') w where w ~ '[a-zà-ÿ]' limit 1), nullif(n, ''), 'Un coach') $$;
+
+-- Prépare une notification pour chaque dirigeant ; plusieurs de suite (série de créneaux, import de matchs) n'en font qu'une
+create or replace function raincy_notify(p_staff text[], p_kind text, p_tag text, p_title text, p_body text, p_url text) returns void
+language plpgsql security definer set search_path = public as $$
+declare s text; targets text[] := '{}'; cfg push_config; subs jsonb;
+begin
+  foreach s in array coalesce(p_staff, '{}'::text[]) loop
+    if s is null or s = '' then continue; end if;
+    -- grouped: a message not shown yet, or a burst of planning changes (weekly series, import of matches)
+    if exists (select 1 from notifs where staff_id = s and tag = p_tag and created_at > now() - interval '2 minutes' and (not delivered or p_kind = 'planning')) then
+      update notifs set n = n + 1, title = left(p_title, 120), body = left(p_body, 240), url = p_url, delivered = false where id = (select max(id) from notifs where staff_id = s and tag = p_tag);
+    else
+      insert into notifs (staff_id, kind, tag, title, body, url) values (s, p_kind, p_tag, left(p_title, 120), left(p_body, 240), p_url);
+      targets := targets || s;
+    end if;
+  end loop;
+  delete from notifs where created_at < now() - interval '30 days';
+  select * into cfg from push_config where id = 1;
+  if cfg.fn_url is null or coalesce(array_length(targets, 1), 0) = 0 then return; end if;
+  -- a mention always goes through; the other kinds follow the dirigeant's choice (messages, planning)
+  select jsonb_agg(jsonb_build_object('id', id, 'endpoint', endpoint)) into subs from push_subs
+    where staff_id = any(targets) and (p_kind in ('mention', 'test') or coalesce((prefs->>p_kind)::boolean, true));
+  if subs is null then return; end if;
+  begin
+    perform net.http_post(url := cfg.fn_url, body := jsonb_build_object('subs', subs),
+      headers := jsonb_build_object('Content-Type', 'application/json', 'x-raincy-secret', cfg.secret));
+  exception when others then raise notice 'envoi des notifications : %', sqlerrm; end;
+end $$;
+revoke all on function raincy_notify(text[], text, text, text, text, text) from public, anon, authenticated;
+
+-- Un message : aux membres de la conversation ; « @Prénom » (marque [[tag:id]] ajoutée par l'appli) prévient la personne dans tous les cas
+create or replace function raincy_on_message() returns trigger language plpgsql security definer set search_path = public as $$
+declare t text[]; tagged text[]; who text := raincy_coach(new.author_name); title text; body text;
+begin
+  begin
+    tagged := coalesce(string_to_array(substring(new.body from '\\[\\[tag:([\\w,-]+)\\]\\]'), ','), '{}');
+    body := left(btrim(regexp_replace(regexp_replace(new.body, '\\[\\[[^\\]]*\\]\\]', '', 'g'), '#rappel-[\\w-]+', '', 'g'), ' ' || chr(10) || chr(13)), 200);
+    if new.channel = 'general' then
+      t := array(select distinct staff_id from push_subs); title := '💬 Tout le club · ' || who;
+    elsif new.channel like 'team:%' then
+      t := raincy_team_staff(substr(new.channel, 6));
+      title := '💬 ' || coalesce((select data->>'name' from items where col = 'teams' and id = substr(new.channel, 6)), 'Catégorie') || ' · ' || who;
+    elsif new.channel like 'dm:%' then
+      t := string_to_array(substr(new.channel, 4), ':'); title := case when new.body like '🐞%' then '🐞 Signalement · ' else '✉️ ' end || who;
+      tagged := array(select x from unnest(tagged) x where x = any(t)); -- a private conversation stays private
+    end if;
+    t := array(select x from unnest(t) x where x <> coalesce(new.author_id, '') and not x = any(tagged));
+    tagged := array(select x from unnest(tagged) x where x <> coalesce(new.author_id, ''));
+    perform raincy_notify(tagged, 'mention', 'tag:' || new.id, '📣 ' || who || ' t''a mentionné', body, '#/messages/' || new.channel);
+    perform raincy_notify(t, 'messages', 'msg:' || new.channel, title, body, '#/messages/' || new.channel);
+  exception when others then raise notice 'notification du message : %', sqlerrm; end;
+  return new;
+end $$;
+drop trigger if exists raincy_msg_notify on messages;
+create trigger raincy_msg_notify after insert on messages for each row execute function raincy_on_message();
+
+-- Planning : un créneau réservé ou libéré pour une catégorie prévient ses dirigeants
+create or replace function raincy_on_booking() returns trigger language plpgsql security definer set search_path = public as $$
+declare b bookings; t text[];
+begin
+  if tg_op = 'DELETE' then b := old; else b := new; end if;
+  begin
+    if b.team_id is null or b.date < current_date or b.date > current_date + 60 then return null; end if;
+    t := array(select x from unnest(raincy_team_staff(b.team_id)) x where tg_op = 'DELETE' or x <> coalesce(b.author_id, ''));
+    perform raincy_notify(t, 'planning', 'plan:' || b.team_id, '📅 Planning · ' || coalesce(b.team_name, ''),
+      case when tg_op = 'DELETE' then 'Créneau libéré : ' else 'Créneau réservé : ' end || raincy_day(b.date) || ' ' || raincy_hm(b.start_min) || '–' || raincy_hm(b.end_min)
+        || case when b.part = 'full' then '' else ' (demi-terrain ' || b.part || ')' end || case when b.kind = 'match' then ' · match' else '' end, '#/planning');
+  exception when others then raise notice 'notification du planning : %', sqlerrm; end;
+  return null;
+end $$;
+drop trigger if exists raincy_booking_notify on bookings;
+create trigger raincy_booking_notify after insert or delete on bookings for each row execute function raincy_on_booking();
+
+-- Matchs et séances : ajoutés, déplacés (date, heure, lieu) ou supprimés, dans les 30 jours
+create or replace function raincy_on_item() returns trigger language plpgsql security definer set search_path = public as $$
+declare d jsonb; o jsonb; t text[]; what text; team text; lbl text; ismatch boolean := new.col = 'matches'; dt date;
+begin
+  if new.col not in ('matches', 'trainings') then return null; end if;
+  begin
+    if tg_op = 'UPDATE' and not old.deleted then o := old.data; end if;
+    if new.deleted then
+      if o is null then return null; end if;
+      d := o; what := case when ismatch then 'Match supprimé' else 'Séance supprimée' end;
+    else
+      d := new.data;
+      if coalesce((d->>'model')::boolean, false) or coalesce((d->>'exempt')::boolean, false) then return null; end if;
+      if o is null then what := case when ismatch then 'Nouveau match' else 'Nouvelle séance' end;
+      elsif (d->>'date') is distinct from (o->>'date') then what := 'Nouvelle date';
+      elsif (d->>'time') is distinct from (o->>'time') or (ismatch and (d->>'rdv') is distinct from (o->>'rdv')) then what := 'Nouvel horaire';
+      elsif ismatch and (d->>'place') is distinct from (o->>'place') then what := 'Nouveau lieu';
+      else return null; end if;
+    end if;
+    begin dt := (d->>'date')::date; exception when others then return null; end;
+    if dt is null or dt < current_date or dt > current_date + 30 then return null; end if;
+    team := d->>'teamId'; if coalesce(team, '') = '' then return null; end if;
+    t := array(select x from unnest(raincy_team_staff(team)) x where x <> coalesce(d->>'editedBy', ''));
+    lbl := coalesce((select data->>'name' from items where col = 'teams' and id = team), '');
+    perform raincy_notify(t, 'planning', 'plan:' || team, case when ismatch then '⚽ ' else '🏃 ' end || what || ' · ' || lbl,
+      raincy_day(dt) || coalesce(' ' || replace(nullif(d->>'time', ''), ':', 'h'), '')
+        || case when ismatch then ' · ' || case when coalesce((d->>'home')::boolean, false) then 'contre ' else 'chez ' end || coalesce(d->>'opponent', '?')
+             || coalesce(' · ' || nullif(d->>'place', ''), '')
+           else coalesce(' · ' || nullif(d->>'title', ''), '') end,
+      case when new.deleted then case when ismatch then '#/matchs' else '#/entrainements' end
+           else case when ismatch then '#/match/' else '#/entrainement/' end || new.id end);
+  exception when others then raise notice 'notification du planning : %', sqlerrm; end;
+  return null;
+end $$;
+drop trigger if exists raincy_item_notify on items;
+create trigger raincy_item_notify after insert or update on items for each row execute function raincy_on_item();
+
+-- L'appli : clé publique, abonnement d'un téléphone, test, notifications à afficher, accusés de lecture
+create or replace function club_push_key(k text) returns text language plpgsql security definer set search_path = public as $$
+begin if not club_ok(k) then raise exception 'CLE_CLUB'; end if; return (select vapid_public from push_config where id = 1); end $$;
+create or replace function club_push_setup(k text, admin_k text, p_url text) returns jsonb language plpgsql security definer set search_path = public as $$
+begin if not club_ok(k) then raise exception 'CLE_CLUB'; end if; if not admin_ok(admin_k) then raise exception 'ADMIN'; end if;
+  update push_config set fn_url = nullif(p_url, '') where id = 1;
+  return (select jsonb_build_object('secret', secret, 'public', vapid_public) from push_config where id = 1); end $$;
+create or replace function club_push_sub(k text, p_endpoint text, p_prefs jsonb) returns boolean language plpgsql security definer set search_path = public as $$
+declare sid text := session_staff(k);
+begin if sid is null then raise exception 'SESSION'; end if;
+  if coalesce(p_endpoint, '') not like 'https://%' then raise exception 'DONNEES'; end if;
+  insert into push_subs (staff_id, endpoint, prefs) values (sid, p_endpoint, coalesce(p_prefs, '{}'::jsonb))
+    on conflict (endpoint) do update set staff_id = excluded.staff_id, prefs = excluded.prefs;
+  return true; end $$;
+create or replace function club_push_unsub(k text, p_endpoint text) returns boolean language plpgsql security definer set search_path = public as $$
+begin delete from push_subs where endpoint = p_endpoint and staff_id = session_staff(k); return found; end $$;
+create or replace function club_push_test(k text) returns int language plpgsql security definer set search_path = public as $$
+declare sid text := session_staff(k);
+begin if sid is null then raise exception 'SESSION'; end if;
+  perform raincy_notify(array[sid], 'test', 'test:' || now(), '🔔 Raincy Coach', 'Les notifications marchent sur ce téléphone !', '#/reglages');
+  return (select count(*) from push_subs where staff_id = sid); end $$;
+create or replace function club_notifs(k text) returns jsonb language plpgsql security definer set search_path = public as $$
+declare sid text := session_staff(k); r jsonb;
+begin if sid is null then return '[]'::jsonb; end if;
+  select coalesce(jsonb_agg(jsonb_build_object('id', id, 'title', title, 'body', body, 'url', url, 'n', n, 'tag', tag, 'kind', kind) order by id desc), '[]'::jsonb) into r
+    from (select * from notifs where staff_id = sid and not delivered and created_at > now() - interval '2 days' order by id desc limit 10) x;
+  update notifs set delivered = true where staff_id = sid and not delivered;
+  return r; end $$;
+create or replace function club_mark_read(k text, p_channel text, p_at timestamptz) returns boolean language plpgsql security definer set search_path = public as $$
+declare sid text := session_staff(k);
+begin if sid is null or coalesce(p_channel, '') = '' then return false; end if;
+  insert into message_reads (channel, staff_id, at) values (p_channel, sid, coalesce(p_at, now()))
+    on conflict (channel, staff_id) do update set at = greatest(message_reads.at, excluded.at);
+  update notifs set delivered = true where staff_id = sid and tag = 'msg:' || p_channel and not delivered;
+  return true; end $$;
+create or replace function club_reads(k text, p_channel text) returns jsonb language plpgsql security definer set search_path = public as $$
+begin if not club_ok(k) then raise exception 'CLE_CLUB'; end if;
+  return (select coalesce(jsonb_agg(jsonb_build_object('staff_id', staff_id, 'at', at)), '[]'::jsonb) from message_reads where channel = p_channel); end $$;
+grant execute on function club_push_key(text), club_push_setup(text, text, text), club_push_sub(text, text, jsonb), club_push_unsub(text, text),
+  club_push_test(text), club_notifs(text), club_mark_read(text, text, timestamptz), club_reads(text, text) to anon, authenticated;
+
 -- Sauvegardes du club (version 3.8) : une copie de toutes les données chaque lundi à 3 h, les 8 dernières sont gardées.
 -- Elles restent sur le serveur (privé) ; seul un responsable peut les lister et les télécharger.
 create table if not exists backups (id bigserial primary key, created_at timestamptz not null default now(), kind text not null default 'auto', size int, data jsonb not null);
@@ -463,6 +648,14 @@ notify pgrst, 'reload schema';
     // parents (3.8)
     parentLink: (teamKey, teamIds, teamName, renew) => rpc('club_parent_link', { p_team_key: teamKey, p_team_ids: teamIds, p_team_name: teamName, p_new: !!renew }),
     answers: matchIds => rpc('club_answers', { p_matches: matchIds }),
+    // notifications and read receipts (3.15)
+    pushKey: () => rpc('club_push_key'),
+    pushSetup: url => rpc('club_push_setup', { admin_k: adminKey(), p_url: url }),
+    pushSub: (endpoint, prefs) => rpc('club_push_sub', { k: token(), p_endpoint: endpoint, p_prefs: prefs }),
+    pushUnsub: endpoint => rpc('club_push_unsub', { k: token(), p_endpoint: endpoint }),
+    pushTest: () => rpc('club_push_test', { k: token() }),
+    markRead: (channel, at) => rpc('club_mark_read', { k: token(), p_channel: channel, p_at: at }),
+    reads: channel => rpc('club_reads', { p_channel: channel }),
     photoAdd: (matchId, src, data) => rpc('club_photo_add', { p_match: matchId, p_src: src, p_data: data, p_by: Auth.current() ? Store.fullName(Auth.current()) : '' }),
     photos: matchId => rpc('club_photos', { p_match: matchId }),
     photoGet: id => rpc('club_photo_get', { p_id: id }),
@@ -500,6 +693,7 @@ notify pgrst, 'reload schema';
         ${!ready() && builtIn() ? `<button class="btn primary" data-cloud="connect">${I.check}<span>Me connecter au serveur du club</span></button>` : ''}
         ${!builtIn() ? `<button class="btn" data-cloud="setup">${I.edit}<span>${ready() ? 'Reconfigurer' : 'Configurer le serveur'}</span></button>` : ''}
         ${ready() ? `<button class="btn" data-cloud="test">${I.check}<span>Tester</span></button><button class="btn" data-cloud="update">${I.rotate}<span>Mettre à jour le serveur</span></button><button class="btn" data-cloud="adminkey">${I.whistle}<span>Code responsable</span></button>` : ''}</div>
+        ${ready() ? Notify.adminCard() : ''}
         <p class="muted small">Les éducateurs rejoignent le club avec le lien d'invitation, puis se connectent sur n'importe quel appareil avec leur nom et leur mot de passe.</p>`
       : !ready() && builtIn() ? `<div class="chips"><button class="btn primary" data-cloud="connect">${I.check}<span>Me connecter au serveur du club</span></button></div>`
       : `<p class="muted small">${ready() ? 'Tes données sont enregistrées sur le serveur du club : tu les retrouves en te connectant sur un autre appareil.' : 'Demande au responsable le lien d\'invitation du club.'}</p>`}

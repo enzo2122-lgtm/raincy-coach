@@ -793,14 +793,15 @@ const Views = (() => {
       </section>` : ''}
       <p class="muted small">Raincy Coach · version ${Help.VERSION} · <button class="linkish" onclick="App.checkUpdate(true)">Mettre à jour l'appli</button></p>`;
     Help.onSettings(root, () => settings(root));
-    Auth.mountSettings(root);
-    root.onchange = e => Auth.onSettingsChange(e.target);
+    Auth.mountSettings(root); Notify.mountAccount(root); Notify.mountAdmin(root);
+    root.onchange = e => { if (e.target.dataset.notifpref) return Notify.onChange(e.target); Auth.onSettingsChange(e.target); };
     const cn = $('#clubName', root); if (cn) cn.oninput = e => { c.name = e.target.value || 'Mon club'; Store.save(); App.refreshChrome(); };
     root.onclick = async e => {
       const b = e.target.closest('button'); if (!b) return;
       if (b.dataset.home) { c.homeBib = b.dataset.home; Store.save(); App.refreshChrome(); return settings(root); }
       if (b.dataset.away) { c.awayBib = b.dataset.away; Store.save(); return settings(root); }
       if (b.dataset.act === 'exportAll') return runExport('Préparation du fichier…', async () => { S().ui.clubFileSent = true; Store.save(); return Exporter.json(await Library.withBackgrounds(Store.exportAll()), `${c.name}-${today()}`); });
+      if (b.dataset.notif) return Notify.onClick(b, () => settings(root));
       if (b.dataset.auth || b.dataset.reset) return Auth.onSettingsClick(b, () => settings(root));
       if (b.dataset.cloud) return Cloud.onSettingsClick(b, () => settings(root));
       if (b.dataset.act === 'import') return importFile();

@@ -1041,3 +1041,17 @@ h2.section svg { width: 22px; height: 22px; vertical-align: -4px; margin-right: 
   .ed-stage { --edge: max(22px, env(safe-area-inset-left), env(safe-area-inset-right)); }
   .ed-stage canvas { left: var(--edge); right: auto; width: calc(100% - 2 * var(--edge)); }
 }
+/* 3.15 : notifications, mentions, accusés de lecture */
+.notif-box { margin: 14px 0; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface2); }
+.notif-box .chips { margin: 8px 0; }
+.notif-admin { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.mention { color: var(--accent); font-weight: 800; }
+.bubble.mine .mention { color: inherit; text-decoration: underline; }
+.seen { color: #2563eb; font-weight: 700; }
+.bubble.mine .seen { color: #93c5fd; }
+.sent { opacity: .8; }
+.seen-by { font-size: inherit; color: inherit; padding: 0 2px; }
+.mention-sug { display: flex; flex-direction: column; gap: 2px; max-height: 220px; overflow-y: auto; margin: 0 8px 6px; padding: 4px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: 0 6px 20px rgba(0,0,0,.15); }
+.mention-sug[hidden] { display: none; }
+.mention-sug button { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 4px 10px; border: 0; border-radius: 8px; background: none; text-align: left; cursor: pointer; font: inherit; color: var(--ink); }
+.mention-sug button:hover, .mention-sug button:focus { background: var(--surface2); }

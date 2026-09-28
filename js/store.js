@@ -104,6 +104,8 @@ const Store = (() => {
   const get = (col, id) => state[col].find(x => x.id === id);
   function upsert(col, item) {
     item.updatedAt = Date.now();
+    // who changed a match or a session: he is not notified of his own change (club server)
+    if ((col === 'matches' || col === 'trainings') && typeof Auth !== 'undefined' && Auth.current()) item.editedBy = Auth.current().id;
     const i = state[col].findIndex(x => x.id === item.id);
     if (i < 0) state[col].push(item); else state[col][i] = item;
     if (col === 'teams') sortTeams();

@@ -23,6 +23,24 @@ const Messages = (() => {
     return 'Coach ' + (f ? f.charAt(0).toUpperCase() + f.slice(1) : String(s.lastName || '').charAt(0) + String(s.lastName || '').slice(1).toLowerCase());
   }
   const staffOf = m => m.author_id && Store.get('staff', m.author_id);
+  /* ---------- @mentions: « @Karim » in a message; the app adds [[tag:id]] so the server notifies Karim in any case ---------- */
+  const fold = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const firstOf = s => coachName(s).replace(/^Coach /, '');
+  function tagsOf(text) {
+    const words = new Set((fold(text).match(/@([a-z0-9'-]+)/g) || []).map(w => w.slice(1)));
+    return S().staff.filter(s => me() && s.id !== me().id && words.has(fold(firstOf(s)))).map(s => s.id);
+  }
+  const clean = body => String(body).replace(/\n?#rappel-[\w-]+\s*$/, '').replace(/\n?\[\[fichier:[\w,-]+\]\]/, '').replace(/\n?\[\[signalement:[\w-]+\]\]/, '').replace(/\n?\[\[tag:[\w,-]+\]\]/, '');
+  // @Prénom of a coach of the club, highlighted in the bubble
+  const withMentions = html => html.replace(/@([A-Za-zÀ-ÿ0-9'-]+)/g, (all, w) => S().staff.some(s => fold(firstOf(s)) === fold(w)) ? `<b class="mention">@${w}</b>` : all);
+  /* ---------- read receipts (club server): when each dirigeant last read a conversation ---------- */
+  const readsOf = {}, marked = {};
+  async function loadReads(ch) { try { readsOf[ch] = await Cloud.reads(ch) || []; } catch (e) { readsOf[ch] = readsOf[ch] || []; } return readsOf[ch]; }
+  function sendRead(ch) {
+    const list = msgs.filter(m => m.channel === ch), lastAt = list.length ? list[list.length - 1].created_at : null;
+    if (!lastAt || marked[ch] === lastAt || !Cloud.token()) return;
+    marked[ch] = lastAt; Cloud.markRead(ch, lastAt).catch(() => { marked[ch] = null; });
+  }
   const redraw = () => { if (location.hash.startsWith('#/messages')) App.route(true); };
   const crestOf = s => s && s.club ? Clubs.crest(s.club, 18, redraw) : '';
   function authorName(m) {
@@ -103,10 +121,10 @@ const Messages = (() => {
   }
   function start() {
     clearInterval(timer);
-    const tick = async () => { const changed = await fetchNew(); await matchReminders(); badge(); if (changed && fast && onNew) onNew(); };
+    const tick = async () => { const changed = await fetchNew(); await matchReminders(); badge(); if (changed && fast && onNew) onNew(); if (fast && onTick) onTick(); };
     tick(); timer = setInterval(tick, fast ? 6000 : 45000);
   }
-  let onNew = null;
+  let onNew = null, onTick = null;
 
   /* ---------- page ---------- */
   function page(root, chParam) {
@@ -141,39 +159,73 @@ const Messages = (() => {
     if (!ch) { fast = false; onNew = () => page(root); start(); return; }
     markRead(ch); badge();
     const body = $('#convBody', root);
+    // ✓ sent, ✓✓ read (private conversation); « Vu par N » under my last message (category, whole club)
+    const receipt = (m, isLast) => {
+      const rs = (readsOf[ch] || []).filter(r => r.staff_id !== me().id && r.at >= m.created_at);
+      if (ch.startsWith('dm:')) return rs.length ? ` · <span class="seen" title="Lu à ${esc(new Date(rs[0].at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }))}">✓✓${isLast ? ' Lu ' + esc(new Date(rs[0].at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })) : ''}</span>` : ` · <span class="sent">✓${isLast ? ' Envoyé' : ''}</span>`;
+      return isLast ? ` · <button class="linkish seen-by" data-seen="${m.id}">${rs.length ? `Vu par ${rs.length}` : 'Pas encore vu'}</button>` : '';
+    };
+    let myLast = null;
     const draw = () => {
       const list = msgs.filter(m => m.channel === ch);
+      myLast = list.filter(m => m.author_id === me().id).pop() || null;
+      // stays where the coach is reading, except at the bottom of the conversation
+      const atBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 60, keep = body.scrollTop;
       let day = '';
       body.innerHTML = list.length ? list.map(m => {
         const d = new Date(m.created_at), ds = d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
         const sep = ds !== day ? `<div class="day-sep">${esc(ds)}</div>` : ''; day = ds;
         const mine = m.author_id === me().id;
-        return `${sep}<div class="bubble ${mine ? 'mine' : ''}" data-m="${m.id}">${mine ? '' : `<span class="author-line"><b class="author">${crestOf(staffOf(m))}${esc(authorName(m))}</b>${UI.motto(staffOf(m))}</span>`}<p>${esc(String(m.body).replace(/\n?#rappel-[\w-]+\s*$/, '').replace(/\n?\[\[fichier:[\w,-]+\]\]/, '').replace(/\n?\[\[signalement:[\w-]+\]\]/, '')).replace(/\n/g, '<br>')}</p>${filesOf(m)}
-          <span class="time">${d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}${mine || Auth.isAdmin() ? ` · <button class="linkish" data-delm="${m.id}">supprimer</button>` : ''}</span></div>`;
+        return `${sep}<div class="bubble ${mine ? 'mine' : ''}" data-m="${m.id}">${mine ? '' : `<span class="author-line"><b class="author">${crestOf(staffOf(m))}${esc(authorName(m))}</b>${UI.motto(staffOf(m))}</span>`}<p>${withMentions(esc(clean(m.body))).replace(/\n/g, '<br>')}</p>${filesOf(m)}
+          <span class="time">${d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}${mine ? receipt(m, m === myLast) : ''}${mine || Auth.isAdmin() ? ` · <button class="linkish" data-delm="${m.id}">supprimer</button>` : ''}</span></div>`;
       }).join('') : '<p class="muted conv-hint">Pas encore de message. Écris le premier !</p>';
-      body.scrollTop = body.scrollHeight;
+      body.scrollTop = atBottom || !drawn ? body.scrollHeight : keep; drawn = true;
     };
-    draw();
+    let drawn = false;
+    draw(); sendRead(ch);
+    loadReads(ch).then(() => { if (body.isConnected) draw(); });
     const ta = $('#msgText', root);
-    ta.oninput = () => { ta.style.height = 'auto'; ta.style.height = Math.min(140, ta.scrollHeight) + 'px'; };
+    ta.oninput = () => { ta.style.height = 'auto'; ta.style.height = Math.min(140, ta.scrollHeight) + 'px'; suggest(); };
+    // « @ka… » → the coaches whose first name starts like this; a touch completes the name
+    const sug = document.createElement('div'); sug.className = 'mention-sug'; sug.hidden = true; $('#composer', root).before(sug);
+    const suggest = () => {
+      const upto = ta.value.slice(0, ta.selectionStart), m = upto.match(/(^|\s)@([A-Za-zÀ-ÿ'-]*)$/);
+      if (!m) { sug.hidden = true; return; }
+      const q = fold(m[2]), list = S().staff.filter(s => s.id !== me().id && fold(firstOf(s)).startsWith(q)).sort(Store.byName).slice(0, 6);
+      sug.innerHTML = list.map(s => `<button type="button" data-mention="${esc(firstOf(s))}">${crestOf(s)}<b>@${esc(firstOf(s))}</b><span class="muted small">${esc(Store.fullName(s))}${s.role ? ' · ' + esc(s.role) : ''}</span></button>`).join('');
+      sug.hidden = !list.length;
+    };
+    sug.onclick = e => {
+      const b = e.target.closest('[data-mention]'); if (!b) return;
+      const pos = ta.selectionStart, before = ta.value.slice(0, pos).replace(/@([A-Za-zÀ-ÿ'-]*)$/, '@' + b.dataset.mention + ' ');
+      ta.value = before + ta.value.slice(pos); ta.focus(); ta.setSelectionRange(before.length, before.length); sug.hidden = true;
+    };
     ta.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey && matchMedia('(pointer: fine)').matches) { e.preventDefault(); $('#composer', root).requestSubmit(); } };
     $('#composer', root).onsubmit = async e => {
       e.preventDefault();
       const text = ta.value.trim(); if (!text) return;
       ta.value = ''; ta.oninput();
-      try { const m = await Cloud.post(ch, text); if (m && !msgs.some(x => x.id === m.id)) { msgs.push(m); last = m.created_at > last ? m.created_at : last; try { localStorage.setItem(CACHE, JSON.stringify(msgs)); } catch (e2) {} } markRead(ch); draw(); }
+      const tags = tagsOf(text), sent = tags.length ? `${text}\n[[tag:${tags.join(',')}]]` : text;
+      try { const m = await Cloud.post(ch, sent); if (m && !msgs.some(x => x.id === m.id)) { msgs.push(m); last = m.created_at > last ? m.created_at : last; try { localStorage.setItem(CACHE, JSON.stringify(msgs)); } catch (e2) {} } markRead(ch); draw(); }
       catch (err) { ta.value = text; toast(err.message, 'err'); }
     };
     body.onclick = async e => {
       // a report's screenshot, full size
       const sh = e.target.closest('[data-shot]');
+      const sb = e.target.closest('[data-seen]');
+      if (sb) {
+        const m = msgs.find(x => x.id === sb.dataset.seen), rs = (readsOf[ch] || []).filter(r => r.staff_id !== me().id && m && r.at >= m.created_at);
+        return UI.modal({ title: 'Vu par', noFocus: true, body: rs.length ? `<ul class="alerts">${rs.map(r => { const s = Store.get('staff', r.staff_id); return `<li><b>${esc(s ? coachName(s) : 'Un dirigeant')}</b> <span class="muted small">${esc(new Date(r.at).toLocaleString('fr-FR', { weekday: 'short', hour: '2-digit', minute: '2-digit' }))}</span></li>`; }).join('')}</ul>` : '<p class="muted">Personne n\'a encore ouvert la conversation depuis ce message.</p>', actions: [{ label: 'Fermer', kind: 'primary' }] });
+      }
       if (sh) { const rep = Store.get('reports', sh.dataset.shot); if (rep && rep.shot) UI.modal({ title: 'Capture d\'écran', noFocus: true, body: `<div class="viewer"><img alt="Capture d'écran du problème" src="${rep.shot}"></div><p class="muted small">${esc(rep.byName || '')}${rep.page ? ' · page « ' + esc(rep.page) + ' »' : ''}</p>`, actions: [{ label: 'Fermer', kind: 'primary' }] }); return; }
       const b = e.target.closest('[data-delm]'); if (!b) return;
       if (!(await confirmBox('Supprimer ce message pour tout le monde ?'))) return;
       try { await Cloud.deleteMessage(b.dataset.delm); msgs = msgs.filter(m => m.id !== b.dataset.delm); try { localStorage.setItem(CACHE, JSON.stringify(msgs)); } catch (e2) {} draw(); }
       catch (err) { toast(err.message, 'err'); }
     };
-    fast = true; onNew = () => { if (location.hash.startsWith('#/messages/')) { markRead(ch); draw(); badge(); } }; start();
+    fast = true; onNew = () => { if (location.hash.startsWith('#/messages/')) { markRead(ch); draw(); sendRead(ch); badge(); } };
+    onTick = () => { if (location.hash.startsWith('#/messages/') && body.isConnected) { const before = JSON.stringify(readsOf[ch]); loadReads(ch).then(r => { if (body.isConnected && JSON.stringify(r) !== before) draw(); }); } };
+    start();
     if (UI.finePointer()) setTimeout(() => ta.focus(), 100);
   }
   function pickCoach() {
@@ -182,7 +234,7 @@ const Messages = (() => {
       body: others.length ? `<div class="people">${others.map(s => `<button class="person-main" data-to="${s.id}"><span class="pnum role">${I.whistle}</span><span class="pmain"><b class="author">${crestOf(s)}${esc(coachName(s))}</b>${UI.motto(s)}<span class="muted">${esc([s.role, (s.teamIds || []).map(id => (Store.get('teams', id) || {}).name).filter(Boolean).join(', '), s.club ? 'club de cœur : ' + Clubs.name(s.club) : ''].filter(Boolean).join(' · '))}</span></span></button>`).join('')}</div>` : '<p class="muted">Aucun autre dirigeant dans l\'appli.</p>',
       onOpen: r => $$('[data-to]', r).forEach(b => b.onclick = () => { close(); location.hash = '#/messages/' + encodeURIComponent(dmKey(me().id, b.dataset.to)); }) });
   }
-  function leave() { fast = false; onNew = null; start(); }
+  function leave() { fast = false; onNew = null; onTick = null; start(); }
 
   return { page, start, badge, leave, coachName };
 })();
