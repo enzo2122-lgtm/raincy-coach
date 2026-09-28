@@ -194,6 +194,7 @@ const Views = (() => {
     root.innerHTML = `${header('Équipes', 'Les catégories du club, leurs joueurs et leurs dirigeants',
       `<a class="btn" href="#/joueurs">${I.team}<span>${Auth.isAdmin() ? 'Tous les joueurs' : 'Mes joueurs'} (${S().players.filter(Auth.seesPerson).length})</span></a>
        <a class="btn" href="#/dirigeants">${I.whistle}<span>Dirigeants (${S().staff.filter(Auth.seesPerson).length})</span></a>
+       <a class="btn" href="#/infirmerie">🚑<span>Infirmerie${Health.count() ? ' (' + Health.count() + ')' : ''}</span></a>
        ${Auth.isAdmin() ? `<button class="btn" data-act="bybirth">${I.calendar}<span>Ranger par année de naissance</span></button>` : ''}
        ${Auth.isAdmin() ? `<button class="btn primary" data-act="new">${I.plus}<span>Nouvelle catégorie</span></button>` : ''}`)}
       ${Auth.teams().length ? `<div class="grid">${Store.teamGroups(Auth.teams()).map(g => {
@@ -409,6 +410,7 @@ const Views = (() => {
           <p class="muted small">Un toucher par joueur. Le % est sa présence sur la saison (séances où l'appel a été fait).</p>
           ${rosterChips(tm.id, p => `<button class="chip ${(tr.presents || []).includes(p.id) ? 'on' : ''}" data-present="${p.id}">${presChip(p, tm.id)}</button>`)}` : ''}
         <div id="rateBox"></div>
+        <div id="rpeBox"></div>
         <div id="docsBox">${Library.docsPlaceholder()}</div>
         ${Media.placeholder('training:' + tr.id, 'Photos et vidéos de la séance')}
         <div class="danger-zone"><button class="btn" data-act="dup">${I.copy}<span>Dupliquer (autre date ou catégorie)</span></button><button class="btn" data-act="model">📚<span>Enregistrer comme séance type</span></button><button class="btn danger" data-act="delete">${I.trash}<span>Supprimer</span></button></div>`;
@@ -425,8 +427,10 @@ const Views = (() => {
         <button class="btn primary" data-act="addEx">${I.plus}<span>Ajouter un exercice</span></button>
         <div class="danger-zone"><button class="btn danger" data-act="delete">${I.trash}<span>Supprimer la séance type</span></button></div>`;
     };
-    const presChip = (p, teamId) => `<span>${chipLabel(p)}</span>${People.pctBadge(People.attendance(p, teamId))}`;
-    const rateTr = () => { const box = $('#rateBox', root); if (box) box.innerHTML = Ratings.section(tr, Store.rosterOf(tr.teamId || '').filter(p => (tr.presents || []).includes(p.id)), 'training'); };
+    const presChip = (p, teamId) => `${Health.flag(p, tr.date)}<span>${chipLabel(p)}</span>${People.pctBadge(People.attendance(p, teamId))}`;
+    const rateTr = () => { const box = $('#rateBox', root); if (box) box.innerHTML = Ratings.section(tr, Store.rosterOf(tr.teamId || '').filter(p => (tr.presents || []).includes(p.id)), 'training'); rpeTr(); };
+    // the effort of the players present (RPE), for the training load
+    const rpeTr = () => { const box = $('#rpeBox', root); if (box) box.innerHTML = Health.rpeBox(tr, Store.rosterOf(tr.teamId || '').filter(p => (tr.presents || []).includes(p.id)).map(p => p.id), 'training'); };
     const exerciseCard = (e, i, n) => {
       const sc = e.schemaId && Store.get('schemas', e.schemaId);
       return `<article class="card ex" data-ex="${e.id}">
@@ -457,6 +461,7 @@ const Views = (() => {
     };
     root.onclick = async e => {
       const b = e.target.closest('button'); if (!b) return;
+      if (Health.rpeClick(e, tr, tr.presents || [], () => { save(); rpeTr(); })) return;
       const card = b.closest('[data-ex]'), ex = card && tr.exercises.find(x => x.id === card.dataset.ex);
       if (b.dataset.present) {
         const p = tr.presents = tr.presents || [], i = p.indexOf(b.dataset.present); i < 0 ? p.push(b.dataset.present) : p.splice(i, 1); save();
@@ -606,7 +611,7 @@ const Views = (() => {
         ${!m.exempt ? Live.card(m) + Prepa.card(m) : ''}
         ${m.home && !m.exempt && Cloud.ready() ? '<div id="roomsBox"></div>' : ''}
         <div class="row-head"><h2 class="section">Convoqués (${conv.length})</h2>${conv.length ? `<button class="btn primary" data-act="convoc">${I.share}<span>Envoyer la convocation</span></button>` : ''}</div>
-        ${t ? rosterChips(t.id, p => `<button class="chip ${(m.convoked || []).includes(p.id) ? 'on' : ''}" data-conv="${p.id}">${chipLabel(p)}</button>`) : '<p class="muted">Choisis une équipe.</p>'}
+        ${t ? rosterChips(t.id, p => `<button class="chip ${(m.convoked || []).includes(p.id) ? 'on' : ''} ${Health.on(p, m.date) ? 'unav' : ''}" data-conv="${p.id}">${Health.flag(p, m.date)}${chipLabel(p)}</button>`) : '<p class="muted">Choisis une équipe.</p>'}
         ${!m.played && t ? (() => { const low = People.lowPlaytime(t.id); return low.length ? `<p class="tip playtime-tip">⏱️ Peu de temps de jeu cette saison : ${low.slice(0, 8).map(x => `<b>${esc(Store.shortName(x.p))}</b> (${x.min}')`).join(', ')}${low.length > 8 ? '…' : ''} · moyenne de l'équipe ${low[0].avg}'.</p>` : ''; })() : ''}
         <div id="answersBox"></div>
         ${!m.home && !m.exempt ? '<div id="carpoolBox"></div>' : ''}
@@ -626,7 +631,7 @@ const Views = (() => {
                 <span class="mini-step" title="Passes décisives"><em>P</em><button data-pl="${p.id}" data-k="a" data-d="-1" aria-label="Moins de passes">−</button><b>${st.a || 0}</b><button data-pl="${p.id}" data-k="a" data-d="1" aria-label="Plus de passes">+</button></span></div>`; }).join('')}</div>` : '<p class="tip">Coche les convoqués pour noter les buteurs.</p>'}` : ''}
           <label class="fld"><span>Notes</span><textarea data-f="notes" rows="3" placeholder="Ce qui a marché, ce qu'on travaille la semaine prochaine">${esc(m.notes || '')}</textarea></label>
         </section>
-        ${m.played && conv.length ? minutesCard(m, conv) : ''}
+        ${m.played && conv.length ? minutesCard(m, conv) + Health.rpeBox(m, conv.map(p => p.id), 'match') : ''}
         <div id="rateBox"></div>
         <div id="docsBox">${Library.docsPlaceholder()}</div>
         ${Media.placeholder('match:' + m.id, 'Photos et vidéos du match')}
@@ -663,10 +668,13 @@ const Views = (() => {
         const full = People.matchLength(m), conv = (m.convoked || []);
         conv.forEach(pid => { if ((m.minutes || {})[pid] == null) setMin(pid, full); }); save(); return render();
       }
+      if (Health.rpeClick(e, m, m.convoked || [], () => { save(); render(); })) return;
       if (b.dataset.cheer) { ClubLife.cheer(b.dataset.cheer); return render(); }
       if (b.dataset.home) { m.home = b.dataset.home === '1'; save(); return render(); }
       if (b.dataset.unstaff) { m.staffIds = (m.staffIds || []).filter(x => x !== b.dataset.unstaff); save(); return render(); }
-      if (b.dataset.conv) { const c = m.convoked = m.convoked || [], i = c.indexOf(b.dataset.conv); i < 0 ? c.push(b.dataset.conv) : c.splice(i, 1); save(); return render(); }
+      if (b.dataset.conv) { const c = m.convoked = m.convoked || [], i = c.indexOf(b.dataset.conv); i < 0 ? c.push(b.dataset.conv) : c.splice(i, 1);
+        const pl = Store.get('players', b.dataset.conv), u = i < 0 && Health.on(pl, m.date); if (u) toast(`Attention : ${Store.shortName(pl)} est indisponible ce jour-là (${Health.label(u)})`, 'err');
+        save(); return render(); }
       if (b.dataset.sc) { const before = Ratings.result(m); m[b.dataset.sc] = Math.max(0, (+m[b.dataset.sc] || 0) + +b.dataset.d); if (Ratings.result(m) !== before) delete m.smiley; save(); render(); return cheer(before); }
       if (b.dataset.smiley) { m.smiley = b.dataset.smiley; save(); return render(); }
       if (b.dataset.pl) { const st = (m.stats = m.stats || {})[b.dataset.pl] = m.stats[b.dataset.pl] || {}; st[b.dataset.k] = Math.max(0, (st[b.dataset.k] || 0) + +b.dataset.d); save(); return render(); }
