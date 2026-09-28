@@ -7,11 +7,16 @@ const Supporters = (() => {
   // The back of the coin: the first part of the slogan around the ring, « Notre Club, Notre Histoire, Notre Fierté » in the middle
   function back() {
     const id = 'coinArc' + (++n);
+    // centred on the ring: the first half over the top, the second half under the bottom (read upright), ⚜ on each side
+    const top = 37.9, bot = 42.4;
     return `<svg class="coin-svg" viewBox="0 0 100 100" aria-hidden="true">
-      <defs><path id="${id}" d="M50,50 m-40.5,0 a40.5,40.5 0 1,1 81,0 a40.5,40.5 0 1,1 -81,0"/></defs>
+      <defs><path id="${id}t" d="M${50 - top},50 A${top},${top} 0 0 1 ${50 + top},50"/><path id="${id}b" d="M${50 - bot},50 A${bot},${bot} 0 0 0 ${50 + bot},50"/></defs>
       <circle cx="50" cy="50" r="49" fill="#7a0a16"/><circle cx="50" cy="50" r="46.6" fill="none" stroke="#faf8f8" stroke-width="1.4"/>
       <circle cx="50" cy="50" r="33.5" fill="#0e1d45" stroke="#c9a45c" stroke-width="1.2"/>
-      <text font-family="system-ui,sans-serif" font-weight="800" font-size="6.2" letter-spacing=".25" fill="#f3e2b5"><textPath href="#${id}" startOffset="1%">PLUS D'UN SIÈCLE DE PASSION, D'EFFORT ET DE VICTOIRES ⚜</textPath></text>
+      <g font-family="system-ui,sans-serif" font-weight="800" font-size="5.8" letter-spacing=".25" fill="#f3e2b5">
+        <text><textPath href="#${id}t" startOffset="50%" text-anchor="middle">PLUS D'UN SIÈCLE DE PASSION,</textPath></text>
+        <text><textPath href="#${id}b" startOffset="50%" text-anchor="middle">D'EFFORT ET DE VICTOIRES</textPath></text></g>
+      <g font-size="5" fill="#c9a45c" text-anchor="middle"><text x="9.6" y="51.8">⚜</text><text x="90.4" y="51.8">⚜</text></g>
       <text x="50" y="27" text-anchor="middle" font-size="8" fill="#c9a45c">⚜</text>
       <g font-family="system-ui,sans-serif" font-weight="800" text-anchor="middle" fill="#fff">
         <text x="50" y="41" font-size="7.4">NOTRE CLUB</text><text x="50" y="51.5" font-size="7.4">NOTRE HISTOIRE</text><text x="50" y="62" font-size="7.4" fill="#e2c27d">NOTRE FIERTÉ</text></g>
