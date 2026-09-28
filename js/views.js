@@ -750,7 +750,7 @@ const Views = (() => {
       return { p, post: People.postsLabel(p, true), played, g, a: as, pr, min, rate:trs.length ? Math.round(pr / trs.length * 100) : null, nm: Ratings.average(p.id, 'match') || 0, nt: Ratings.average(p.id, 'training') || 0 };
     }).filter(r => ownIds.has(r.p.id) || !ownIds.size || r.played || r.pr).sort((a, b) => sortKey === 'post' ? People.sortPlayers([a.p, b.p], 'post')[0] === a.p ? -1 : 1 : sortKey === 'name' ? Store.byName(a.p, b.p) : sortKey === 'num' ? (+a.p.number || 99) - (+b.p.number || 99) : (b[sortKey] || 0) - (a[sortKey] || 0));
     const th = (k, l) => `<th><button class="th ${sortKey === k ? 'on' : ''}" data-sort="${k}">${l}</button></th>`;
-    root.innerHTML = `${header('Statistiques', esc(t.name), `<button class="btn" data-act="excel">${I.download}<span>Excel</span></button>`)}
+    root.innerHTML = `${header('Statistiques', esc(t.name), `<a class="btn" href="#/bilan/${t.id}">🏆<span>Bilan de saison</span></a><button class="btn" data-act="excel">${I.download}<span>Excel</span></button>`)}
       ${teamSwitch()}
       <div class="tiles">
         <div class="tile"><b>${ms.length}</b><span>Matchs</span></div>

@@ -1512,3 +1512,15 @@ h2.section svg { width: 22px; height: 22px; vertical-align: -4px; margin-right: 
 .vol-set .prep-check { flex: 1; }
 .vol-set select { min-height: 40px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: inherit; }
 .hero-vol { background: #16a34a; color: #fff; margin-right: 6px; }
+
+/* 3.38 : bilan de saison */
+.tile.v b { color: #15803d; } .tile.n b { color: #a16207; } .tile.d b { color: #b91c1c; }
+.ss-row { display: flex; justify-content: space-between; margin: 4px 0; }
+.ss-table { overflow-x: auto; }
+.ss-table table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.ss-table th, .ss-table td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+.ss-table th:first-child, .ss-table td:first-child { text-align: left; }
+.ss-results { display: flex; flex-direction: column; gap: 4px; }
+.ss-results a { display: grid; grid-template-columns: 70px 1fr auto; gap: 8px; padding: 6px 10px; border-radius: 10px; background: var(--surface2); color: inherit; text-decoration: none; border-left: 4px solid #a16207; }
+.ss-results a.res-V { border-left-color: #15803d; } .ss-results a.res-D { border-left-color: #b91c1c; }
+#ssNote { width: 100%; }
