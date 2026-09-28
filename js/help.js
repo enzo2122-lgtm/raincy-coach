@@ -2,7 +2,7 @@
    Errors are caught and kept so a coach can attach them to a report. */
 const Help = (() => {
   const { esc, $, $$, toast, modal } = UI;
-  const VERSION = '3.40';
+  const VERSION = '3.41';
   const TOUR_KEY = 'raincy-tour-seen', ERR_KEY = 'raincy-errors';
 
   /* ---------- error log ---------- */
@@ -80,6 +80,7 @@ const Help = (() => {
     joueur: ['Fiche joueur', ['Présence à l\'entraînement sur la saison (séances où l\'appel a été fait), matchs, minutes, buts, passes et notes.', '« Modifier » ouvre ses informations : numéro, poste, téléphones des parents, infos santé.', 'Les minutes se saisissent dans chaque match joué, rubrique « Temps de jeu ».']],
     president: ['Tableau de bord', ['Les chiffres de la saison pour tout le club, et le détail par catégorie (licenciés, encadrants, présence, résultats).', '« À surveiller » liste ce qui demande une action : catégorie sans éducateur, match sans score, joueurs sans téléphone.', 'Sauvegardes : le serveur copie les données chaque lundi (8 semaines gardées). Tu peux aussi télécharger une copie à garder en lieu sûr, jamais sur GitHub.']],
     licences: ['Licences et cotisations', ['Touche une case pour changer son état : licence, certificat ou questionnaire santé, cotisation, droit à l\'image. Le montant payé s\'écrit à droite.', '« Seulement ceux qui ne sont pas en règle » : la liste de ceux à relancer.', 'Les coachs voient ⚠️ dans les convocations pour un joueur dont la licence est en attente ou le certificat à fournir. Les cotisations restent entre responsables.', '« Excel » télécharge le tableau.']],
+    import: ['Import AssistCoachAI', ['Réglages ou Entraînements → « Recevoir un fichier » : choisis le fichier exporté d\'AssistCoachAI. Joueurs, matchs, entraînements, présences, compos, stats, blessures, bien-être et championnats arrivent dans l\'appli.', 'Rien n\'est ajouté deux fois : les joueurs et les matchs déjà là (import FFF) sont complétés. Un fichier plus récent peut être réimporté.']],
     tests: ['Tests physiques', ['Choisis l\'équipe et le test (VMA, VIFT 30-15, Yo-Yo, sprints, détente, agilité, jongles…) : classement, progrès depuis le test d\'avant.', '« Nouvelle séance de tests » : toute l\'équipe dans un seul tableau.', '« Importer » : un fichier Excel ou CSV d\'une autre plateforme (GPS, appli de tests, tablette). L\'appli reconnaît les joueurs et les colonnes ; tu vérifies avant d\'importer.', 'Avec la VMA ou la VIFT : les allures de course de chaque joueur (15-15, 30-30…).']],
     bilan: ['Bilan de saison', ['Pour une équipe : résultats, buteurs, passeurs, et pour chaque joueur les matchs, minutes, buts, présence, évaluation et jours de blessure.', '« Le mot du coach » s\'ajoute au bilan PDF, à remettre au club ou aux parents.', '« Sauvegarder la saison » enregistre toutes les données du club dans un fichier, à garder avant de repartir sur la saison suivante.']],
     benevoles: ['Bénévoles', ['Pour chaque match des 4 semaines : les tâches (buvette, arbitre de touche, délégué, table de marque, lavage des maillots…) et qui s\'en occupe.', '« Je m\'inscris » en un geste, ou « Inscrire quelqu\'un » pour un parent qui a dit oui. Les parents peuvent aussi s\'inscrire depuis leur page.', 'La veille, les dirigeants inscrits reçoivent un rappel sur leur téléphone.', 'Le responsable choisit les tâches et le nombre de personnes (« Les tâches »).']],

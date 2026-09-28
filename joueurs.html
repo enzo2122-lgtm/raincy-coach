@@ -101,13 +101,20 @@ button, select { font: inherit; }
 .board h3 { margin: 0 0 6px; font-size: 15px; }
 .board p { display: flex; justify-content: space-between; margin: 3px 0; font-size: 14px; }
 @media (max-width: 480px) { .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.wb h3 { margin: 0 0 4px; } .wb-done { color: var(--yes); font-weight: 700; }
+.wb-row { display: flex; flex-direction: column; gap: 4px; margin: 10px 0; } .wb-row > span:first-child { font-weight: 700; font-size: 15px; }
+.wb-scale { display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px; }
+.wb-scale button { min-height: 38px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-weight: 700; padding: 0; }
+.wb-scale button.on { color: #fff; border-color: transparent; }
+.wb-scale .v1.on, .wb-scale .v2.on, .wb-scale .v3.on, .wb-scale .v4.on { background: #dc2626; } .wb-scale .v5.on, .wb-scale .v6.on, .wb-scale .v7.on { background: #ca8a04; } .wb-scale .v8.on, .wb-scale .v9.on, .wb-scale .v10.on { background: #16a34a; }
+.wb-note { width: 100%; min-height: 44px; border-radius: 12px; border: 1px solid var(--line); padding: 0 12px; margin: 6px 0 10px; font: inherit; background: var(--surface); color: var(--ink); }
 </style>
 </head>
 <body>
 <header class="top"><div class="top-in"><img src="icons/crest.png" alt=""><div><p id="club">FA Le Raincy · Espace joueurs</p><h1 id="team">Chargement…</h1></div></div></header>
 <main id="page"><p class="empty">Chargement des informations de l'équipe…</p></main>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
-<script src="js/config.js?v=80"></script>
-<script src="js/players-page.js?v=80"></script>
+<script src="js/config.js?v=81"></script>
+<script src="js/players-page.js?v=81"></script>
 </body>
 </html>

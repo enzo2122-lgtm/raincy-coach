@@ -117,6 +117,7 @@ const Health = (() => {
       <div class="list">${now.map(([p, u]) => `<div class="list-item hl-item k-${u.kind}"><a class="li-main" href="#/joueur/${p.id}"><b>${KINDS[u.kind][0]} ${esc(Store.fullName(p))}</b><span class="muted">${esc(teamsOf(p))} · ${esc(label(u).replace(/^\S+ /, ''))}${u.to ? ` · ${days(t, u.to)} j` : ''}${u.note ? ' · ' + esc(u.note) : ''}</span></a>
         <button class="btn soft" data-hlback="${p.id}|${u.id}">💪 De retour</button></div>`).join('') || '<p class="muted">Personne : tout le monde est disponible. 💪</p>'}</div>
       ${soon.length ? `<h2 class="section">Absences à venir</h2><div class="list">${soon.map(([p, u]) => `<a class="list-item" href="#/joueur/${p.id}"><span class="li-main"><b>${KINDS[u.kind][0]} ${esc(Store.fullName(p))}</b><span class="muted">dès le ${esc(fmt(u.from))} · ${esc(label(u).replace(/^\S+ /, ''))}</span></span></a>`).join('')}</div>` : ''}
+      ${wellnessSection()}
       <h2 class="section">Charge d'entraînement (7 derniers jours)</h2>
       <p class="muted small">Charge = effort ressenti (RPE) × minutes, noté après les séances et les matchs. ⚠️ = 7 derniers jours bien plus lourds que ses semaines habituelles : à surveiller, risque de blessure.</p>
       ${load.length ? `<div class="hl-load">${load.map(([p, r]) => `<a href="#/joueur/${p.id}" class="${r.high ? 'high' : ''}"><span>${r.high ? '⚠️ ' : ''}${esc(Store.fullName(p))}</span><b>${r.acute}</b><i>habituel ${r.chronic || '–'}</i></a>`).join('')}</div>`
@@ -135,5 +136,32 @@ const Health = (() => {
   }
   const count = () => S().players.filter(Auth.seesPerson).filter(p => on(p)).length;
 
-  return { on, flag, label, dialog, playerCard, click, rpeBox, rpeClick, risk, page, count, KINDS };
+  /* ---------- well-being: mood, mental, sleep, legs, soreness (1 to 10), filled in by the player on his page ---------- */
+  const WB = [['mood', '🙂', 'Ressenti'], ['mental', '🧠', 'Mental'], ['sleep', '😴', 'Sommeil'], ['legs', '🦵', 'Jambes'], ['sore', '💪', 'Courbatures']];
+  const wbAvg = w => { const v = WB.map(([k]) => +w[k]).filter(x => x > 0); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
+  // a player to call: a very low score in the last 3 days (pain, bad mood), or a fall compared with his usual level
+  function toCall(p) {
+    const l = (p.wellness || []).filter(w => w.day >= addDays(today(), -3)).sort((a, b) => a.day.localeCompare(b.day)); if (!l.length) return null;
+    const last = l[l.length - 1], low = WB.filter(([k]) => +last[k] > 0 && +last[k] <= 4).map(([, , lab]) => lab);
+    return low.length ? { last, why: low.join(', ') } : null;
+  }
+  function wellnessCard(p) {
+    const l = (p.wellness || []).slice().sort((a, b) => a.day.localeCompare(b.day)).slice(-14); if (!l.length) return '';
+    const last = l[l.length - 1];
+    return `<section class="card"><h2>💚 Bien-être</h2><p class="muted small">Dernier questionnaire : ${esc(fmt(last.day))}${last.note ? ` · « ${esc(last.note)} »` : ''}</p>
+      <div class="wb-last">${WB.map(([k, ic, lab]) => `<span class="${+last[k] <= 4 ? 'low' : +last[k] >= 8 ? 'high' : ''}">${ic}<b>${last[k] || '–'}</b><i>${lab}</i></span>`).join('')}</div>
+      <div class="wb-spark" title="Moyenne des 14 derniers questionnaires">${l.map(w => { const a = wbAvg(w) || 0; return `<i style="height:${a * 10}%" class="${a <= 4 ? 'low' : a >= 8 ? 'high' : ''}" title="${esc(fmt(w.day))} : ${a.toFixed(1)}"></i>`; }).join('')}</div></section>`;
+  }
+  function wellnessSection() {
+    const ps = S().players.filter(Auth.seesPerson), t = today();
+    const calls = ps.map(p => [p, toCall(p)]).filter(([, c]) => c);
+    const todayN = ps.filter(p => (p.wellness || []).some(w => w.day === t)).length, with7 = ps.filter(p => (p.wellness || []).some(w => w.day >= addDays(t, -6)));
+    if (!with7.length && !calls.length) return `<h2 class="section">💚 Bien-être</h2><p class="muted small">Les joueurs remplissent un petit questionnaire (ressenti, mental, sommeil, jambes, courbatures) sur leur page. Les réponses apparaissent ici.</p>`;
+    return `<h2 class="section">💚 Bien-être (7 jours) · ${todayN} réponse${todayN > 1 ? 's' : ''} aujourd'hui</h2>
+      ${calls.length ? `<div class="wb-call">📞 <b>${calls.length} joueur${calls.length > 1 ? 's' : ''} à appeler</b> : ${calls.map(([p, c]) => `<a href="#/joueur/${p.id}">${esc(Store.shortName(p))}</a> <i>(${esc(c.why)})</i>`).join(' · ')}</div>` : ''}
+      <div class="hl-load">${with7.map(p => { const l = (p.wellness || []).filter(w => w.day >= addDays(t, -6)), a = l.reduce((s, w) => s + (wbAvg(w) || 0), 0) / l.length;
+        return `<a href="#/joueur/${p.id}" class="${a <= 4.5 ? 'high' : ''}"><span>${esc(Store.fullName(p))}</span><b>${a.toFixed(1).replace('.', ',')}</b><i>${l.length} réponse${l.length > 1 ? 's' : ''} · moyenne sur 10</i></a>`; }).join('')}</div>`;
+  }
+
+  return { on, flag, label, dialog, playerCard, click, rpeBox, rpeClick, risk, page, count, KINDS, WB, wellnessCard, wellnessSection, toCall };
 })();

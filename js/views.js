@@ -635,7 +635,7 @@ const Views = (() => {
                 <span class="mini-step" title="Passes décisives"><em>P</em><button data-pl="${p.id}" data-k="a" data-d="-1" aria-label="Moins de passes">−</button><b>${st.a || 0}</b><button data-pl="${p.id}" data-k="a" data-d="1" aria-label="Plus de passes">+</button></span></div>`; }).join('')}</div>` : '<p class="tip">Coche les convoqués pour noter les buteurs.</p>'}` : ''}
           <label class="fld"><span>Notes</span><textarea data-f="notes" rows="3" placeholder="Ce qui a marché, ce qu'on travaille la semaine prochaine">${esc(m.notes || '')}</textarea></label>
         </section>
-        ${m.played && conv.length ? minutesCard(m, conv) + Health.rpeBox(m, conv.map(p => p.id), 'match') : ''}
+        ${m.played && conv.length ? minutesCard(m, conv) + Season.detailCard(m) + Health.rpeBox(m, conv.map(p => p.id), 'match') : ''}
         <div id="rateBox"></div>
         <div id="docsBox">${Library.docsPlaceholder()}</div>
         ${Media.placeholder('match:' + m.id, 'Photos et vidéos du match')}
@@ -753,6 +753,7 @@ const Views = (() => {
     const th = (k, l) => `<th><button class="th ${sortKey === k ? 'on' : ''}" data-sort="${k}">${l}</button></th>`;
     root.innerHTML = `${header('Statistiques', esc(t.name), `<a class="btn" href="#/bilan/${t.id}">🏆<span>Bilan de saison</span></a><button class="btn" data-act="excel">${I.download}<span>Excel</span></button>`)}
       ${teamSwitch()}
+      ${Season.leagueCard(t)}
       ${Season.advanced(t)}
       <div class="tiles">
         <div class="tile"><b>${ms.length}</b><span>Matchs</span></div>
@@ -842,6 +843,8 @@ const Views = (() => {
   // Receive a .raincy.json file (players, staff, sessions, matches…) from another coach or from the club
   async function receiveText(txt) {
     txt = String(txt).replace(/^\uFEFF/, '');
+    // a team exported from AssistCoachAI
+    if (/"planning"/.test(txt.slice(0, 200000)) && await ACImport.fromText(txt)) return true;
     if (People.isClubList(txt)) {
       const r = People.importClubList(txt), p = r.players, s = r.staff;
       App.route();

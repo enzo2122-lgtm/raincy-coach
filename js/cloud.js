@@ -445,7 +445,8 @@ begin
     'coaches', (select coalesce(jsonb_agg(jsonb_build_object('name', trim(coalesce(st.data->>'firstName', '') || ' ' || coalesce(st.data->>'lastName', '')), 'role', st.data->>'role', 'phone', st.data->>'phone')
         order by st.data->>'lastName'), '[]'::jsonb) from items st where st.col = 'staff' and not st.deleted and st.data->>'phoneShow' = 'parents' and coalesce(st.data->>'phone', '') <> ''
         and exists (select 1 from jsonb_array_elements_text(case when jsonb_typeof(st.data->'teamIds') = 'array' then st.data->'teamIds' else '[]'::jsonb end) x where x = any(l.team_ids))),
-    'roster', (select coalesce(jsonb_agg(jsonb_build_object('id', p.id, 'name', raincy_short(p.data), 'number', p.data->>'number') order by p.data->>'firstName'), '[]'::jsonb)
+    'roster', (select coalesce(jsonb_agg(jsonb_build_object('id', p.id, 'name', raincy_short(p.data), 'number', p.data->>'number',
+        'wb', (select max(w->>'day') from jsonb_array_elements(case when jsonb_typeof(p.data->'wellness') = 'array' then p.data->'wellness' else '[]'::jsonb end) w)) order by p.data->>'firstName'), '[]'::jsonb)
       from items p where p.col = 'players' and not p.deleted
         and exists (select 1 from jsonb_array_elements_text(case when jsonb_typeof(p.data->'teamIds') = 'array' then p.data->'teamIds' else '[]'::jsonb end) x where x = any(l.team_ids))),
     'matches', (select coalesce(jsonb_agg(x order by x->>'date', x->>'time'), '[]'::jsonb) from (
@@ -488,6 +489,20 @@ begin
     on conflict (match_id, player_id) do update set status = excluded.status, note = excluded.note, by_coach = false, updated_at = now();
   return to_jsonb(true); end $$;
 grant execute on function club_player_link(text, text, text[], text, boolean), player_view(text), player_answer(text, text, text, text, text) to anon, authenticated;
+-- (3.41) Le questionnaire de bien-être d'un joueur (ressenti, mental, sommeil, jambes, courbatures de 1 à 10), une fois par jour
+create or replace function player_wellness(p_token text, p_player text, p_mood int, p_mental int, p_sleep int, p_legs int, p_sore int, p_note text) returns jsonb language plpgsql security definer set search_path = public as $$
+declare l player_links; pl items; w jsonb; d text := to_char(current_date, 'YYYY-MM-DD');
+begin
+  select * into l from player_links where coalesce(p_token, '') <> '' and token = p_token;
+  if l.token is null then raise exception 'LIEN_JOUEURS'; end if;
+  select * into pl from items where col = 'players' and id = p_player and not deleted;
+  if pl.id is null or not exists (select 1 from jsonb_array_elements_text(case when jsonb_typeof(pl.data->'teamIds') = 'array' then pl.data->'teamIds' else '[]'::jsonb end) x where x = any(l.team_ids)) then raise exception 'DONNEES'; end if;
+  if least(p_mood, p_mental, p_sleep, p_legs, p_sore) < 1 or greatest(p_mood, p_mental, p_sleep, p_legs, p_sore) > 10 then raise exception 'DONNEES'; end if;
+  w := (select coalesce(jsonb_agg(e), '[]'::jsonb) from (select e from jsonb_array_elements(case when jsonb_typeof(pl.data->'wellness') = 'array' then pl.data->'wellness' else '[]'::jsonb end) e where e->>'day' <> d order by e->>'day' desc limit 119) q)
+    || jsonb_build_array(jsonb_build_object('day', d, 'mood', p_mood, 'mental', p_mental, 'sleep', p_sleep, 'legs', p_legs, 'sore', p_sore, 'note', left(coalesce(p_note, ''), 200), 'self', true));
+  update items set data = jsonb_set(data, '{wellness}', w), updated_at = (extract(epoch from now()) * 1000)::bigint, rev = nextval('items_rev') where col = 'players' and id = p_player;
+  return to_jsonb(true); end $$;
+grant execute on function player_wellness(text, text, int, int, int, int, int, text) to anon, authenticated;
 grant execute on function club_parent_link(text, text, text[], text, boolean), parent_view(text), parent_answer(text, text, text, text, int, text),
   club_answers(text, text[]), club_set_answer(text, text, text, text) to anon, authenticated;
 create or replace function club_photo_add(k text, p_match text, p_src text, p_data text, p_by text) returns jsonb language plpgsql security definer set search_path = public as $$

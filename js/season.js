@@ -90,5 +90,49 @@ const Season = (() => {
         <p class="muted small">En vert nos buts, en rouge les buts encaissés. Quand on marque le premier : ${whenFirst(true)} · quand on encaisse le premier : ${whenFirst(false)}.</p>`
         : '<p class="muted small">Suis tes matchs en direct (📱 sur la page du match) pour voir les buts par période et les résultats selon qui marque le premier.</p>'}</section>`;
   }
-  return { page, pdf, data, advanced };
+  /* ---------- the detailed stats of a match (shots, key passes, interceptions, crosses, corners, cards, saves) ---------- */
+  const DET = [['g', '⚽', 'Buts'], ['a', '🅿️', 'Passes déc.'], ['sc', '🎯', 'Tirs cadrés'], ['snc', '↗️', 'Non cadrés'], ['d', '🔑', 'Passes clés'], ['iv', '✋', 'Interceptions'],
+    ['cr', '📐', 'Centres'], ['co', '🚩', 'Corners'], ['yc', '🟨', 'Jaunes'], ['rc', '🟥', 'Rouges'], ['sv', '🧤', 'Arrêts']];
+  function detailCard(m) {
+    const det = m.detail || {}, st = m.stats || {}, ids = [...new Set([...Object.keys(det), ...Object.keys(st)])].filter(id => Store.get('players', id));
+    if (!ids.length || !Object.keys(det).length) return '';
+    const v = (id, k) => k === 'g' || k === 'a' ? ((st[id] || {})[k] || 0) : ((det[id] || {})[k] || 0);
+    const cols = DET.filter(([k]) => ids.some(id => v(id, k)));
+    const rows = ids.map(id => ({ p: Store.get('players', id), id })).sort((a, b) => cols.reduce((s, [k]) => s + v(b.id, k), 0) - cols.reduce((s, [k]) => s + v(a.id, k), 0));
+    return `<section class="card"><h2>📊 Stats détaillées</h2><div class="ss-table"><table><thead><tr><th>Joueur</th>${cols.map(([, ic, l]) => `<th title="${esc(l)}">${ic}<br><small>${esc(l)}</small></th>`).join('')}</tr></thead>
+      <tbody>${rows.map(r => `<tr><td><a href="#/joueur/${r.id}">${esc(Store.shortName(r.p))}</a></td>${cols.map(([k]) => `<td>${v(r.id, k) || ''}</td>`).join('')}</tr>`).join('')}</tbody>
+      <tfoot><tr><td><b>Équipe</b></td>${cols.map(([k]) => `<td><b>${ids.reduce((s, id) => s + v(id, k), 0)}</b></td>`).join('')}</tr></tfoot></table></div></section>`;
+  }
+  // a player's detailed stats over the season (player page)
+  function playerDetail(p) {
+    const from = People.seasonFrom(), ms = S().matches.filter(m => m.played && m.date >= from && ((m.detail || {})[p.id] || ((m.stats || {})[p.id])));
+    if (!ms.some(m => (m.detail || {})[p.id])) return '';
+    const sum = k => ms.reduce((s, m) => s + (k === 'g' || k === 'a' ? (((m.stats || {})[p.id] || {})[k] || 0) : (((m.detail || {})[p.id] || {})[k] || 0)), 0);
+    return `<section class="card"><h2>📊 Ses stats détaillées</h2><div class="tt-cards">${DET.filter(([k]) => sum(k)).map(([k, ic, l]) => `<div><span>${ic} ${esc(l)}</span><b>${sum(k)}</b></div>`).join('')}</div></section>`;
+  }
+
+  /* ---------- the league table (championships imported from AssistCoachAI, completed by our results) ---------- */
+  function table(t) {
+    const L = t.league; if (!L) return null;
+    const pts = Object.assign({ win: 3, draw: 1, loss: 0 }, (L.config || {}).points || {}), T = {};
+    L.teams.forEach(x => { T[x.id] = { id: x.id, name: x.own ? `${S().club.name} · ${t.name}` : x.name, own: x.own, j: 0, v: 0, n: 0, d: 0, bp: 0, bc: 0, pts: -(x.pen || 0) }; });
+    const own = L.teams.find(x => x.own), ours = S().matches.filter(m => m.teamId === t.id && m.played);
+    L.fixtures.forEach(f => {
+      let hs = f.hs, as = f.as;
+      // our own matches: the score typed in the app wins (the league file may be older)
+      if (own && (f.h === own.id || f.a === own.id)) { const opp = L.teams.find(x => x.id === (f.h === own.id ? f.a : f.h)); const m = opp && ours.find(x => x.date === f.d && ACImport.sameOpp(x.opponent, opp.name)); if (m) { hs = f.h === own.id ? m.gf : m.ga; as = f.h === own.id ? m.ga : m.gf; } }
+      if (hs == null || as == null || !T[f.h] || !T[f.a]) return;
+      const H = T[f.h], A = T[f.a]; H.j++; A.j++; H.bp += +hs; H.bc += +as; A.bp += +as; A.bc += +hs;
+      if (+hs > +as) { H.v++; A.d++; H.pts += pts.win; A.pts += pts.loss; } else if (+hs < +as) { A.v++; H.d++; A.pts += pts.win; H.pts += pts.loss; } else { H.n++; A.n++; H.pts += pts.draw; A.pts += pts.draw; }
+    });
+    return Object.values(T).sort((a, b) => b.pts - a.pts || (b.bp - b.bc) - (a.bp - a.bc) || b.bp - a.bp || b.v - a.v || a.name.localeCompare(b.name));
+  }
+  function leagueCard(t) {
+    const rows = table(t); if (!rows) return '';
+    const up = +((t.league.config || {}).promotion_slots || 0), down = +((t.league.config || {}).relegation_slots || 0);
+    return `<section class="card"><h2>🏆 ${esc(t.league.name)}</h2><div class="ss-table"><table class="lg-table"><thead><tr><th>#</th><th>Équipe</th><th>Pts</th><th>J</th><th>V</th><th>N</th><th>D</th><th>Diff</th></tr></thead>
+      <tbody>${rows.map((r, i) => `<tr class="${r.own ? 'own' : ''} ${i < up ? 'up' : ''} ${down && i >= rows.length - down ? 'down' : ''}"><td>${i + 1}</td><td>${esc(r.name)}</td><td><b>${r.pts}</b></td><td>${r.j}</td><td>${r.v}</td><td>${r.n}</td><td>${r.d}</td><td>${r.bp - r.bc > 0 ? '+' : ''}${r.bp - r.bc}</td></tr>`).join('')}</tbody></table></div>
+      <p class="muted small">${up ? `En vert : ${up} place${up > 1 ? 's' : ''} de montée. ` : ''}Nos scores saisis dans l'appli sont pris en compte.</p></section>`;
+  }
+  return { page, pdf, data, advanced, detailCard, playerDetail, table, leagueCard };
 })();

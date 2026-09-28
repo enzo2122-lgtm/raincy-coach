@@ -1564,3 +1564,18 @@ h2.section svg { width: 22px; height: 22px; vertical-align: -4px; margin-right: 
 .adv-bands > div { display: grid; grid-template-columns: 70px 1fr 1fr; gap: 6px; align-items: center; margin: 3px 0; font-size: 13px; }
 .adv-bands i { display: block; height: 18px; min-width: 2px; border-radius: 4px; color: #fff; font: 700 12px/18px var(--round); font-style: normal; padding: 0 5px; }
 .adv-bands i.f { background: #16a34a; } .adv-bands i.a { background: #dc2626; }
+
+/* 3.41 : import AssistCoachAI, bien-être, stats détaillées, classement */
+.wb-last { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin: 6px 0 10px; }
+.wb-last span { display: flex; flex-direction: column; align-items: center; padding: 8px 4px; border-radius: 10px; background: var(--surface2); font-size: 18px; }
+.wb-last b { font: 800 18px var(--round); } .wb-last i { font-style: normal; font-size: 11px; color: var(--muted); }
+.wb-last .low { background: color-mix(in srgb, #dc2626 14%, var(--surface)); } .wb-last .high { background: color-mix(in srgb, #16a34a 12%, var(--surface)); }
+.wb-spark { display: flex; align-items: flex-end; gap: 3px; height: 50px; }
+.wb-spark i { flex: 1; min-width: 6px; border-radius: 3px 3px 0 0; background: #ca8a04; } .wb-spark i.low { background: #dc2626; } .wb-spark i.high { background: #16a34a; }
+.wb-call { padding: 10px 14px; border-radius: 12px; background: color-mix(in srgb, #ea580c 14%, var(--surface)); border: 1px solid #ea580c; margin-bottom: 10px; }
+.wb-call i { color: var(--muted); font-size: 13px; }
+.ss-table th small { font-weight: 500; font-size: 10.5px; color: var(--muted); }
+.ss-table tfoot td { border-top: 2px solid var(--line); }
+.lg-table tr.own td { background: color-mix(in srgb, var(--bordeaux) 12%, var(--surface)); font-weight: 700; }
+.lg-table tr.up td:first-child { box-shadow: inset 4px 0 0 #16a34a; } .lg-table tr.down td:first-child { box-shadow: inset 4px 0 0 #dc2626; }
+.pre { white-space: pre-wrap; }

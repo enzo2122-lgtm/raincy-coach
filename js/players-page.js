@@ -83,6 +83,23 @@
       ${rows.length ? `<details><summary class="muted small">Temps de jeu de l'équipe</summary><div class="grid2">${rows.map(x => `<span class="${x.id === mine ? 'mine' : ''}">${esc(x.name)}</span><b>${+x.min ? esc(x.min) + "'" : '–'}${+x.g ? ' ⚽' + (x.g > 1 ? '×' + esc(x.g) : '') : ''}${+x.a ? ' 🅿️' : ''}</b>`).join('')}</div></details>` : ''}</article>`;
   }
 
+  // the well-being questionnaire of the day (1 to 10), sent to the coaches
+  const WB = [['mood', '🙂', 'Ressenti général'], ['mental', '🧠', 'Mental'], ['sleep', '😴', 'Sommeil'], ['legs', '🦵', 'Jambes'], ['sore', '💪', 'Courbatures (10 = aucune)']];
+  const wbVals = {};
+  function wbCard(id, now) {
+    const r = (data.roster || []).find(x => x.id === id) || {};
+    if (r.wb === now) return '<div class="card wb-done">💚 Merci, ton questionnaire du jour est envoyé.</div>';
+    return `<div class="card wb"><h3>💚 Comment tu te sens aujourd'hui ?</h3><p class="info">De 1 (très mal) à 10 (au top). Ton coach voit tes réponses.</p>
+      ${WB.map(([k, ic, lab]) => `<div class="wb-row"><span>${ic} ${lab}</span><span class="wb-scale">${[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => `<button class="${wbVals[k] === n ? 'on' : ''} v${n}" data-wb="${k}" data-v="${n}">${n}</button>`).join('')}</span></div>`).join('')}
+      <input id="wbNote" maxlength="200" placeholder="Un mot pour le coach (douleur, fatigue…)" class="wb-note">
+      <button class="b yes on" data-wbsend="${esc(id)}">Envoyer</button></div>`;
+  }
+  async function wbSend(id) {
+    if (WB.some(([k]) => !wbVals[k])) return toast('Réponds aux 5 questions', true);
+    try { await rpc('player_wellness', { p_token: token, p_player: id, p_mood: wbVals.mood, p_mental: wbVals.mental, p_sleep: wbVals.sleep, p_legs: wbVals.legs, p_sore: wbVals.sore, p_note: ($('#wbNote') || {}).value || '' });
+      const r = (data.roster || []).find(x => x.id === id); const d = new Date(); if (r) r.wb = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; toast('Merci ! 💚'); render(); }
+    catch (e) { toast(e.message, true); }
+  }
   function render() {
     const d = new Date(), now = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     document.title = `${data.team} · ${club()} · Joueurs`;
@@ -94,6 +111,7 @@
     $('#page').innerHTML = `
       <div class="card who">${mine && nameOf(mine) ? `<span>Salut <b>${esc(nameOf(mine))}</b> 👋</span><button class="b small" data-who="">Ce n'est pas moi</button>`
         : `<label><span>Qui es-tu ? (pour voir ta convocation et ta saison)</span><select id="whoSel"><option value="">Choisis ton nom</option>${roster.map(p => `<option value="${esc(p.id)}">${esc(p.name)}${p.number ? ' · n°' + esc(p.number) : ''}</option>`).join('')}</select></label>`}</div>
+      ${mine && nameOf(mine) ? wbCard(mine, now) : ''}
       ${my ? `<h2>Ma saison</h2><div class="tiles"><div><b>${my.mp}</b><span>matchs joués</span></div><div><b>${my.min}'</b><span>temps de jeu</span></div><div><b>${my.mp ? Math.round(my.min / my.mp) : 0}'</b><span>par match</span></div><div><b>${my.g}</b><span>buts</span></div><div><b>${my.a}</b><span>passes déc.</span></div></div>` : ''}
       <h2>Prochain match</h2>${up.length ? nextCard(up[0]) : '<p class="tip">Pas de match prévu pour l\'instant.</p>'}
       ${up.length > 1 ? `<h2>Ensuite</h2><div class="card">${up.slice(1, 6).map(m => `<div class="tr"><span class="d">${esc(fmt(m.date, { weekday: 'short', day: 'numeric', month: 'short' }))}</span><span>${m.home ? 'contre' : 'chez'} ${esc(m.opponent || '?')}${m.time ? ' · ' + esc(hh(m.time)) : ''}</span></div>`).join('')}</div>` : ''}
@@ -129,6 +147,8 @@
     const c = e.target.closest('[data-cal]');
     if (c) { const m = data.matches.find(x => x.id === c.dataset.cal); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([ics(m)], { type: 'text/calendar;charset=utf-8' })); a.download = `match-${m.date}.ics`; document.body.appendChild(a); a.click(); a.remove(); return; }
     const w = e.target.closest('[data-who]'); if (w) { setMe(''); render(); return; }
+    const wb = e.target.closest('[data-wb]'); if (wb) { wbVals[wb.dataset.wb] = +wb.dataset.v; document.querySelectorAll(`[data-wb="${wb.dataset.wb}"]`).forEach(x => x.classList.toggle('on', x === wb)); return; }
+    const ws = e.target.closest('[data-wbsend]'); if (ws) { wbSend(ws.dataset.wbsend); return; }
     const b = e.target.closest('[data-ans]'); if (!b) return;
     answer(b.closest('[data-m]').dataset.m, b.dataset.p, b.dataset.ans);
   });
