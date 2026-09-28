@@ -2,7 +2,7 @@
    Errors are caught and kept so a coach can attach them to a report. */
 const Help = (() => {
   const { esc, $, $$, toast, modal } = UI;
-  const VERSION = '3.11';
+  const VERSION = '3.12';
   const TOUR_KEY = 'raincy-tour-seen', ERR_KEY = 'raincy-errors';
 
   /* ---------- error log ---------- */
@@ -99,8 +99,8 @@ const Help = (() => {
     modal({ title: `Aide · ${title}`, noFocus: true,
       body: `<ul class="help-list">${tips.map(t => `<li>${esc(t)}</li>`).join('')}</ul>
         <div class="help-actions">
+          <button class="big-act" data-h="bug">🐞<b>Signaler un problème sur cette page</b><span>Le responsable le reçoit dans ses messages</span></button>
           <button class="big-act" data-h="tour">${I.help}<b>Revoir le guide</b><span>Les bases en 8 écrans</span></button>
-          <button class="big-act" data-h="bug">🐞<b>Signaler un problème</b><span>Quelque chose ne marche pas</span></button>
           <button class="big-act" data-h="idea">💡<b>Proposer une idée</b><span>Une amélioration, une demande</span></button>
         </div>`,
       onOpen: (r, close) => $$('[data-h]', r).forEach(b => b.onclick = () => { close(); const h = b.dataset.h; setTimeout(() => h === 'tour' ? tour() : report(h), 60); }) });
@@ -109,6 +109,7 @@ const Help = (() => {
     let b = document.getElementById('helpFab');
     if (!b) { b = document.createElement('button'); b.id = 'helpFab'; b.className = 'help-fab'; b.setAttribute('aria-label', 'Aide'); b.innerHTML = `${I.help}<span>Aide</span>`; b.onclick = () => open(); document.body.appendChild(b); }
     b.hidden = document.body.classList.contains('editing') || !Auth.current() || location.hash.startsWith('#/messages/');
+    b.innerHTML = `${I.help}<span>Aide · Signaler</span>`;
   }
 
   /* ---------- reports ---------- */
@@ -118,32 +119,57 @@ const Help = (() => {
     return { version: VERSION, page: location.hash || '#/', device: navigator.userAgent, screen: `${screen.width}×${screen.height} (${innerWidth}×${innerHeight})`,
       standalone: matchMedia('(display-mode: standalone)').matches || !!navigator.standalone, by: u ? Store.fullName(u) : '', role: u ? u.role || '' : '', errors: errors().slice(-5) };
   }
+  const pageTitle = (key = pageKey()) => (PAGES[key] || PAGES[''])[0];
   function textOf(rep) {
     const d = rep.diag || {};
-    return [`${TYPES[rep.type][0]} ${TYPES[rep.type][1]} – Raincy Coach`, `De : ${rep.byName || '?'}${d.role ? ' (' + d.role + ')' : ''}`, `Date : ${new Date(rep.at).toLocaleString('fr-FR')}`, '',
+    return [`${TYPES[rep.type][0]} ${TYPES[rep.type][1]} – Raincy Coach${rep.page ? ' · page « ' + rep.page + ' »' : ''}`, `De : ${rep.byName || '?'}${d.role ? ' (' + d.role + ')' : ''}`, `Date : ${new Date(rep.at).toLocaleString('fr-FR')}`, '',
       rep.text, rep.context ? `\nCe que je faisais : ${rep.context}` : '',
       rep.withDiag ? `\n--- Infos techniques ---\nVersion ${d.version} · page ${d.page}\nÉcran ${d.screen} · appli installée : ${d.standalone ? 'oui' : 'non'}\n${d.device}${(d.errors || []).length ? '\nErreurs récentes :\n' + d.errors.map(e => `- ${e.at.slice(0, 16)} ${e.msg} (${e.src} ${e.page})`).join('\n') : ''}` : ''].join('\n');
   }
   function report(type = 'bug') {
-    const email = Store.state.club.reportEmail || '';
+    const email = Store.state.club.reportEmail || '', page = pageTitle(), toAdmins = Cloud.ready() && !Auth.isAdmin();
+    let shot = '';
     modal({ title: 'Signaler ou proposer', body: `
+      <p class="muted small">📍 Page : <b>${esc(page)}</b> (ajoutée toute seule au message)</p>
       <div class="chips" id="repType">${Object.entries(TYPES).map(([k, [e, l]]) => `<button class="chip ${k === type ? 'on' : ''}" data-v="${k}">${e} ${l}</button>`).join('')}</div>
       <label class="fld" style="margin-top:12px"><span>Explique en quelques mots</span><textarea id="repText" rows="5" placeholder="ex : quand je touche « Jouer », les joueurs ne bougent pas"></textarea></label>
       <label class="fld"><span>Ce que tu faisais juste avant (facultatif)</span><input id="repCtx" placeholder="ex : j'étais sur le schéma de la séance U13"></label>
+      <div class="rep-shot"><button class="btn soft" type="button" id="repShot">${I.image}<span>Ajouter une capture d'écran</span></button><span id="repShotView"></span></div>
+      <p class="muted small">Astuce : fais une capture d'écran du problème avec ton téléphone, puis ajoute-la ici.</p>
       <label class="switch"><input type="checkbox" id="repDiag" checked><span>Joindre les infos techniques (version, appareil, erreurs)</span></label>
-      <p class="tip">${email ? `Le message part vers <b>${esc(email)}</b>. Tu peux aussi l'envoyer par WhatsApp ou SMS avec « Partager ».` : "Le responsable n'a pas encore indiqué d'e-mail dans Réglages : envoie le message avec « Partager » (WhatsApp, SMS…). Il est aussi gardé dans l'appli."}</p>`,
-      onOpen: r => $$('#repType .chip', r).forEach(b => b.onclick = () => { $$('#repType .chip', r).forEach(x => x.classList.remove('on')); b.classList.add('on'); }),
+      <p class="tip">${toAdmins ? 'Le message part tout de suite aux responsables du club, dans leurs <b>messages privés</b>.' : Auth.isAdmin() ? 'Tu es responsable : le message est gardé dans Tableau de bord → Signalements.' : 'Le message est gardé dans l\'appli et part au serveur du club au retour du réseau.'}${email ? ` « E-mail » l'envoie aussi à ${esc(email)}.` : ''}</p>`,
+      onOpen: r => {
+        $$('#repType .chip', r).forEach(b => b.onclick = () => { $$('#repType .chip', r).forEach(x => x.classList.remove('on')); b.classList.add('on'); });
+        // a screenshot, made light (it travels with the report)
+        $('#repShot', r).onclick = async () => {
+          const [f] = await UI.pickFiles({ accept: 'image/*' }); if (!f) return;
+          try { const img = await Media.loadImage(URL.createObjectURL(f)); shot = Media.drawScaled(img, img.naturalWidth, img.naturalHeight, 900).toDataURL('image/jpeg', .6);
+            $('#repShotView', r).innerHTML = `<img alt="Capture jointe" src="${shot}">`; } catch (e) { toast('Image illisible', 'err'); }
+        };
+      },
       actions: [
-        { label: 'Partager', icon: I.share, onClick: (c, r) => send(r, 'share') },
-        { label: email ? 'Envoyer par e-mail' : 'Enregistrer', kind: 'primary', icon: email ? I.upload : I.check, onClick: (c, r) => send(r, email ? 'mail' : 'save') },
+        { label: 'Partager', icon: I.share, onClick: (c, r) => send(r, 'share', page, shot) },
+        ...(email ? [{ label: 'E-mail', icon: I.upload, onClick: (c, r) => send(r, 'mail', page, shot) }] : []),
+        { label: toAdmins ? 'Envoyer au responsable' : 'Enregistrer', kind: 'primary', icon: I.check, onClick: (c, r) => send(r, 'app', page, shot) },
       ] });
   }
-  function send(r, how) {
+  // The report goes to every responsable as a private message (club messaging), so it is seen at once
+  async function deliver(rep) {
+    const me = Auth.current(); if (!me || !Cloud.ready()) return 0;
+    const admins = ((await Cloud.accounts()) || []).filter(a => a.admin && a.staff_id !== me.id);
+    const msg = [`${TYPES[rep.type][0]} ${TYPES[rep.type][1]} signalé depuis la page « ${rep.page} »`, rep.text, rep.context ? 'Ce que je faisais : ' + rep.context : '',
+      rep.withDiag ? `(version ${VERSION} · ${/iPhone|iPad/.test(navigator.userAgent) ? 'iPhone / iPad' : /Android/.test(navigator.userAgent) ? 'Android' : 'ordinateur'}${(rep.diag.errors || []).length ? ' · ' + rep.diag.errors.length + ' erreur(s) notée(s)' : ''})` : '',
+      rep.shot ? '📎 Capture d\'écran jointe : Tableau de bord → Signalements.' : ''].filter(Boolean).join('\n').slice(0, 1900);
+    let n = 0; for (const a of admins) { try { await Cloud.post('dm:' + [me.id, a.staff_id].sort().join(':'), msg); n++; } catch (e) {} }
+    return n;
+  }
+  function send(r, how, page, shot) {
     const text = $('#repText', r).value.trim();
     if (!text) { toast('Écris d\'abord ton message', 'err'); return false; }
     const u = Auth.current();
     const rep = { id: Store.uid(), type: $('#repType .on', r).dataset.v, text, context: $('#repCtx', r).value.trim(), withDiag: $('#repDiag', r).checked, diag: diagnostics(),
-      at: Date.now(), by: u ? u.id : null, byName: u ? Store.fullName(u) : '', status: 'new' };
+      at: Date.now(), by: u ? u.id : null, byName: u ? Store.fullName(u) : '', status: 'new', page: page || pageTitle() };
+    if (shot) rep.shot = shot;
     Store.upsert('reports', rep);
     const body = textOf(rep), subject = `[Raincy Coach] ${TYPES[rep.type][1]} de ${rep.byName || 'un éducateur'}`;
     if (how === 'mail') location.href = `mailto:${encodeURIComponent(Store.state.club.reportEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body.slice(0, 1800))}`;
@@ -151,7 +177,9 @@ const Help = (() => {
       if (navigator.share) navigator.share({ title: subject, text: body }).catch(() => {});
       else if (navigator.clipboard) navigator.clipboard.writeText(body).then(() => toast('Message copié : colle-le dans WhatsApp ou un mail')).catch(() => {});
     }
-    toast('Merci ! Ton message est enregistré');
+    if (how === 'app' && Cloud.ready() && !Auth.isAdmin()) {
+      deliver(rep).then(n => toast(n ? `Merci ! ${n > 1 ? 'Les responsables ont' : 'Le responsable a'} reçu ton message` : 'Merci ! Ton message est enregistré, le responsable le verra dans l\'appli')).catch(() => toast('Merci ! Ton message est enregistré'));
+    } else toast('Merci ! Ton message est enregistré');
   }
 
   /* ---------- settings: report e-mail + received reports ---------- */
@@ -164,7 +192,7 @@ const Help = (() => {
         <p class="muted small">Cet e-mail est transmis aux autres éducateurs avec « Envoyer toutes mes données ». Les messages enregistrés sur leur appareil te reviennent aussi quand ils t'envoient leurs données.</p>
         <h3 class="sub-h">Messages reçus (${reps.length})</h3>
         ${reps.length ? `<div class="rep-list">${reps.map(x => `<details class="rep ${x.status === 'done' ? 'done' : ''}"><summary><span>${TYPES[x.type][0]}</span><b>${esc(x.text.slice(0, 70))}${x.text.length > 70 ? '…' : ''}</b><span class="muted small">${esc(x.byName || '?')} · ${new Date(x.at).toLocaleDateString('fr-FR')}</span></summary>
-          <pre>${esc(textOf(x))}</pre><button class="btn" data-repdone="${x.id}">${x.status === 'done' ? 'Marquer à traiter' : 'Marquer comme traité'}</button></details>`).join('')}</div>` : '<p class="muted">Aucun message pour l\'instant.</p>'}` : ''}
+          <pre>${esc(textOf(x))}</pre>${x.shot ? `<img class="rep-img" alt="Capture d'écran" src="${x.shot}">` : ''}<button class="btn" data-repdone="${x.id}">${x.status === 'done' ? 'Marquer à traiter' : 'Marquer comme traité'}</button></details>`).join('')}</div>` : '<p class="muted">Aucun message pour l\'instant.</p>'}` : ''}
     </section>`;
   }
   function onSettings(root, rerender) {
@@ -173,6 +201,6 @@ const Help = (() => {
     $$('[data-repdone]', root).forEach(b => b.onclick = e => { e.stopPropagation(); const x = Store.get('reports', b.dataset.repdone); x.status = x.status === 'done' ? 'new' : 'done'; Store.upsert('reports', x); rerender(); });
   }
 
-  return { watch, tour, tourSeen, open, button, report, settingsSection, onSettings, VERSION };
+  return { watch, tour, tourSeen, open, button, report, settingsSection, onSettings, VERSION, TYPES };
 })();
 Help.watch();

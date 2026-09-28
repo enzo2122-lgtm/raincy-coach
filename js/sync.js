@@ -139,6 +139,8 @@ const Sync = (() => {
     const a = document.activeElement, typing = a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName);
     // not while the finger is on the screen or the page is still moving (it would jump under the finger)
     if (Date.now() - lastTouch < 1500) { pending = true; clearTimeout(retry); retry = setTimeout(refreshView, 1600); return; }
+    // Réglages: forms and lists loaded one by one; redrawn when the coach comes back to it, not under his fingers
+    if (/^#\/reglages/.test(location.hash)) { pending = true; return; }
     if (document.body.classList.contains('editing') || !document.getElementById('modal').hidden || !document.getElementById('lock').hidden || typing) { pending = true; return; }
     pending = false; App.refreshChrome(); App.route(true);
   }
