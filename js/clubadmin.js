@@ -43,7 +43,7 @@ const ClubAdmin = (() => {
         ${tile(`${n('cotis', 'ok')}/${all.length}`, 'Cotisations payées', 'v')}${tile(n('cotis', 'partiel'), 'Payées en partie', 'n')}${tile(total ? total.toLocaleString('fr-FR') + ' €' : '–', 'Encaissé')}${tile(n('image', 'non'), 'Refus droit à l\'image', n('image', 'non') ? 'd' : '')}</div>
       <div class="filters">
         <label class="search">${I.search}<input id="admQ" type="search" placeholder="Chercher un nom" value="${esc(ui.admQ || '')}"></label>
-        <select id="admCat" aria-label="Catégorie"><option value="">Toutes les catégories</option>${S().teams.map(t => `<option value="${t.id}" ${t.id === cat ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select>
+        <select id="admCat" aria-label="Catégorie"><option value="">Toutes les catégories</option>${S().teams.map(t => `<option value="${t.id}" ${t.id === cat ? 'selected' : ''}>${esc(Store.teamLabel(t))}</option>`).join('')}</select>
         <label class="switch"><input type="checkbox" id="admOnly" ${only ? 'checked' : ''}><span>Seulement ceux qui ne sont pas en règle</span></label>
       </div>
       <p class="muted small">Touche une case pour changer son état. Les coachs voient ⚠️ à côté d'un joueur dont la licence est en attente ou le certificat à fournir (dans les convocations), et savent qui refuse le droit à l'image. Les cotisations restent entre responsables.</p>

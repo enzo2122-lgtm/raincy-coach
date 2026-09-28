@@ -206,7 +206,7 @@ const Library = (() => {
       <label class="fld"><span>Thème de la séance</span><input id="ttName" value="${esc(cleanName(rec.name))}"></label>
       <div class="row2"><label class="fld"><span>Date</span><input type="date" id="ttDate" value="${UI.today()}"></label>
       <label class="fld"><span>Durée par exercice (min)</span><input type="number" id="ttDur" value="15" min="0" max="120"></label></div>
-      <label class="fld"><span>Équipe</span><select id="ttTeam"><option value="">Aucune</option>${Auth.teams().map(t => `<option value="${t.id}" ${t.id === S().ui.teamId ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></label>`,
+      <label class="fld"><span>Équipe</span><select id="ttTeam"><option value="">Aucune</option>${Auth.teams().map(t => `<option value="${t.id}" ${t.id === S().ui.teamId ? 'selected' : ''}>${esc(Store.teamLabel(t))}</option>`).join('')}</select></label>`,
       actions: [{ label: 'Annuler' }, { label: 'Créer la séance', kind: 'primary', onClick: (c, r) => {
         const title = $('#ttName', r).value.trim() || cleanName(rec.name), date = $('#ttDate', r).value || UI.today(), dur = +$('#ttDur', r).value || 0, teamId = $('#ttTeam', r).value || null;
         (async () => {

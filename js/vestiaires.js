@@ -118,7 +118,7 @@ const Rooms = (() => {
       <label class="fld"><span>Date</span><input type="date" id="vDate" value="${pre.date}"></label>
       <div class="row2"><label class="fld"><span>De</span><select id="vStart">${timeOptions(pre.start)}</select></label><label class="fld"><span>À</span><select id="vEnd">${timeOptions(Math.min(23 * 60 + 45, pre.start + 120))}</select></label></div>
       <div class="lbl">Pour</div><div class="chips" id="vKind">${Object.entries(KINDS).map(([k, [l, ic]], i) => `<button class="chip ${i ? '' : 'on'}" data-v="${k}">${ic} ${l}</button>`).join('')}</div>
-      <label class="fld" style="margin-top:12px"><span>Notre catégorie</span><select id="vTeam">${S().teams.map(t => `<option value="${t.id}" ${t.id === (mine[0] || S().ui.teamId) ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}<option value="">Autre / sans catégorie</option></select></label>
+      <label class="fld" style="margin-top:12px"><span>Notre catégorie</span><select id="vTeam">${S().teams.map(t => `<option value="${t.id}" ${t.id === (mine[0] || S().ui.teamId) ? 'selected' : ''}>${esc(Store.teamLabel(t))}</option>`).join('')}<option value="">Autre / sans catégorie</option></select></label>
       <label class="fld" id="vOppBox" hidden><span>Équipe adverse</span><input id="vOpp" maxlength="50" placeholder="ex : AS Bondy" list="vOppList"><datalist id="vOppList">${homeMatchesOn(pre.date).map(m => `<option value="${esc(m.opponent || '')}">`).join('')}</datalist></label>
       <label class="fld"><span>Note (facultatif)</span><input id="vNote" maxlength="60" placeholder="ex : arbitre, clés au club-house"></label>
       <p class="plan-status" id="vStatus"></p>`,
@@ -211,7 +211,7 @@ const Rooms = (() => {
       <label class="fld"><span>Vestiaire</span><select id="wRoom">${ROOMS.map(([id, n]) => `<option value="${id}">${esc(n)}</option>`).join('')}</select></label>
       <div class="lbl">Jours</div><div class="chips" id="wDays">${order.map(d => `<button class="chip" data-v="${d}">${DAYS[d].slice(0, 3)}</button>`).join('')}</div>
       <div class="row2" style="margin-top:12px"><label class="fld"><span>De</span><select id="wStart">${timeOptions(17 * 60 + 45)}</select></label><label class="fld"><span>À</span><select id="wEnd">${timeOptions(20 * 60)}</select></label></div>
-      <label class="fld"><span>Catégorie</span><select id="wTeam">${S().teams.map(t => `<option value="${t.id}" ${t.id === (mine[0] || S().ui.teamId) ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></label>
+      <label class="fld"><span>Catégorie</span><select id="wTeam">${S().teams.map(t => `<option value="${t.id}" ${t.id === (mine[0] || S().ui.teamId) ? 'selected' : ''}>${esc(Store.teamLabel(t))}</option>`).join('')}</select></label>
       <div class="row2"><label class="fld"><span>À partir du</span><input type="date" id="wFrom" value="${iso(new Date())}"></label><label class="fld"><span>Jusqu'au</span><input type="date" id="wTo" value="${seasonEnd()}"></label></div>`,
       onOpen: r => $$('#wDays .chip', r).forEach(b => b.onclick = () => b.classList.toggle('on')),
       actions: [{ label: 'Annuler' }, { label: 'Attribuer toute la saison', kind: 'primary', onClick: (close, r) => {

@@ -89,7 +89,7 @@ const People = (() => {
       ${teamId ? `<button class="icon-btn" data-unlink="${p.id}" data-kind="staff" aria-label="Retirer ${esc(name(p))} de la catégorie">${I.x}</button>` : ''}
     </div>`;
   }
-  const teamChips = ids => `<div class="chips" id="pTeams">${Auth.teams().map(t => `<button type="button" class="chip ${(ids || []).includes(t.id) ? 'on' : ''}" data-t="${t.id}">${esc(t.name)}</button>`).join('') || '<p class="muted">Crée d\'abord une catégorie dans Équipes.</p>'}</div>`;
+  const teamChips = ids => `<div class="chips" id="pTeams">${Store.teamGroups(Auth.teams()).map(g => `<span class="team-fam">${g.map(t => `<button type="button" class="chip ${Store.isSub(t) ? 'sub' : ''} ${(ids || []).includes(t.id) ? 'on' : ''}" data-t="${t.id}">${esc(t.name)}</button>`).join('')}</span>`).join('') ||'<p class="muted">Crée d\'abord une catégorie dans Équipes.</p>'}</div>`;
   const bindChips = r => $$('#pTeams .chip', r).forEach(b => b.onclick = () => b.classList.toggle('on'));
   // Chips only show the categories this dirigeant sees: the other categories of the person are kept as they were
   const pickedTeams = (r, before = []) => [...before.filter(id => !Auth.teams().some(t => t.id === id)), ...$$('#pTeams .chip.on', r).map(b => b.dataset.t)];
@@ -299,7 +299,7 @@ const People = (() => {
       <div class="filters">
         <label class="search">${I.search}<input id="q" type="search" placeholder="Chercher un nom" value="${esc(ui[key + 'Q'] || '')}"></label>
         ${isP ? `<select id="post" aria-label="Poste"><option value="">Tous les postes</option>${TYPES.map(([t]) => `<optgroup label="${esc(LINES.find(x => x[0] === t)[1])}"><option value="${t}" ${pf === t ? 'selected' : ''}>${esc(LINES.find(x => x[0] === t)[1])} (tous)</option>${subsOf(t).map(x => `<option value="${x[0]}" ${pf === x[0] ? 'selected' : ''}>${esc(x[2] + ' · ' + x[1])}</option>`).join('')}</optgroup>`).join('')}<option value="-" ${pf === '-' ? 'selected' : ''}>Poste non renseigné</option></select>` : ''}
-        <select id="cat" aria-label="Catégorie"><option value="">${Auth.isAdmin() ? 'Toutes les catégories' : 'Mes catégories'}</option>${Auth.teams().map(t => `<option value="${t.id}" ${t.id === filt ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}<option value="-" ${filt === '-' ? 'selected' : ''}>Sans catégorie</option></select>
+        <select id="cat" aria-label="Catégorie"><option value="">${Auth.isAdmin() ? 'Toutes les catégories' : 'Mes catégories'}</option>${Auth.teams().map(t => `<option value="${t.id}" ${t.id === filt ? 'selected' : ''}>${esc(Store.teamLabel(t))}</option>`).join('')}<option value="-" ${filt === '-' ? 'selected' : ''}>Sans catégorie</option></select>
       </div>
       ${isP ? sortBar(sort, 'psort') : ''}
       <div class="people big" id="plist">${draw(list)}</div>`;

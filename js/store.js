@@ -171,9 +171,24 @@ const Store = (() => {
   const fullName = p => p ? [String(p.lastName || '').toUpperCase(), p.firstName].filter(Boolean).join(' ') || 'Sans nom' : '';
   const shortName = p => p ? (p.firstName ? p.firstName + (p.lastName ? ' ' + p.lastName[0].toUpperCase() + '.' : '') : fullName(p)) : '';
 
+  /* ---------- a category and its teams: « U14 » (the main one), then « U14 A », « U14 B » ---------- */
+  const famOf = t => catKey(t.category || t.name);
+  const isMain = t => !!t && catKey(t.name) === famOf(t);
+  // a team A / B of a category that has its main team
+  const isSub = t => !!t && !isMain(t) && state.teams.some(x => x !== t && isMain(x) && famOf(x) === famOf(t));
+  // [[U14, U14 A, U14 B], [U15, …]] in the order of the list, the main team first
+  function teamGroups(list) {
+    const out = [], by = new Map();
+    list.forEach(t => { const k = famOf(t); if (!by.has(k)) { const g = []; by.set(k, g); out.push(g); } by.get(k).push(t); });
+    out.forEach(g => { const i = g.findIndex(isMain); if (i > 0) g.unshift(g.splice(i, 1)[0]); });
+    return out;
+  }
+  // in a drop-down list, the teams A / B are shifted under their category
+  const teamLabel = t => t ? (isSub(t) ? '   ↳ ' : '') + (t.name || '') : '';
+
   return {
     load, save, persistNow, sortTeams, get, upsert, remove, uid, exportAll, exportTraining, exportSchema, importText, reset, removeExamples,
-    playersOf, rosterOf, staffOf, fullName, shortName, byName,
+    playersOf, rosterOf, staffOf, fullName, shortName, byName, isMain, isSub, teamGroups, teamLabel,
     get state() { return state; }, on: f => listeners.add(f), off: f => listeners.delete(f),
   };
 })();

@@ -418,7 +418,7 @@ const Editor = (() => {
         ${f.format === 'bg' ? '' : f.format === 'zone' ? `<div class="row2"><label class="fld"><span>Longueur (m)</span><input type="number" id="fW" min="5" max="110" value="${f.w || 30}"></label><label class="fld"><span>Largeur (m)</span><input type="number" id="fH" min="5" max="75" value="${f.h || 20}"></label></div>`
           : chipRow([['full', 'Terrain entier'], ['half', 'Demi-terrain']], 'view', f.view || 'full')}
         <h3>Équipe</h3>
-        <label class="fld"><span>Catégorie</span><select id="scTeam"><option value="">Aucune</option>${Auth.teams().map(t => `<option value="${t.id}" ${t.id === sc.teamId ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></label>
+        <label class="fld"><span>Catégorie</span><select id="scTeam"><option value="">Aucune</option>${Auth.teams().map(t => `<option value="${t.id}" ${t.id === sc.teamId ? 'selected' : ''}>${esc(Store.teamLabel(t))}</option>`).join('')}</select></label>
         ${sc.teamId ? (() => { const onField = new Set(sc.objects.map(o => o.playerId).filter(Boolean)), free = Store.rosterOf(sc.teamId).filter(p => !onField.has(p.id));
           return `<label class="fld"><span>Mettre un joueur sur le terrain</span><select id="addWho"><option value="">${free.length ? 'Choisir un joueur…' : 'Tout l\'effectif est sur le terrain'}</option>${free.map(p => `<option value="${p.id}">${esc(Store.fullName(p))}${p.number ? ' (' + esc(p.number) + ')' : ''}${People.postsLabel(p, true) ? ' · ' + esc(People.postsLabel(p, true)) : ''}</option>`).join('')}</select></label>`; })() : '<p class="tip">Choisis une catégorie pour placer tes joueurs avec un menu.</p>'}
         <button class="btn soft wide" data-act="formation" ${f.format === 'zone' || f.format === 'bg' ? 'disabled' : ''}>${I.formation}<span>Placer une formation</span></button>
@@ -452,7 +452,7 @@ const Editor = (() => {
     const teams = Auth.teams().filter(t => t.format === f.format);
     UI.modal({
       title: 'Placer une formation',
-      body: `<label class="fld"><span>Mon équipe</span><select id="fmTeam"><option value="">Sans prénoms</option>${teams.map(t => `<option value="${t.id}" ${t.id === E.sc.teamId ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></label>
+      body: `<label class="fld"><span>Mon équipe</span><select id="fmTeam"><option value="">Sans prénoms</option>${teams.map(t => `<option value="${t.id}" ${t.id === E.sc.teamId ? 'selected' : ''}>${esc(Store.teamLabel(t))}</option>`).join('')}</select></label>
         <label class="fld"><span>Notre système</span><select id="fmHome">${list.map(x => `<option>${esc(x)}</option>`).join('')}</select></label>
         <label class="fld"><span>Adversaires</span><select id="fmAway"><option value="">Pas d'adversaires</option>${list.map(x => `<option>${esc(x)}</option>`).join('')}</select></label>
         <label class="switch"><input type="checkbox" id="fmReplace" checked><span>Enlever les joueurs déjà placés</span></label>`,

@@ -227,7 +227,7 @@ const Planning = (() => {
       <label class="fld"><span>Fin</span><select id="bEnd">${timeOptions(start + 90)}</select></label></div>
       <div class="lbl">Terrain</div><div class="chips" id="bPart"><button class="chip on" data-v="full">Grand terrain</button><button class="chip" data-v="half">Demi-terrain</button></div>
       <div class="lbl">Pour</div><div class="chips" id="bKind">${Object.entries(KINDS).map(([k, [l]], i) => `<button class="chip ${i ? '' : 'on'}" data-v="${k}">${l}</button>`).join('')}</div>
-      <label class="fld" style="margin-top:12px"><span>Catégorie</span><select id="bTeam">${teams.map(t => `<option value="${t.id}" ${t.id === (mine[0] || S().ui.teamId) ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}<option value="">Autre / sans catégorie</option></select></label>
+      <label class="fld" style="margin-top:12px"><span>Catégorie</span><select id="bTeam">${teams.map(t => `<option value="${t.id}" ${t.id === (mine[0] || S().ui.teamId) ? 'selected' : ''}>${esc(Store.teamLabel(t))}</option>`).join('')}<option value="">Autre / sans catégorie</option></select></label>
       <label class="fld"><span>Note (facultatif)</span><input id="bNote" maxlength="80" placeholder="ex : séance vitesse, plateau…"></label>
       <p class="plan-status" id="bStatus"></p>`,
       onOpen: r => {
@@ -282,7 +282,7 @@ const Planning = (() => {
       <div class="row2" style="margin-top:12px"><label class="fld"><span>Début</span><select id="rStart">${timeOptions(18 * 60)}</select></label>
       <label class="fld"><span>Fin</span><select id="rEnd">${timeOptions(19 * 60 + 30)}</select></label></div>
       <div class="lbl">Terrain</div><div class="chips" id="rPart"><button class="chip" data-v="full">Grand terrain</button><button class="chip on" data-v="half">Demi-terrain</button></div>
-      <label class="fld" style="margin-top:12px"><span>Catégorie</span><select id="rTeam">${teams.map(t => `<option value="${t.id}" ${t.id === (mine[0] || S().ui.teamId) ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></label>
+      <label class="fld" style="margin-top:12px"><span>Catégorie</span><select id="rTeam">${teams.map(t => `<option value="${t.id}" ${t.id === (mine[0] || S().ui.teamId) ? 'selected' : ''}>${esc(Store.teamLabel(t))}</option>`).join('')}</select></label>
       <div class="row2"><label class="fld"><span>À partir du</span><input type="date" id="rFrom" value="${iso(new Date())}"></label>
       <label class="fld"><span>Jusqu'au</span><input type="date" id="rTo" value="${seasonEnd()}"></label></div>`,
       onOpen: r => {

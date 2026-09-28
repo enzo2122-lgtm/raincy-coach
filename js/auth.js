@@ -161,7 +161,9 @@ const Auth = (() => {
     if (s && s.staff_id === id) return !s.admin && !s.teams_set;
     const u = U(id) || {}; return !u.admin && !u.teamsSet;
   }
-  const teamChips = ids => `<div class="chips team-pick" id="myTeams">${Store.state.teams.map(t => `<button type="button" class="chip ${(ids || []).includes(t.id) ? 'on' : ''}" data-t="${t.id}">${esc(t.name)}</button>`).join('')}</div>`;
+  // one group per category: « U14 », then its teams « U14 A », « U14 B »
+  const teamChips = ids => `<div class="chips team-pick" id="myTeams">${Store.teamGroups(Store.state.teams).map(g => `<span class="team-fam">${g.map(t => `<button type="button" class="chip ${Store.isSub(t) ? 'sub' : ''} ${(ids || []).includes(t.id) ? 'on' : ''}" data-t="${t.id}">${esc(t.name)}</button>`).join('')}</span>`).join('')}</div>
+    <p class="muted small">Choisir « U14 » donne aussi accès à U14 A et U14 B.</p>`;
   function teamsScreen(id, keep) {
     const s = Store.get('staff', id);
     const el = frame(`<p class="lead">${esc(s.firstName || Store.fullName(s))}, choisis ta ou tes catégories. <b>Attention : après validation, seul un responsable pourra les changer.</b></p>

@@ -154,7 +154,7 @@ const Importer = (() => {
         <textarea id="fffText" rows="6" placeholder="DIM 04 OCT 2026 - 15H30&#10;Seniors D3 - Senior Journée 1&#10;BFC 2&#10;15:30&#10;RAINCY F.A."></textarea>
       </div>
       <div id="srcFile" class="src" hidden><p class="muted" id="fileHint"></p><button class="btn" id="pickFile">${I.upload}<span>Choisir le fichier</span></button></div>
-      <label class="fld" style="margin-top:10px"><span>Catégorie</span><select id="impTeam"><option value="auto">Automatique (d'après la compétition)</option>${teams.map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join('')}</select></label>
+      <label class="fld" style="margin-top:10px"><span>Catégorie</span><select id="impTeam"><option value="auto">Automatique (d'après la compétition)</option>${teams.map(t => `<option value="${t.id}">${esc(Store.teamLabel(t))}</option>`).join('')}</select></label>
       <label class="switch"><input type="checkbox" id="impBook" ${Cloud.ready() ? '' : 'disabled'}><span>Réserver aussi le terrain pour les matchs à domicile (2 h, grand terrain)</span></label>
       <div id="impPreview" class="imp-preview"></div>`,
       onOpen: r => {

@@ -45,11 +45,11 @@ const Views = (() => {
     const t = activeTeam();
     return `<div class="team-switch" role="tablist" aria-label="Équipe">
       <button class="chip ${!t ? 'on' : ''}" data-team="">${Auth.isAdmin() ? 'Toutes les équipes' : Auth.teams().length > 1 ? 'Mes équipes' : 'Tout'}</button>
-      ${Auth.teams().map(x => `<button class="chip ${x.id === t ? 'on' : ''}" data-team="${x.id}">${esc(x.name)}</button>`).join('')}
+      ${Store.teamGroups(Auth.teams()).map(g => `<span class="team-fam">${g.map(x => `<button class="chip ${Store.isSub(x) ? 'sub' : ''} ${x.id === t ? 'on' : ''}" data-team="${x.id}">${esc(x.name)}</button>`).join('')}</span>`).join('')}
     </div>
     <label class="team-select"><span>Catégorie</span><select data-teamsel aria-label="Catégorie">
       <option value="">${Auth.isAdmin() ? 'Toutes les équipes' : Auth.teams().length > 1 ? 'Mes équipes' : 'Tout'}</option>
-      ${Auth.teams().map(x => `<option value="${x.id}" ${x.id === t ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label>`;
+      ${Auth.teams().map(x => `<option value="${x.id}" ${x.id === t ? 'selected' : ''}>${esc(Store.teamLabel(x))}</option>`).join('')}</select></label>`;
   }
   // Chips on a computer, a drop-down list on phones and tablets (nothing to slide sideways)
   function bindTeamSwitch(root, rerender) {
@@ -193,9 +193,12 @@ const Views = (() => {
        <a class="btn" href="#/dirigeants">${I.whistle}<span>Dirigeants (${S().staff.filter(Auth.seesPerson).length})</span></a>
        ${Auth.isAdmin() ? `<button class="btn" data-act="bybirth">${I.calendar}<span>Ranger par année de naissance</span></button>` : ''}
        ${Auth.isAdmin() ? `<button class="btn primary" data-act="new">${I.plus}<span>Nouvelle catégorie</span></button>` : ''}`)}
-      ${Auth.teams().length ? `<div class="grid">${Auth.teams().map(t => { const np = Store.playersOf(t.id).length, ns = Store.staffOf(t.id).length;
-        return `<a class="card team-card" href="#/equipe/${t.id}">
-          <span class="badge">${fmtLabel(t.format)}</span><h2>${esc(t.name)}</h2><p class="muted">${count(np, 'joueur')} · ${count(ns, 'dirigeant')}</p></a>`; }).join('')}</div>`
+      ${Auth.teams().length ? `<div class="grid">${Store.teamGroups(Auth.teams()).map(g => {
+        const nums = t => `${count(Store.playersOf(t.id).length, 'joueur')} · ${count(Store.staffOf(t.id).length, 'dirigeant')}`;
+        const [main, ...subs] = Store.isMain(g[0]) ? g : [null, ...g];
+        // the category card, with its teams A / B inside
+        return `<div class="card team-card team-fam-card">${main ? `<a class="team-main" href="#/equipe/${main.id}"><span class="badge">${fmtLabel(main.format)}</span><h2>${esc(main.name)}</h2><p class="muted">${nums(main)}</p></a>` : ''}
+          ${subs.map(t => `<a class="team-sub" href="#/equipe/${t.id}"><b>${main ? '↳ ' : ''}${esc(t.name)}</b><span class="muted">${nums(t)}</span></a>`).join('')}</div>`; }).join('')}</div>`
         : empty('Crée ta première catégorie pour ajouter tes joueurs.')}`;
     const nb = $('[data-act="new"]', root); if (nb) nb.onclick = newTeam;
     const bb = $('[data-act="bybirth"]', root); if (bb) bb.onclick = () => People.sortByBirthDialog(() => teams(root));
@@ -357,7 +360,7 @@ const Views = (() => {
   function copyTraining(tr, how) {
     const t = how === 'use' ? activeTeam() : tr.teamId;
     modal({ title: how === 'use' ? `Utiliser « ${tr.title} »` : 'Dupliquer la séance', body: `
-      <label class="fld"><span>Pour la catégorie</span><select id="cpTeam"><option value="">Aucune</option>${Auth.teams().map(x => `<option value="${x.id}" ${x.id === t ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label>
+      <label class="fld"><span>Pour la catégorie</span><select id="cpTeam"><option value="">Aucune</option>${Auth.teams().map(x => `<option value="${x.id}" ${x.id === t ? 'selected' : ''}>${esc(Store.teamLabel(x))}</option>`).join('')}</select></label>
       <div class="row2"><label class="fld"><span>Date</span><input type="date" id="cpDate" value="${today()}"></label><label class="fld"><span>Heure</span><input type="time" id="cpTime" value="${esc(tr.time || '18:00')}"></label></div>
       <p class="muted small">Les exercices, consignes et schémas sont copiés. Les présences et les notes repartent à zéro.</p>`,
       actions: [{ label: 'Annuler' }, { label: 'Créer la séance', kind: 'primary', onClick: (c, r) => {
@@ -372,7 +375,7 @@ const Views = (() => {
     modal({ title: 'Nouvel entraînement', body: `
       <label class="fld"><span>Thème</span><input id="trTitle" placeholder="ex : Sortie de balle à 3" maxlength="80"></label>
       <div class="row2"><label class="fld"><span>Date</span><input type="date" id="trDate" value="${today()}"></label><label class="fld"><span>Heure</span><input type="time" id="trTime" value="18:00"></label></div>
-      <label class="fld"><span>Équipe</span><select id="trTeam"><option value="">Aucune</option>${Auth.teams().map(x => `<option value="${x.id}" ${x.id === t ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label>`,
+      <label class="fld"><span>Équipe</span><select id="trTeam"><option value="">Aucune</option>${Auth.teams().map(x => `<option value="${x.id}" ${x.id === t ? 'selected' : ''}>${esc(Store.teamLabel(x))}</option>`).join('')}</select></label>`,
       actions: [{ label: 'Annuler' }, { label: 'Créer', kind: 'primary', onClick: (c, r) => {
         const tr = Store.upsert('trainings', { id: Store.uid(), title: $('#trTitle', r).value.trim() || 'Entraînement', date: $('#trDate', r).value || today(), time: $('#trTime', r).value, teamId: $('#trTeam', r).value || null, goal: '', exercises: [], presents: [] });
         location.hash = '#/entrainement/' + tr.id;
@@ -390,7 +393,7 @@ const Views = (() => {
           <div class="row3">
             <label class="fld"><span>Date</span><input type="date" id="trDate" value="${esc(tr.date)}"></label>
             <label class="fld"><span>Heure</span><input type="time" id="trTime" value="${esc(tr.time || '')}"></label>
-            <label class="fld"><span>Équipe</span><select id="trTeam"><option value="">Aucune</option>${Auth.teams().map(x => `<option value="${x.id}" ${x.id === tr.teamId ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label>
+            <label class="fld"><span>Équipe</span><select id="trTeam"><option value="">Aucune</option>${Auth.teams().map(x => `<option value="${x.id}" ${x.id === tr.teamId ? 'selected' : ''}>${esc(Store.teamLabel(x))}</option>`).join('')}</select></label>
           </div>
           <label class="fld"><span>Objectif de la séance</span><textarea id="trGoal" rows="2" placeholder="ex : jouer vers l'avant après la récupération">${esc(tr.goal || '')}</textarea></label>
         </section>
@@ -507,7 +510,7 @@ const Views = (() => {
     root.innerHTML = `${header('Matchs', 'Agenda et résultats de tout le club', `<button class="btn" data-act="imp">${I.upload}<span>Importer (FFF, agenda…)</span></button><button class="btn primary" data-act="new">${I.plus}<span>Nouveau match</span></button>`)}
       ${coach && !t ? `<div class="seg"><button class="seg-b ${scope === 'club' ? 'on' : ''}" data-scope="club">🏟️ Tout le club</button><button class="seg-b ${scope === 'mine' ? 'on' : ''}" data-scope="mine">⭐ Mes équipes</button></div>` : ''}
       <label class="team-select all-sizes"><span>Catégorie</span><select data-mteam aria-label="Catégorie"><option value="">Toutes les catégories</option>
-        ${S().teams.map(x => `<option value="${x.id}" ${x.id === t ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label>
+        ${S().teams.map(x => `<option value="${x.id}" ${x.id === t ? 'selected' : ''}>${esc(Store.teamLabel(x))}</option>`).join('')}</select></label>
       <div class="side-legend"><span class="side-home">🏠 Domicile</span><span class="side-away">🚌 Extérieur</span></div>
       <h2 class="section">À venir (${up.length})</h2>${up.length ? `<div class="list">${shown.map(item).join('')}</div>${up.length > shown.length ? `<button class="btn soft wide" data-act="more">Voir les ${up.length - shown.length} matchs suivants</button>` : ''}` : '<p class="muted">Aucun match prévu.</p>'}
       <h2 class="section">Résultats</h2>${done.length ? `<div class="list">${done.map(item).join('')}</div>` : '<p class="muted">Pas encore de résultat.</p>'}`;
@@ -524,7 +527,7 @@ const Views = (() => {
       <div class="row2"><label class="fld"><span>Date</span><input type="date" id="mDate" value="${today()}"></label><label class="fld"><span>Coup d'envoi</span><input type="time" id="mTime" value="10:00"></label></div>
       <div class="chips" id="mHome"><button class="chip on" data-v="1">Domicile</button><button class="chip" data-v="0">Extérieur</button></div>
       <div class="row2"><label class="fld"><span>Compétition</span><select id="mComp">${COMPS.map(c => `<option>${c}</option>`).join('')}</select></label>
-      <label class="fld"><span>Équipe</span><select id="mTeam">${Auth.teams().map(x => `<option value="${x.id}" ${x.id === t ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label></div>`,
+      <label class="fld"><span>Équipe</span><select id="mTeam">${Auth.teams().map(x => `<option value="${x.id}" ${x.id === t ? 'selected' : ''}>${esc(Store.teamLabel(x))}</option>`).join('')}</select></label></div>`,
       onOpen: r => $$('#mHome .chip', r).forEach(b => b.onclick = () => { $$('#mHome .chip', r).forEach(x => x.classList.remove('on')); b.classList.add('on'); }),
       actions: [{ label: 'Annuler' }, { label: 'Créer', kind: 'primary', onClick: (c, r) => {
         if (!S().teams.length) { toast('Crée d\'abord une équipe', 'err'); return false; }
@@ -587,7 +590,7 @@ const Views = (() => {
         `<button class="btn primary" data-act="pdf">${I.pdf}<span>Feuille de match</span></button>`)}
         <section class="card ${side(m)}">
           <div class="row3">
-            <label class="fld"><span>Équipe</span><select data-f="teamId">${Auth.teams().map(x => `<option value="${x.id}" ${x.id === m.teamId ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label>
+            <label class="fld"><span>Équipe</span><select data-f="teamId">${Auth.teams().map(x => `<option value="${x.id}" ${x.id === m.teamId ? 'selected' : ''}>${esc(Store.teamLabel(x))}</option>`).join('')}</select></label>
             <label class="fld"><span>Adversaire</span><input data-f="opponent" value="${esc(m.opponent)}"></label>
             <label class="fld"><span>Date</span><input type="date" data-f="date" value="${esc(m.date)}"></label>
             <label class="fld"><span>Coup d'envoi</span><input type="time" data-f="time" value="${esc(m.time || '')}"></label>
