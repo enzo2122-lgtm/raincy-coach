@@ -43,14 +43,16 @@ const Importer = (() => {
     return out;
   }
   // Guess which category a match belongs to from its competition name
+  // « U14 D4 - U15 - U14 Journée 1 » → U14 (the level comes first; « U15 - U14 » only says which ages may play)
+  const levelOf = comp => { const m = norm(comp).match(/\bU ?(\d{1,2})\b/); return m ? 'U' + m[1] : ''; };
   function guessTeam(comp, ourName) {
-    const c = norm(comp) + ' ' + norm(ourName), T = S().teams;
+    const c = norm(comp) + ' ' + norm(ourName), T = S().teams, lv = levelOf(comp) || levelOf(ourName);
     // the category itself (« U13 ») before its teams (« U13 A », which share its category)
     const by = name => T.find(t => norm(t.name) === name) || T.find(t => norm(t.category || t.name) === name);
     if (/ANCIEN|VETERAN|CDM|\b\+35|\b\+45/.test(c)) return by('VETERANS');
     // No U18 / U19 / U20 at the club: those players are in Seniors
-    if (/\bU ?(18|19|20)\b/.test(c)) return by('SENIORS');
-    for (const u of ['U17', 'U16', 'U15', 'U14', 'U13', 'U12', 'U11', 'U10', 'U9', 'U8', 'U7', 'U6']) if (c.includes(u)) {
+    if (['U18', 'U19', 'U20'].includes(lv)) return by('SENIORS');
+    for (const u of ['U17', 'U16', 'U15', 'U14', 'U13', 'U12', 'U11', 'U10', 'U9', 'U8', 'U7', 'U6']) if (lv ? lv === u : c.includes(u)) {
       const map = { U16: 'U17', U14: 'U15', U12: 'U13', U10: 'U11', U8: 'U9' }; // older clubs grouped two ages in one category
       const t = by(u) || by(map[u]);
       return t && pickTeam(t, ourName);
@@ -60,7 +62,11 @@ const Importer = (() => {
   }
   /* The District numbers the club's teams of a category: « FA LE RAINCY » = team 1, « FA LE RAINCY 2 » = team 2…
      Team 1 is « U14 A », team 2 « U14 B »… unless the responsable set another number on the team (Équipes → the team). */
-  const teamNo = ourName => { const m = norm(ourName).match(/RAINCY\b\D{0,3}(\d)\b/); return m ? +m[1] : 1; };
+  // « RAINCY F.A. » → 1, « RAINCY F.A. 2 » → 2, « F. ASSOCIATION LE RAINCY 1 » → 1, « FA LE RAINCY B » → 2
+  const teamNo = ourName => {
+    const s = norm(ourName).replace(/^.*RAINCY/, '').replace(/^\s*F\.?\s*A\.?(?=\s|$)/, '').trim(), m = s.match(/^(\d)\b/) || s.match(/^([A-E])$/);
+    return !m ? 1 : /\d/.test(m[1]) ? +m[1] : m[1].charCodeAt(0) - 64;
+  };
   const letterNo = t => { const m = String(t.name || '').trim().match(/\s([A-E])$/i); return m ? m[1].toUpperCase().charCodeAt(0) - 64 : 0; };
   const districtNo = t => +t.districtNo || letterNo(t);
   function pickTeam(t, ourName) {
@@ -77,6 +83,18 @@ const Importer = (() => {
       const cur = Store.get('teams', m.teamId); if (!cur) return;
       const base = norm(cur.category || cur.name).replace(/\s+[A-E]$/, ''); if (onlyCat && base !== norm(onlyCat).replace(/\s+[A-E]$/, '')) return;
       const t = pickTeam(cur, ours);
+      if (t && t.id !== m.teamId) { m.teamId = t.id; m.updatedAt = Date.now(); n++; }
+    });
+    if (n) Store.save();
+    return n;
+  }
+
+  function refileImported() {
+    let n = 0;
+    S().matches.forEach(m => {
+      if (m.teamManual) return;
+      const lines = String(m.notes || '').split('\n'), ours = ((m.notes || '').match(/Équipe : (.+)/) || [])[1]; if (!ours) return;
+      const comp = lines[0] && !/^Équipe :/.test(lines[0]) ? lines[0] : '', t = guessTeam(comp, ours);
       if (t && t.id !== m.teamId) { m.teamId = t.id; m.updatedAt = Date.now(); n++; }
     });
     if (n) Store.save();
@@ -232,5 +250,5 @@ const Importer = (() => {
     return { title: title.slice(0, 120) || 'Exercice', duration: dur ? +dur : 15, org: org.replace(/\n/g, ' ').slice(0, 1500) + (evoList.length ? '\n\nÉvolutions :\n' + evoList.map(e => '+ ' + e).join('\n') : ''), consignes: consList.join('\n'), materiel: mat.replace(/\n/g, ' ') };
   }
 
-  return { parseFFF, parseICS, parseCSV, guessTeam, reassignImported, districtNo, letterNo, matchesDialog, trainingsFromICS, isAssistCoach, parseAssistPage };
+  return { parseFFF, parseICS, parseCSV, guessTeam, reassignImported, refileImported, teamNo, levelOf, districtNo, letterNo, matchesDialog, trainingsFromICS, isAssistCoach, parseAssistPage };
 })();
