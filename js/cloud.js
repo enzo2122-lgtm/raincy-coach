@@ -313,6 +313,8 @@ begin
   if l.token is null then raise exception 'LIEN_PARENTS'; end if;
   return jsonb_build_object('team', l.team_name,
     'club', (select jsonb_build_object('name', data->>'name', 'fieldName', data->>'fieldName') from items where col = 'club' and id = 'club' and not deleted),
+    -- (3.37) les tâches des bénévoles (buvette, arbitre de touche…) : la liste du club, ou celle de l'appli
+    'volTasks', (select data->'volTasks' from items where col = 'club' and id = 'club' and not deleted),
     -- (3.9) les coachs de la catégorie qui ont choisi de donner leur numéro aux parents (Réglages → Mon compte)
     'coaches', (select coalesce(jsonb_agg(jsonb_build_object('name', trim(coalesce(st.data->>'firstName', '') || ' ' || coalesce(st.data->>'lastName', '')), 'role', st.data->>'role', 'phone', st.data->>'phone')
         order by st.data->>'lastName'), '[]'::jsonb) from items st where st.col = 'staff' and not st.deleted and st.data->>'phoneShow' = 'parents' and coalesce(st.data->>'phone', '') <> ''
@@ -324,6 +326,7 @@ begin
         'team', (select t.data->>'name' from items t where t.col = 'teams' and t.id = i.data->>'teamId'),
         'open', not coalesce((i.data->>'played')::boolean, false) and i.data->>'date' >= today,
         'photos', (select coalesce(jsonb_agg(ph.id order by ph.created_at), '[]'::jsonb) from match_photos ph where ph.match_id = i.id),
+        'vol', case when i.data->>'date' >= today then coalesce(i.data->'vol', '{}'::jsonb) else '{}'::jsonb end,
         'players', case when not coalesce((i.data->>'played')::boolean, false) and i.data->>'date' >= today then (
           select coalesce(jsonb_agg(jsonb_build_object('id', p.id, 'name', raincy_short(p.data), 'answer', a.status, 'seats', coalesce(a.seats, 0)) order by p.data->>'firstName'), '[]'::jsonb)
           from items p left join answers a on a.match_id = i.id and a.player_id = p.id
@@ -363,6 +366,56 @@ begin if not club_ok(k) then raise exception 'CLE_CLUB'; end if;
   insert into answers (match_id, player_id, status, by_coach) values (p_match, p_player, p_status, true)
     on conflict (match_id, player_id) do update set status = excluded.status, by_coach = true, updated_at = now();
   return to_jsonb(true); end $$;
+-- Bénévoles (version 3.37) : un parent s'inscrit (ou se retire) pour une tâche d'un match de la catégorie (buvette, arbitre de touche…).
+-- L'inscription est gardée avec le match : les coachs la voient aussitôt dans l'appli.
+create or replace function parent_volunteer(p_token text, p_match text, p_task text, p_label text, p_name text, p_remove boolean) returns jsonb language plpgsql security definer set search_path = public as $$
+declare l parent_links; m items; v jsonb; lst jsonb; nm text := left(trim(coalesce(p_name, '')), 40);
+begin
+  select * into l from parent_links where coalesce(p_token, '') <> '' and token = p_token;
+  if l.token is null then raise exception 'LIEN_PARENTS'; end if;
+  if coalesce(p_task, '') !~ '^[A-Za-z0-9_-]{1,30}$' or nm = '' then raise exception 'DONNEES'; end if;
+  select * into m from items where col = 'matches' and id = p_match and not deleted;
+  if m.id is null or not (m.data->>'teamId' = any(l.team_ids)) then raise exception 'DONNEES'; end if;
+  if m.data->>'date' < to_char(current_date, 'YYYY-MM-DD') then raise exception 'MATCH_PASSE'; end if;
+  v := case when jsonb_typeof(m.data->'vol') = 'object' then m.data->'vol' else '{}'::jsonb end;
+  lst := case when jsonb_typeof(v->p_task) = 'array' then v->p_task else '[]'::jsonb end;
+  if coalesce(p_remove, false) then
+    lst := (select coalesce(jsonb_agg(e), '[]'::jsonb) from jsonb_array_elements(lst) e where not (e->>'name' = nm and coalesce((e->>'parent')::boolean, false)));
+  elsif not exists (select 1 from jsonb_array_elements(lst) e where lower(e->>'name') = lower(nm)) then
+    if jsonb_array_length(lst) >= 8 then raise exception 'COMPLET'; end if;
+    lst := lst || jsonb_build_array(jsonb_build_object('id', substr(md5(random()::text), 1, 12), 'name', nm, 'parent', true, 'label', left(coalesce(p_label, ''), 40)));
+  end if;
+  update items set data = jsonb_set(data, '{vol}', v || jsonb_build_object(p_task, lst)), updated_at = (extract(epoch from now()) * 1000)::bigint, rev = nextval('items_rev')
+    where col = 'matches' and id = p_match;
+  return lst; end $$;
+grant execute on function parent_volunteer(text, text, text, text, text, boolean) to anon, authenticated;
+-- La veille d'un match, un rappel aux dirigeants inscrits comme bénévoles (tous les jours à 16 h UTC, 18 h en été à Paris)
+create or replace function raincy_vol_remind() returns void language plpgsql security definer set search_path = public as $$
+declare m items; k text; e jsonb; lbl text;
+begin
+  for m in select * from items where col = 'matches' and not deleted and data->>'date' = to_char(current_date + 1, 'YYYY-MM-DD') and jsonb_typeof(data->'vol') = 'object' loop
+    for k in select jsonb_object_keys(m.data->'vol') loop
+      for e in select * from jsonb_array_elements(case when jsonb_typeof(m.data->'vol'->k) = 'array' then m.data->'vol'->k else '[]'::jsonb end) loop
+        if coalesce(e->>'staffId', '') = '' then continue; end if;
+        lbl := coalesce((select t->>'label' from items c, jsonb_array_elements(case when jsonb_typeof(c.data->'volTasks') = 'array' then c.data->'volTasks' else '[]'::jsonb end) t
+          where c.col = 'club' and c.id = 'club' and t->>'key' = k limit 1),
+          case k when 'buvette' then 'Buvette' when 'touche' then 'Arbitre de touche' when 'delegue' then 'Délégué' when 'table' then 'Table de marque' when 'lavage' then 'Lavage des maillots' when 'accueil' then 'Accueil' when 'photos' then 'Photos' else 'Bénévole' end);
+        perform raincy_notify(array[e->>'staffId'], 'planning', 'vol:' || m.id || ':' || k, '🙋 Demain : ' || lbl,
+          coalesce((select data->>'name' from items where col = 'teams' and id = m.data->>'teamId'), '') || case when coalesce((m.data->>'home')::boolean, false) then ' contre ' else ' chez ' end
+          || coalesce(m.data->>'opponent', '?') || coalesce(' · ' || raincy_hm(nullif(split_part(m.data->>'time', ':', 1), '')::int * 60 + coalesce(nullif(split_part(m.data->>'time', ':', 2), '')::int, 0)), ''), '#/benevoles');
+      end loop;
+    end loop;
+  end loop;
+exception when others then raise notice 'rappel des bénévoles : %', sqlerrm;
+end $$;
+revoke all on function raincy_vol_remind() from public, anon, authenticated;
+do $vol$ begin
+  begin
+    perform cron.unschedule(jobid) from cron.job where jobname = 'raincy-benevoles';
+    perform cron.schedule('raincy-benevoles', '0 16 * * *', 'select public.raincy_vol_remind()');
+  exception when others then raise notice 'Rappel des bénévoles non programmé : %', sqlerrm;
+  end;
+end $vol$;
 -- Joueurs (version 3.35) : la page des joueurs d'une catégorie (seniors, U17, U18…), avec son propre lien secret.
 -- En plus de la page des parents : la causerie du prochain match (objectif, 3 clés, mot du coach, vidéo), et pour chaque match joué
 -- le temps de jeu, les buts et les passes de chacun (prénom et initiale seulement), sur toute la saison.

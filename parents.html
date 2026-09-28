@@ -74,13 +74,18 @@ button, select { font: inherit; }
 .ph-view { position: fixed; inset: 0; background: rgba(0,0,0,.92); display: grid; place-items: center; z-index: 9; padding: 16px; color: #fff; text-align: center; }
 .ph-view[hidden] { display: none; }
 .ph-view img { max-width: 100%; max-height: 85vh; border-radius: 8px; }
+.vol { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.vol-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 6px 0; }
+.vol-row .vt { font-weight: 700; min-width: 170px; } .vol-row .vt b { font-size: 13px; color: var(--no); } .vol-row .vt b.ok { color: var(--yes); }
+.vol-row .vn { flex: 1; font-size: 14px; color: var(--muted); }
+.b.small { min-height: 36px; font-size: 14px; padding: 0 12px; }
 </style>
 </head>
 <body>
 <header class="top"><div class="top-in"><img src="icons/crest.png" alt=""><div><p id="club">FA Le Raincy · Espace parents</p><h1 id="team">Chargement…</h1></div></div></header>
 <main id="page"><p class="empty">Chargement des informations de l'équipe…</p></main>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
-<script src="js/config.js?v=76"></script>
-<script src="js/parents-page.js?v=76"></script>
+<script src="js/config.js?v=77"></script>
+<script src="js/parents-page.js?v=77"></script>
 </body>
 </html>

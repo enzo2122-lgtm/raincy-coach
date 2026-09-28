@@ -108,6 +108,7 @@ const Views = (() => {
     else if (todayT.length) { title = `Bonne séance, ${esc(coach)} 💪`; box = `<b>Aujourd'hui</b> · ${items.join(' · ')}<span class="hero-wx" id="heroWx"></span><i class="hero-wish">En espérant un entraînement bénéfique pour tes joueurs !</i>`; }
     else if (tomorrowM.length) box = `<b>Demain</b> · ⚽ ${esc(matchLabel(tomorrowM[0]))}${tomorrowM[0].time ? ' à ' + esc(tomorrowM[0].time) : ''}<i class="hero-wish">Bonne préparation, et repose bien tes troupes !</i>`;
     // the next match of the day or of tomorrow: straight to its preparation
+    const duty = Vol.mine(2); if (duty.length) box += `<a class="hero-prep hero-vol" href="#/benevoles">🙋 ${duty.map(({ m, t }) => `${t.icon} ${esc(t.label)} ${m.date === now ? 'aujourd\'hui' : 'demain'}`).join(' · ')}</a> `;
     const prepM = todayM[0] || tomorrowM[0]; if (todayM[0]) box += `<a class="hero-prep hero-live" href="#/direct/${todayM[0].id}">📱 Match en direct</a> `; if (prepM) box += `<a class="hero-prep" href="#/prepa/${prepM.id}">🎯 Préparation du match${Prepa.score(prepM) ? ' · ' + Prepa.score(prepM) + ' %' : ''}</a>`;
     const redraw = () => { if (/^#?\/?$/.test(location.hash.replace('#/', '#'))) App.route(true); };
     return `<header class="hero hero-me" data-wx-time="${esc(firstTime)}">
@@ -610,7 +611,7 @@ const Views = (() => {
           </div>
           <div class="chips"><button class="chip ch-home ${m.home ? 'on' : ''}" data-home="1">🏠 Domicile</button><button class="chip ch-away ${!m.home ? 'on' : ''}" data-home="0">🚌 Extérieur</button></div>
         </section>
-        ${!m.exempt ? Live.card(m) + Prepa.card(m) : ''}
+        ${!m.exempt ? Live.card(m) + Prepa.card(m) + Vol.card(m) : ''}
         ${m.home && !m.exempt && Cloud.ready() ? '<div id="roomsBox"></div>' : ''}
         <div class="row-head"><h2 class="section">Convoqués (${conv.length})</h2>${conv.length ? `<button class="btn primary" data-act="convoc">${I.share}<span>Envoyer la convocation</span></button>` : ''}</div>
         ${t ? rosterChips(t.id, p => `<button class="chip ${(m.convoked || []).includes(p.id) ? 'on' : ''} ${Health.on(p, m.date) ? 'unav' : ''}" data-conv="${p.id}">${Health.flag(p, m.date)}${chipLabel(p)}</button>`) : '<p class="muted">Choisis une équipe.</p>'}

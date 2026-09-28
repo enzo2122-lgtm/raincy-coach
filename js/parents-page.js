@@ -29,10 +29,34 @@
       let m = txt; try { m = JSON.parse(txt).message || txt; } catch (e) {}
       if (/LIEN_PARENTS/.test(m)) throw new Error('Ce lien n\'est plus valable : demande le nouveau lien au coach de l\'équipe.');
       if (/MATCH_PASSE/.test(m)) throw new Error('Ce match est passé : les réponses sont fermées.');
+      if (/COMPLET/.test(m)) throw new Error('Cette tâche est déjà complète. Merci quand même !');
       if (r.status === 404 || /could not find the function/i.test(m)) throw new Error('La page des parents n\'est pas encore prête : le club doit mettre à jour son serveur.');
       throw new Error('Le serveur ne répond pas. Réessaie dans un instant.');
     }
     return txt ? JSON.parse(txt) : null;
+  }
+
+  /* ---------- volunteers: buvette, arbitre de touche… (the club's list, or the app's) ---------- */
+  const VOL = [{ key: 'buvette', icon: '🥤', label: 'Buvette', need: 2, when: 'home' }, { key: 'touche', icon: '🚩', label: 'Arbitre de touche', need: 1, when: 'all' },
+    { key: 'delegue', icon: '📋', label: 'Délégué', need: 1, when: 'home' }, { key: 'table', icon: '🧾', label: 'Table de marque / FMI', need: 1, when: 'home' },
+    { key: 'lavage', icon: '🧺', label: 'Lavage des maillots', need: 1, when: 'all' }];
+  const NAME = 'raincy-parent-name';
+  const myName = () => { try { return localStorage.getItem(NAME) || ''; } catch (e) { return ''; } };
+  const volTasks = m => ((data.volTasks && data.volTasks.length) ? data.volTasks : VOL).filter(t => t.on !== false && (t.when === 'all' || (t.when === 'home' && m.home) || (t.when === 'away' && !m.home)));
+  function volBox(m) {
+    const ts = volTasks(m); if (!ts.length || m.played || m.exempt || !m.open) return '';
+    const me = myName().toLowerCase();
+    return `<div class="vol"><p class="info"><b>🙋 Coup de main</b> · le club a besoin de vous ce jour-là</p>${ts.map(t => { const ppl = (m.vol || {})[t.key] || [], mine = me && ppl.some(x => x.parent && String(x.name).toLowerCase() === me);
+      return `<div class="vol-row"><span class="vt">${t.icon} ${esc(t.label)} <b class="${ppl.length >= t.need ? 'ok' : ''}">${ppl.length}/${t.need}</b></span><span class="vn">${ppl.map(x => esc(x.name)).join(', ') || '<i class="muted">personne pour l\'instant</i>'}</span>
+        ${mine ? `<button class="b small" data-vol="${esc(t.key)}" data-rm="1">Me retirer</button>` : ppl.length < t.need + 2 ? `<button class="b small yes on" data-vol="${esc(t.key)}" data-label="${esc(t.label)}">Je m'inscris</button>` : ''}</div>`; }).join('')}</div>`;
+  }
+  async function volunteer(matchId, task, label, remove) {
+    let nm = myName();
+    if (!nm && !remove) { nm = (prompt('Ton prénom et ton nom (ex : Sarah, maman de Noah)') || '').trim(); if (!nm) return; try { localStorage.setItem(NAME, nm.slice(0, 40)); } catch (e) {} }
+    try { const lst = await rpc('parent_volunteer', { p_token: token, p_match: matchId, p_task: task, p_label: label || '', p_name: nm, p_remove: !!remove });
+      const m = data.matches.find(x => x.id === matchId); m.vol = Object.assign({}, m.vol || {}, { [task]: lst || [] }); render(); loadPhotos();
+      toast(remove ? 'Tu es retiré.' : 'Merci pour ton aide ! 🙏'); }
+    catch (e) { toast(e.message, true); }
   }
 
   const result = m => !m.played ? '' : +m.gf > +m.ga ? 'V' : +m.gf < +m.ga ? 'D' : 'N';
@@ -84,6 +108,7 @@
           <span class="st ${esc(k.answer || '')}">${k.answer === 'oui' ? '✓ présent' : k.answer === 'non' ? '✗ absent' : 'pas de réponse'}</span>
           <span class="btns"><button class="b yes ${k.answer === 'oui' ? 'on' : ''}" data-ans="oui" data-p="${esc(k.id)}">Présent</button><button class="b no ${k.answer === 'non' ? 'on' : ''}" data-ans="non" data-p="${esc(k.id)}">Absent</button>${k.answer === 'oui' ? seatSel(k) : ''}</span></li>`).join('')}</ul>
         <p class="sum">✓ ${yes} présent${yes > 1 ? 's' : ''} · ✗ ${no} absent${no > 1 ? 's' : ''} · ${kids.length - yes - no} sans réponse</p>` : m.open ? '<p class="info">La liste des convoqués n\'est pas encore publiée.</p>' : ''}
+      ${volBox(m)}
       ${!m.played && !m.exempt && m.date >= new Date().toISOString().slice(0, 10) ? `<p><button class="b cal" data-cal="${esc(m.id)}">📅 Ajouter à mon agenda</button></p>` : ''}
       ${(m.photos || []).length ? `<div class="photos">${m.photos.map(id => `<a class="ph" data-photo="${esc(id)}" href="#" role="button" aria-label="Voir la photo"><span class="muted small">Photo…</span></a>`).join('')}</div>` : ''}
       ${!m.home && (m.carpool || []).length && !m.played ? `<div class="car-list"><p class="info"><b>🚗 Covoiturage</b></p>${m.carpool.map(c => `<div class="car"><b>${esc(c.driver || 'Voiture')}</b>
@@ -129,6 +154,7 @@
     const ph = e.target.closest('[data-photo]');
     if (ph) { e.preventDefault(); const v = $('#phView'), src = photoData[ph.dataset.photo]; if (src) { v.innerHTML = `<img alt="Photo du match" src="${src}"><p>Touche pour fermer</p>`; v.hidden = false; } return; }
     if (e.target.closest('#phView')) { $('#phView').hidden = true; return; }
+    const v = e.target.closest('[data-vol]'); if (v) { volunteer(v.closest('[data-m]').dataset.m, v.dataset.vol, v.dataset.label, !!v.dataset.rm); return; }
     const b = e.target.closest('[data-ans]'); if (!b) return;
     const card = b.closest('[data-m]'), m = data.matches.find(x => x.id === card.dataset.m), k = (m.players || []).find(x => x.id === b.dataset.p);
     answer(card.dataset.m, b.dataset.p, b.dataset.ans, b.dataset.ans === 'oui' ? (k && k.seats) || 0 : 0);
