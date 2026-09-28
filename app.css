@@ -1452,3 +1452,29 @@ h2.section svg { width: 22px; height: 22px; vertical-align: -4px; margin-right: 
 .hl-scale button.on { color: #fff; border-color: transparent; }
 .hl-scale .r1.on, .hl-scale .r2.on, .hl-scale .r3.on { background: #16a34a; } .hl-scale .r4.on, .hl-scale .r5.on, .hl-scale .r6.on { background: #ca8a04; }
 .hl-scale .r7.on, .hl-scale .r8.on { background: #ea580c; } .hl-scale .r9.on, .hl-scale .r10.on { background: #dc2626; }
+
+/* 3.34 : progression des joueurs */
+.pg-top { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 12px; align-items: center; }
+.pg-radar { width: 100%; max-width: 420px; height: auto; }
+.pg-curve { width: 100%; height: auto; margin-top: 8px; }
+.pg-scores p { display: flex; align-items: baseline; gap: 8px; margin: 4px 0; padding: 4px 8px; border-left: 4px solid var(--c); border-radius: 6px; background: var(--surface2); }
+.pg-scores p span { flex: 1; font-size: 14px; } .pg-scores p b { font: 800 17px var(--round); }
+.pg-scores i { font-style: normal; font-size: 12px; font-weight: 700; } .pg-scores i.up { color: #15803d; } .pg-scores i.down { color: #dc2626; }
+.pg-scores .pg-glob { --c: #8c1024; background: color-mix(in srgb, #8c1024 10%, var(--surface)); }
+.pg-comment { font-style: italic; padding: 8px 12px; border-radius: 10px; background: var(--surface2); }
+.pg-hist { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.pg-hist .chip { min-height: 32px; font-size: 13px; }
+.pg-legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12.5px; }
+.pg-legend span::before { content: ''; display: inline-block; width: 12px; height: 4px; border-radius: 2px; background: var(--c); margin-right: 5px; vertical-align: middle; }
+.pg-goals { display: flex; flex-direction: column; gap: 6px; margin: 6px 0 10px; }
+.pg-goal { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 10px; background: var(--surface2); }
+.pg-goal > span { flex: 1; } .pg-goal.done > span { color: #15803d; } .pg-goal.drop { opacity: .6; }
+.pg-area { border-left: 4px solid var(--c); padding: 4px 0 4px 10px; margin-bottom: 10px; }
+.pg-area h3 { margin: 0 0 4px; font-size: 15px; color: var(--c); }
+.pg-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 40px; }
+.pg-row > span:first-child { font-size: 14px; }
+.pg-stars { display: flex; gap: 2px; flex: none; }
+.pg-stars button { width: 36px; height: 36px; border: 0; background: none; font-size: 24px; line-height: 1; color: #cbd5e1; cursor: pointer; padding: 0; }
+.pg-stars button.on { color: #f59e0b; }
+.pg-ok { font-size: 18px; }
+@media (max-width: 600px) { .pg-top { grid-template-columns: 1fr; } .pg-stars button { width: 32px; height: 34px; font-size: 22px; } }

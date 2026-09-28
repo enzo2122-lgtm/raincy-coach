@@ -611,6 +611,7 @@ const People = (() => {
       <p class="muted small">Saison ${esc(seasonLabel())} · les présences comptent les séances où le coach a fait l'appel.</p>
       <div class="cards2">
         ${Health.playerCard(p)}
+        ${Progress.card(p)}
         <section class="card"><h2>${I.phone}Contacts</h2>
           ${p.phone ? tel(p.phone, 'Joueur') : ''}${(p.parents || []).map(x => `<div class="pp-parent"><b>${esc(x.name || x.rel || 'Parent')}</b>${x.rel && x.name ? ` <span class="muted">(${esc(x.rel)})</span>` : ''}${x.phone ? tel(x.phone) : ''}</div>`).join('')}
           ${p.email ? `<p><a href="mailto:${esc(p.email)}">${esc(p.email)}</a></p>` : ''}
@@ -627,8 +628,10 @@ const People = (() => {
         </section>
         <section class="card">${notesHistory(p) || `<h2>⭐ Notes des dirigeants</h2><p class="muted">Pas encore de note.</p>`}</section>
       </div>`;
+    Progress.mount(root, p);
     root.onclick = e => {
       if (Health.click(e, p, () => playerPage(root, id))) return;
+      if (Progress.click(e, p, () => playerPage(root, id))) return;
       const b = e.target.closest('button'); if (!b) return;
       if (b.dataset.act === 'back') return history.length > 1 ? history.back() : (location.hash = '#/joueurs');
       if (b.dataset.act === 'edit') return editPlayer(p, { onSave: () => { if (Store.get('players', p.id)) playerPage(root, p.id); else location.hash = '#/joueurs'; } });
