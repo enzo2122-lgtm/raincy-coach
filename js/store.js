@@ -142,7 +142,7 @@ const Store = (() => {
     if (obj.data.club && obj.data.club.cloud && obj.data.club.cloud.url) { state.club.cloud = obj.data.club.cloud; if (obj.data.club.fieldName) state.club.fieldName = obj.data.club.fieldName; }
     migrate(); save(); return res;
   }
-  function reset() { state = blank(); save(); }
+  function reset() { state = blank(); migrate(); save(); }
   function removeExamples() {
     const isEx = x => x.example || /\(exemple\)/i.test(x.name || x.title || '');
     ['teams', 'schemas', 'trainings'].forEach(c => state[c].forEach(x => { if (isEx(x)) x.example = true; }));

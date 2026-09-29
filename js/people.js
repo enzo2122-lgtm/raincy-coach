@@ -314,6 +314,7 @@ const People = (() => {
     const draw = l => (isP ? rowsOf(l, sort, p => playerRow(p)) : l.map(p => staffRow(p)).join('')) || '<p class="muted">Personne ici.</p>';
     root.innerHTML = `<header class="page-head"><div><h1>${isP ? 'Joueurs' : 'Dirigeants'}</h1><p class="sub">${list.length} sur ${all.length} · ${Auth.isAdmin() ? 'tout le club' : 'mes catégories'}</p></div>
       <div class="head-actions"><a class="btn" href="#/equipes">${I.back}<span>Équipes</span></a>
+      ${Auth.isAdmin() ? `<button class="btn" data-act="importAny">📥<span>Importer (photo, PDF, Excel…)</span></button>` : ''}
       <button class="btn" data-act="paste">${I.paste}<span>Coller une liste</span></button>
       <button class="btn primary" data-act="new">${I.plus}<span>${isP ? 'Nouveau joueur' : 'Nouveau dirigeant'}</span></button></div></header>
       <div class="filters">
@@ -338,6 +339,7 @@ const People = (() => {
       if (b.dataset.psort) { ui.peopleSort = b.dataset.psort; Store.persistNow(); return again(); }
       if (b.dataset.act === 'new') return (isP ? editPlayer : editStaff)(null, { teamId: filt && filt !== '-' ? filt : null, onSave: again });
       if (b.dataset.act === 'paste') return isP ? pasteList(again) : pasteStaff(again);
+      if (b.dataset.act === 'importAny') return Imports.open(isP ? 'players' : 'staff', again);
       if (b.dataset.person && isP) { location.hash = '#/joueur/' + b.dataset.person; return; }
       if (b.dataset.person) editStaff(Store.get('staff', b.dataset.person), { onSave: again });
     };
@@ -662,6 +664,6 @@ const People = (() => {
     };
   }
 
-  return { isClubList, importClubList, autoCategories, sortByBirth, sortByBirthDialog, catOf, seasonLabel, seasonFrom, editPlayer, editStaff, teamSections, bindTeamSections, staffPicker, listPage, playerPage, age, fmtBirth, tel, name,
+  return { addPlayers, ageTeam, findCat, isClubList, importClubList, autoCategories, sortByBirth, sortByBirthDialog, catOf, seasonLabel, seasonFrom, editPlayer, editStaff, teamSections, bindTeamSections, staffPicker, listPage, playerPage, age, fmtBirth, tel, name,
     attendance, pctBadge, matchLength, playerSeason, assignSlots, lowPlaytime, POSTS, TYPES, postsOf, postsLabel, lineOf, sortPlayers, byLine, sortBar, PHONE_SHOW, staffPhone };
 })();

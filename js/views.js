@@ -792,6 +792,9 @@ const Views = (() => {
         <label class="fld"><span>Nom du club</span><input id="clubName" value="${esc(c.name)}" maxlength="40"></label>
         <div class="lbl">Couleur de nos maillots</div>${bibs('home', c.homeBib)}
         <div class="lbl">Couleur des adversaires</div>${bibs('away', c.awayBib)}
+        <div class="lbl">Importer des données</div>
+        <p class="muted small">Joueurs, matchs ou dirigeants depuis une photo, une capture d'écran, un PDF, un fichier Excel / CSV ou un texte copié. Tu vérifies le tableau avant d'importer : rien n'est créé en double.</p>
+        <div class="chips"><button class="btn primary" data-imp="players">👥<span>Joueurs</span></button><button class="btn" data-imp="matches">⚽<span>Matchs</span></button><button class="btn" data-imp="staff">🧢<span>Dirigeants</span></button></div>
       </section>` : ''}
       <section class="card">
         <h2>${I.share}Fichiers du club</h2>
@@ -823,6 +826,7 @@ const Views = (() => {
       const b = e.target.closest('button'); if (!b) return;
       if (b.dataset.home) { c.homeBib = b.dataset.home; Store.save(); App.refreshChrome(); return settings(root); }
       if (b.dataset.away) { c.awayBib = b.dataset.away; Store.save(); return settings(root); }
+      if (b.dataset.imp) return Imports.open(b.dataset.imp, () => settings(root));
       if (b.dataset.act === 'exportAll') return runExport('Préparation du fichier…', async () => { S().ui.clubFileSent = true; Store.save(); return Exporter.json(await Library.withBackgrounds(Store.exportAll()), `${c.name}-${today()}`); });
       if (b.dataset.notif) return Notify.onClick(b, () => settings(root));
       if (b.dataset.auth || b.dataset.reset) return Auth.onSettingsClick(b, () => settings(root));

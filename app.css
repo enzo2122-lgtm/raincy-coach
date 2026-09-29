@@ -1650,3 +1650,18 @@ body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 
 /* 3.44 : matchs officiels / amicaux */
 .kind-seg { margin: 10px 0 14px; max-width: 520px; }
 .kind-seg .seg-b { white-space: normal; }
+
+/* ---------- 3.46 : import universel (photo, PDF, Excel, CSV) ---------- */
+.imp-kinds { margin-bottom: 8px; }
+.imp-src { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.imp-src label.btn { cursor: pointer; }
+#impPaste { width: 100%; margin: 6px 0; }
+.imp-prog .bar { height: 8px; border-radius: 99px; background: var(--line); overflow: hidden; } .imp-prog .bar i { display: block; height: 100%; width: 0; background: var(--bordeaux); transition: width .2s; }
+.imp-table-wrap { overflow: auto; max-height: 46vh; border: 1px solid var(--line); border-radius: 12px; margin: 8px 0; }
+.imp-table { border-collapse: collapse; font-size: 13.5px; min-width: 100%; }
+.imp-table th { position: sticky; top: 0; background: var(--surface); z-index: 1; padding: 6px 4px; border-bottom: 1px solid var(--line); }
+.imp-table th select { font-size: 12.5px; min-height: 34px; max-width: 150px; }
+.imp-table td { padding: 5px 7px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.imp-table td[contenteditable]:focus { outline: 2px solid var(--gold); background: color-mix(in srgb, var(--gold) 12%, var(--surface)); }
+.imp-sum { margin: 8px 0 12px; font-size: 14px; }
+.icon-btn.small { width: 30px; height: 30px; border-radius: 8px; }
