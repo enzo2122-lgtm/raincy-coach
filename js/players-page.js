@@ -21,10 +21,13 @@
   const score = m => m.home ? `${esc(m.gf)} – ${esc(m.ga)}` : `${esc(m.ga)} – ${esc(m.gf)}`;
   const title = m => m.home ? `<b>${esc(club())}</b> <i>contre</i> ${esc(m.opponent || '?')}` : `${esc(m.opponent || '?')} <i>contre</i> <b>${esc(club())}</b>`;
 
-  // his season, from the played matches where he was convoked
+  // his season, from the played matches where he was convoked: the official ones, the friendlies apart
   function season() {
     const r = { mp: 0, min: 0, g: 0, a: 0, conv: 0 };
-    (data.matches || []).filter(m => m.played && m.my).forEach(m => { r.conv++; const mn = +m.my.min || 0; if (mn > 0) { r.mp++; r.min += mn; } r.g += +m.my.g || 0; r.a += +m.my.a || 0; });
+    const ami = m => /amical|tournoi|pr[ée]pa|friendly/i.test(m.competition || '');
+    r.f = { mp: 0, min: 0, g: 0, a: 0 };
+    (data.matches || []).filter(m => m.played && m.my && ami(m)).forEach(m => { const mn = +m.my.min || 0; if (mn > 0) { r.f.mp++; r.f.min += mn; } r.f.g += +m.my.g || 0; r.f.a += +m.my.a || 0; });
+    (data.matches || []).filter(m => m.played && m.my && !ami(m)).forEach(m => { r.conv++; const mn = +m.my.min || 0; if (mn > 0) { r.mp++; r.min += mn; } r.g += +m.my.g || 0; r.a += +m.my.a || 0; });
     return r;
   }
 
@@ -77,7 +80,7 @@
     const my = season();
     $('#page').innerHTML = `${Member.bar(data, 'joueurs')}
       ${wbCard(now)}
-      ${my.conv ? `<h2>Ma saison</h2><div class="tiles"><div><b>${my.mp}</b><span>matchs joués</span></div><div><b>${my.min}'</b><span>temps de jeu</span></div><div><b>${my.mp ? Math.round(my.min / my.mp) : 0}'</b><span>par match</span></div><div><b>${my.g}</b><span>buts</span></div><div><b>${my.a}</b><span>passes déc.</span></div></div>` : ''}
+      ${my.conv || my.f.mp ? `<h2>Ma saison</h2><div class="tiles"><div><b>${my.mp}</b><span>matchs joués</span></div><div><b>${my.min}'</b><span>temps de jeu</span></div><div><b>${my.mp ? Math.round(my.min / my.mp) : 0}'</b><span>par match</span></div><div><b>${my.g}</b><span>buts</span></div><div><b>${my.a}</b><span>passes déc.</span></div></div><p class="info">Matchs officiels (championnat, coupe).${my.f.mp ? ` Matchs amicaux : <b>${my.f.mp}</b> joué${my.f.mp > 1 ? 's' : ''}, <b>${my.f.min}'</b>${my.f.g ? `, ⚽ ${my.f.g}` : ''}${my.f.a ? `, 🅿️ ${my.f.a}` : ''}.` : ''}</p>` : ''}
       <h2>Prochain match</h2>${up.length ? nextCard(up[0]) : '<p class="tip">Pas de match prévu pour l\'instant.</p>'}
       ${up.length > 1 ? `<h2>Ensuite</h2><div class="card">${up.slice(1, 6).map(m => `<div class="tr"><span class="d">${esc(fmt(m.date, { weekday: 'short', day: 'numeric', month: 'short' }))}</span><span>${m.home ? 'contre' : 'chez'} ${esc(m.opponent || '?')}${m.time ? ' · ' + esc(hh(m.time)) : ''}</span></div>`).join('')}</div>` : ''}
       ${(data.trainings || []).length ? `<h2>Entraînements (2 semaines)</h2><div class="card">${data.trainings.map(t => `<div class="tr"><span class="d">${esc(fmt(t.date, { weekday: 'short', day: 'numeric', month: 'short' }))}</span><span>${t.time ? esc(hh(t.time)) + ' · ' : ''}${esc(t.title || 'Entraînement')}</span></div>`).join('')}</div>` : ''}

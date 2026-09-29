@@ -1646,3 +1646,7 @@ body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 
   #printArea .qp-note { font-size: 12pt; margin-top: 6mm; }
 }
 @media print { #printArea .pc img, #printArea .qr-poster img { display: inline-block; break-after: auto; page-break-after: auto; } }
+
+/* 3.44 : matchs officiels / amicaux */
+.kind-seg { margin: 10px 0 14px; max-width: 520px; }
+.kind-seg .seg-b { white-space: normal; }

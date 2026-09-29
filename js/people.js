@@ -537,7 +537,7 @@ const People = (() => {
     return S().matches.filter(m => m.date >= from && !m.exempt && (m.convoked || []).includes(p.id)).sort((a, b) => b.date.localeCompare(a.date));
   }
   function playerSeason(p) {
-    const ms = seasonMatches(p), played = ms.filter(m => m.played);
+    const ms = seasonMatches(p), played = ms.filter(m => m.played && Store.kindOk(m));
     const minutes = played.reduce((a, m) => a + (+((m.minutes || {})[p.id]) || 0), 0);
     const withMin = played.filter(m => (m.minutes || {})[p.id] != null && (m.minutes || {})[p.id] !== '');
     const g = played.reduce((a, m) => a + (((m.stats || {})[p.id] || {}).g || 0), 0), as = played.reduce((a, m) => a + (((m.stats || {})[p.id] || {}).a || 0), 0);
@@ -582,7 +582,7 @@ const People = (() => {
   function lowPlaytime(teamId) {
     const t = Store.get('teams', teamId); if (!t) return [];
     const fam = new Set(S().teams.filter(x => catKey(x.category || x.name) === catKey(t.category || t.name)).map(x => x.id));
-    const from = seasonFrom(), ms = S().matches.filter(m => fam.has(m.teamId) && m.played && !m.exempt && m.date >= from && m.minutes && Object.keys(m.minutes).length);
+    const from = seasonFrom(), ms = S().matches.filter(m => fam.has(m.teamId) && m.played && !m.exempt && !Store.isFriendly(m) && m.date >= from && m.minutes && Object.keys(m.minutes).length);
     if (ms.length < 3) return []; // not enough matches with playing time yet
     const own = Store.playersOf(teamId), squad = own.length ? own : Store.rosterOf(teamId);
     const rows = squad.map(p => ({ p, min: ms.reduce((a, m) => a + (+(m.minutes[p.id]) || 0), 0), conv: ms.filter(m => (m.convoked || []).includes(p.id)).length }));
@@ -603,6 +603,7 @@ const People = (() => {
     root.innerHTML = `<header class="page-head"><div><h1>${p.number ? `<span class="pnum big">${esc(p.number)}</span> ` : ''}${esc(name(p))}</h1>
         <p class="sub">${[postsLabel(p), p.birth ? `${age(p.birth)} ans (${fmtBirth(p.birth)})` : '', p.foot ? 'pied ' + String(p.foot).toLowerCase() : '', p.height ? p.height + ' cm' : '', p.weight ? p.weight + ' kg' : '', p.mute ? 'muté' : '', p.licence ? 'licence ' + p.licence : '', p.subcat, teamNames(p.teamIds)].filter((x, i, a) => x && a.indexOf(x) === i).map(esc).join(' · ')}</p></div>
       <div class="head-actions"><button class="btn" data-act="back">${I.back}<span>Retour</span></button><button class="btn primary" data-act="edit">${I.edit}<span>Modifier</span></button></div></header>
+      ${UI.kindSeg()}
       <div class="tiles">
         ${tile(s.att.pct == null ? '–' : s.att.pct + ' %', `Présence à l'entraînement${s.att.total ? ` (${s.att.n}/${s.att.total})` : ''}`, s.att.pct == null ? '' : s.att.pct >= 75 ? 'v' : s.att.pct >= 50 ? 'n' : 'd')}
         ${tile(s.played.length, 'Matchs joués')}${tile(s.minutes, 'Minutes jouées')}${tile(s.avg == null ? '–' : s.avg + "'", 'Moyenne par match')}

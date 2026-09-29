@@ -128,5 +128,14 @@ const UI = (() => {
 
   // mouse/trackpad (computer): fields can take the focus; touch screens: no keyboard popping up on its own
   const finePointer = () => matchMedia('(pointer: fine)').matches;
-  return { finePointer, esc, $, $$, toast, modal, confirmBox, busy, bgTask, thumb, fmtDate, today, accentFor, pickFiles, chooseFiles, motto, mottoIdea, MOTTO_MAX };
+  // « 🏆 Officiels | 🤝 Amicaux » : what the results, goals and stats count (one choice for the whole app)
+  function kindSeg(counts) {
+    const k = Store.matchKind(), n = x => counts && counts[x] != null ? ` <i class="seg-n">${counts[x]}</i>` : '';
+    return `<div class="seg kind-seg" role="tablist" aria-label="Type de matchs"><button class="seg-b ${k === 'off' ? 'on' : ''}" data-mkind="off" role="tab">🏆 Matchs officiels${n('off')}</button><button class="seg-b ${k === 'ami' ? 'on' : ''}" data-mkind="ami" role="tab">🤝 Matchs amicaux${n('ami')}</button></div>`;
+  }
+  document.addEventListener('click', e => {
+    const b = e.target.closest && e.target.closest('[data-mkind]'); if (!b) return;
+    e.stopPropagation(); Store.state.ui.matchKind = b.dataset.mkind; Store.persistNow(); App.route(true);
+  }, true);
+  return { kindSeg, finePointer, esc, $, $$, toast, modal, confirmBox, busy, bgTask, thumb, fmtDate, today, accentFor, pickFiles, chooseFiles, motto, mottoIdea, MOTTO_MAX };
 })();

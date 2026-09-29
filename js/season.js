@@ -7,7 +7,7 @@ const Season = (() => {
 
   function data(t) {
     const from = People.seasonFrom(), now = UI.today();
-    const ms = S().matches.filter(m => m.teamId === t.id && m.played && !m.exempt && m.date >= from).sort((a, b) => a.date.localeCompare(b.date));
+    const ms = S().matches.filter(m => m.teamId === t.id && m.played && !m.exempt && m.date >= from && Store.kindOk(m)).sort((a, b) => a.date.localeCompare(b.date));
     const trs = S().trainings.filter(x => !x.model && x.teamId === t.id && x.date >= from && x.date <= now);
     const r = { V: 0, N: 0, D: 0 }; ms.forEach(m => r[res(m)]++);
     const gf = ms.reduce((a, m) => a + (+m.gf || 0), 0), ga = ms.reduce((a, m) => a + (+m.ga || 0), 0);
@@ -27,9 +27,10 @@ const Season = (() => {
     if (!t) { root.innerHTML = '<div class="empty"><p>Crée d\'abord une équipe.</p></div>'; return; }
     const d = data(t), season = People.seasonLabel(), note = ((t.seasonNotes || {})[season]) || '';
     const top = k => d.players.filter(x => x[k] > 0).sort((a, b) => b[k] - a[k]).slice(0, 5);
-    root.innerHTML = `<header class="page-head"><div><h1>🏆 Bilan de saison</h1><p class="sub">${esc(t.name)} · ${esc(season)}</p></div>
+    root.innerHTML = `<header class="page-head"><div><h1>🏆 Bilan de saison</h1><p class="sub">${esc(t.name)} · ${esc(season)} · ${Store.matchKind() === 'ami' ? 'matchs amicaux' : 'matchs officiels'}</p></div>
       <div class="head-actions"><a class="btn" href="#/stats">${I.back}<span>Statistiques</span></a><button class="btn" data-ss="save">${I.download}<span>Sauvegarder la saison</span></button><button class="btn primary" data-ss="pdf">${I.pdf}<span>Bilan PDF</span></button></div></header>
       <label class="fld inline"><span>Équipe</span><select id="ssTeam">${teams.map(x => `<option value="${x.id}" ${x.id === t.id ? 'selected' : ''}>${esc(Store.teamLabel(x))}</option>`).join('')}</select></label>
+      ${UI.kindSeg()}
       <div class="tiles"><div class="tile"><b>${d.ms.length}</b><span>Matchs</span></div><div class="tile v"><b>${d.r.V}</b><span>Victoires</span></div><div class="tile n"><b>${d.r.N}</b><span>Nuls</span></div><div class="tile d"><b>${d.r.D}</b><span>Défaites</span></div>
         <div class="tile"><b>${d.gf} – ${d.ga}</b><span>Buts pour – contre</span></div><div class="tile"><b>${d.trs.length}</b><span>Séances (${Math.round(d.trMin / 60)} h)</span></div></div>
       <div class="cards2">
@@ -65,7 +66,7 @@ const Season = (() => {
   }
   /* ---------- detailed statistics (Stats page): form, points, home / away, clean sheets, goals by period (live match) ---------- */
   function advanced(t) {
-    const from = People.seasonFrom(), ms = S().matches.filter(m => m.teamId === t.id && m.played && !m.exempt && m.date >= from).sort((a, b) => a.date.localeCompare(b.date));
+    const from = People.seasonFrom(), ms = S().matches.filter(m => m.teamId === t.id && m.played && !m.exempt && m.date >= from && Store.kindOk(m)).sort((a, b) => a.date.localeCompare(b.date));
     if (!ms.length) return '';
     const pts = m => ({ V: 3, N: 1, D: 0 })[res(m)], rec = l => { const r = { V: 0, N: 0, D: 0, gf: 0, ga: 0 }; l.forEach(m => { r[res(m)]++; r.gf += +m.gf || 0; r.ga += +m.ga || 0; }); return r; };
     const home = rec(ms.filter(m => m.home)), away = rec(ms.filter(m => !m.home)), total = ms.reduce((a, m) => a + pts(m), 0);
@@ -105,7 +106,7 @@ const Season = (() => {
   }
   // a player's detailed stats over the season (player page)
   function playerDetail(p) {
-    const from = People.seasonFrom(), ms = S().matches.filter(m => m.played && m.date >= from && ((m.detail || {})[p.id] || ((m.stats || {})[p.id])));
+    const from = People.seasonFrom(), ms = S().matches.filter(m => m.played && m.date >= from && Store.kindOk(m) && ((m.detail || {})[p.id] || ((m.stats || {})[p.id])));
     if (!ms.some(m => (m.detail || {})[p.id])) return '';
     const sum = k => ms.reduce((s, m) => s + (k === 'g' || k === 'a' ? (((m.stats || {})[p.id] || {})[k] || 0) : (((m.detail || {})[p.id] || {})[k] || 0)), 0);
     return `<section class="card"><h2>📊 Ses stats détaillées</h2><div class="tt-cards">${DET.filter(([k]) => sum(k)).map(([k, ic, l]) => `<div><span>${ic} ${esc(l)}</span><b>${sum(k)}</b></div>`).join('')}</div></section>`;

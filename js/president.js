@@ -9,7 +9,7 @@ const President = (() => {
 
   function figures() {
     const from = People.seasonFrom(), now = today();
-    const ms = S().matches.filter(m => m.date >= from && !m.exempt), played = ms.filter(m => m.played);
+    const ms = S().matches.filter(m => m.date >= from && !m.exempt && Store.kindOk(m)), played = ms.filter(m => m.played);
     const trs = S().trainings.filter(t => t.date >= from && t.date <= now);
     const rows = S().teams.map(t => {
       const ps = Store.playersOf(t.id), st = Store.staffOf(t.id);

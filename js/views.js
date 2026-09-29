@@ -736,7 +736,7 @@ const Views = (() => {
     const t = teamOf(tid);
     if (!t) { root.innerHTML = header('Statistiques') + empty('Crée une équipe pour voir ses statistiques.'); return; }
     S().ui.teamId = tid;
-    const ms = S().matches.filter(m => m.teamId === t.id && m.played).sort((a, b) => b.date.localeCompare(a.date));
+    const ms0 = S().matches.filter(m => m.teamId === t.id && m.played), ms = ms0.filter(Store.kindOk).sort((a, b) => b.date.localeCompare(a.date));
     const trs = S().trainings.filter(x => x.teamId === t.id && (x.presents || []).length);
     const V = ms.filter(m => result(m) === 'V').length, N = ms.filter(m => result(m) === 'N').length, D = ms.filter(m => result(m) === 'D').length;
     const bp = ms.reduce((a, m) => a + (+m.gf || 0), 0), bc = ms.reduce((a, m) => a + (+m.ga || 0), 0);
@@ -753,7 +753,8 @@ const Views = (() => {
     const th = (k, l) => `<th><button class="th ${sortKey === k ? 'on' : ''}" data-sort="${k}">${l}</button></th>`;
     root.innerHTML = `${header('Statistiques', esc(t.name), `<a class="btn" href="#/bilan/${t.id}">🏆<span>Bilan de saison</span></a><button class="btn" data-act="excel">${I.download}<span>Excel</span></button>`)}
       ${teamSwitch()}
-      ${Season.leagueCard(t)}
+      ${UI.kindSeg({ off: ms0.filter(m => m.played && !Store.isFriendly(m)).length, ami: ms0.filter(m => m.played && Store.isFriendly(m)).length })}
+      ${Store.matchKind() === 'ami' ? '' : Season.leagueCard(t)}
       ${Season.advanced(t)}
       <div class="tiles">
         <div class="tile"><b>${ms.length}</b><span>Matchs</span></div>

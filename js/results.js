@@ -30,7 +30,7 @@ const Results = (() => {
   function page(root) {
     const ui = S().ui, seasons = [...new Set([curSeason(), ...S().matches.filter(m => m.date).map(m => seasonOf(m.date))])].sort((a, b) => b - a);
     const season = seasons.includes(ui.resSeason) ? ui.resSeason : curSeason();
-    const all = S().matches.filter(m => m.date && !m.exempt && seasonOf(m.date) === season);
+    const all0 = S().matches.filter(m => m.date && !m.exempt && seasonOf(m.date) === season), all = all0.filter(Store.kindOk);
     const played = all.filter(m => m.played), now = UI.today();
     const upcoming = all.filter(m => !m.played && m.date >= now);
     const count = r => played.filter(m => result(m) === r).length;
@@ -57,6 +57,7 @@ const Results = (() => {
     root.innerHTML = `<header class="page-head"><div><h1>Résultats du club</h1><p class="sub">Tous les matchs de toutes les catégories · saison ${label(season)}</p></div>
       <div class="head-actions">${weekKeys.length ? `<button class="btn primary" data-act="share">${I.share}<span>Partager le dernier week-end</span></button>` : ''}</div></header>
       ${seasons.length > 1 ? `<div class="chips filter">${seasons.map(y => `<button class="chip ${y === season ? 'on' : ''}" data-season="${y}">${label(y)}</button>`).join('')}</div>` : ''}
+      ${UI.kindSeg({ off: all0.filter(m => m.played && !Store.isFriendly(m)).length, ami: all0.filter(m => m.played && Store.isFriendly(m)).length })}
       <section class="card rs-season">
         <div class="rs-tiles">
           <div class="tile"><b>${played.length}</b><span>matchs joués</span></div>

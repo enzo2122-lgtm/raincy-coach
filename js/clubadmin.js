@@ -88,7 +88,7 @@ const ClubAdmin = (() => {
     const teams = (teamIds || S().teams.map(t => t.id)).map(id => Store.get('teams', id)).filter(Boolean);
     teams.forEach(t => {
       const trs = S().trainings.filter(x => !x.model && x.teamId === t.id && x.date >= from && x.date <= now && (x.presents || []).length);
-      const ms = S().matches.filter(m => m.teamId === t.id && m.date >= from && !m.exempt);
+      const ms = S().matches.filter(m => m.teamId === t.id && m.date >= from && !m.exempt && Store.kindOk(m));
       Store.playersOf(t.id).forEach(p => {
         const pr = trs.filter(x => x.presents.includes(p.id)).length, conv = ms.filter(m => (m.convoked || []).includes(p.id)), pl = conv.filter(m => m.played);
         const min = pl.reduce((a, m) => a + (+((m.minutes || {})[p.id]) || 0), 0), withMin = pl.filter(m => (m.minutes || {})[p.id] != null).length;

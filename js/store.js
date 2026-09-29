@@ -186,9 +186,15 @@ const Store = (() => {
   // in a drop-down list, the teams A / B are shifted under their category
   const teamLabel = t => t ? (isSub(t) ? '   ↳ ' : '') + (t.name || '') : '';
 
+  // Friendly matches (amical, tournoi, préparation) are counted apart from the official ones (championnat, coupe, plateau):
+  // results, goals, playing time and stats show one kind or the other (« Officiels » by default)
+  const isFriendly = m => /amical|tournoi|pr[ée]pa|friendly/i.test((m && m.competition) || '');
+  const matchKind = () => (state && state.ui && state.ui.matchKind) || 'off';
+  const kindOk = m => isFriendly(m) === (matchKind() === 'ami');
+
   return {
     load, save, persistNow, sortTeams, get, upsert, remove, uid, exportAll, exportTraining, exportSchema, importText, reset, removeExamples,
-    playersOf, rosterOf, staffOf, fullName, shortName, byName, isMain, isSub, teamGroups, teamLabel,
+    playersOf, rosterOf, staffOf, fullName, shortName, byName, isMain, isSub, teamGroups, teamLabel, isFriendly, matchKind, kindOk,
     get state() { return state; }, on: f => listeners.add(f), off: f => listeners.delete(f),
   };
 })();
