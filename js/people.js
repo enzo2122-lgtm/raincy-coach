@@ -96,6 +96,22 @@ const People = (() => {
   // (a value that is not in the list, e.g. a role typed elsewhere, is kept as the first choice instead of being lost)
   const opt = (list, cur) => (cur && !list.some(v => (Array.isArray(v) ? v[0] : v) === cur) ? `<option selected>${esc(cur)}</option>` : '') + list.map(v => Array.isArray(v) ? `<option value="${esc(v[0])}" ${v[0] === cur ? 'selected' : ''}>${esc(v[1])}</option>` : `<option ${v === cur ? 'selected' : ''}>${esc(v)}</option>`).join('');
 
+  /* ---------- the same player twice (e.g. created again in the category where he plays « surclassé ») ---------- */
+  const twinKey = x => String(x.lastName || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z]/g, '') + '|' + String(x.firstName || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z]/g, '');
+  const twinOf = d => S().players.find(x => twinKey(x) === twinKey(d) && (!d.birth || !x.birth || x.birth === d.birth));
+  function twinDialog(twin, p, data, opts) {
+    modal({ title: 'Ce joueur existe déjà', noFocus: true,
+      body: `<p><b>${esc(name(twin))}</b>${twin.birth ? `, né(e) le ${esc(fmtBirth(twin.birth))}` : ''}, est déjà dans le club : ${esc(teamNames(twin.teamIds) || 'sans catégorie')}.</p>
+        <p>Plutôt qu'une 2e fiche, ajoute-le à ta catégorie : un joueur peut être dans plusieurs catégories (surclassé, équipe A / B). Ses matchs, séances et stats restent sur une seule fiche.</p>`,
+      actions: [{ label: 'Créer quand même', onClick: () => { Object.assign(p, data); Store.upsert('players', p); toast('Enregistré'); opts.onSave && opts.onSave(p); } },
+        { label: 'Ajouter à ma catégorie', kind: 'primary', icon: I.check, onClick: () => {
+          twin.teamIds = [...new Set([...(twin.teamIds || []), ...(data.teamIds || [])])];
+          ['number', 'pos', 'posts', 'phone', 'email', 'birth'].forEach(k => { if ((twin[k] == null || twin[k] === '' || (Array.isArray(twin[k]) && !twin[k].length)) && data[k] != null && data[k] !== '') twin[k] = data[k]; });
+          if (!(twin.parents || []).length && (data.parents || []).length) twin.parents = data.parents;
+          if (data.notes && !(twin.notes || '').includes(data.notes)) twin.notes = [twin.notes, data.notes].filter(Boolean).join('\n');
+          Store.upsert('players', twin); toast(`${Store.shortName(twin)} ajouté à la catégorie`); opts.onSave && opts.onSave(twin); } }] });
+  }
+
   /* ---------- player sheet ---------- */
   function editPlayer(p, opts = {}) {
     const isNew = !p;
@@ -142,8 +158,12 @@ const People = (() => {
         { label: 'Enregistrer', kind: 'primary', onClick: (c, r) => {
           const v = id => $('#' + id, r).value.trim();
           if (!v('pLast') && !v('pFirst')) { toast('Écris au moins le nom ou le prénom', 'err'); return false; }
-          Object.assign(p, { lastName: v('pLast').toUpperCase(), firstName: v('pFirst'), birth: v('pBirth'), subcat: v('pSub'), number: v('pNum') === '' ? '' : +v('pNum'), ...readPosts(r, v('pPos')), phone: v('pTel'), email: v('pMail'), notes: $('#pNotes', r).value, teamIds: pickedTeams(r, p.teamIds || []),
-            parents: [0, 1].map(i => ({ name: v(`par${i}n`), rel: v(`par${i}r`), phone: v(`par${i}t`) })).filter(x => x.name || x.phone) });
+          const data = { lastName: v('pLast').toUpperCase(), firstName: v('pFirst'), birth: v('pBirth'), subcat: v('pSub'), number: v('pNum') === '' ? '' : +v('pNum'), ...readPosts(r, v('pPos')), phone: v('pTel'), email: v('pMail'), notes: $('#pNotes', r).value, teamIds: pickedTeams(r, p.teamIds || []),
+            parents: [0, 1].map(i => ({ name: v(`par${i}n`), rel: v(`par${i}r`), phone: v(`par${i}t`) })).filter(x => x.name || x.phone) };
+          // a new player who is already in the club (same name, same date of birth): add him to this category instead of a 2nd card
+          const twin = isNew && twinOf(data);
+          if (twin) { setTimeout(() => twinDialog(twin, p, data, opts), 60); return; }
+          Object.assign(p, data);
           Store.upsert('players', p); toast('Enregistré'); opts.onSave && opts.onSave(p);
         } },
       ],
