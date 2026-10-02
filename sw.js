@@ -1,9 +1,9 @@
 /* Service worker: keeps the app working without internet. Bump VERSION after each update. */
-const VERSION = 'raincy-coach-v107';
+const VERSION = 'raincy-coach-v108';
 const JSPDF = 'https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js';
 const FILES = [
   './', 'index.html', 'app.css', 'manifest.webmanifest',
-  'js/config.js', 'js/app.bundle.js', 'confidentialite.html',
+  'js/config.js', 'js/app.bundle.js', 'confidentialite.html', 'moi.html', 'joueurs.html', 'parents.html', 'famille.webmanifest', 'js/member.js', 'js/perso.js', 'js/players-page.js', 'js/parents-page.js',
   'icons/crest.png', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png',
 ];
 self.addEventListener('install', e => {
@@ -58,10 +58,20 @@ async function pending() {
   const r = await fetch(c.url.replace(/\/+$/, '') + '/rest/v1/rpc/club_notifs', { method: 'POST', headers, body: JSON.stringify({ k: s.token }) });
   return r.ok ? (await r.json()) || [] : [];
 }
+// (3.68) the family's phone: the notifications of the players followed on it
+async function memberNews() {
+  const c = typeof CLUB_SERVER !== 'undefined' ? CLUB_SERVER : null, sub = await self.registration.pushManager.getSubscription();
+  if (!c || !sub) return [];
+  const headers = { apikey: c.key, 'Content-Type': 'application/json' };
+  if (!String(c.key).startsWith('sb_')) headers.Authorization = 'Bearer ' + c.key;
+  const r = await fetch(c.url.replace(/\/+$/, '') + '/rest/v1/rpc/member_news', { method: 'POST', headers, body: JSON.stringify({ p_endpoint: sub.endpoint }) });
+  return r.ok ? (await r.json()) || [] : [];
+}
 self.addEventListener('push', e => {
   e.waitUntil((async () => {
     let list = [];
-    try { list = await pending(); } catch (err) {}
+    try { list = list.concat(await memberNews()); } catch (err) {}
+    try { list = list.concat(await pending()); } catch (err) {}
     // a phone must always show something when it is woken up
     if (!list.length) list = [{ title: 'Raincy Coach', body: 'Nouvelle information du club', url: '#/', tag: 'raincy' }];
     for (const n of list.slice(0, 4)) {

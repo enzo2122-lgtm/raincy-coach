@@ -3197,7 +3197,7 @@ var Importer = (() => {
    Errors are caught and kept so a coach can attach them to a report. */
 var Help = (() => {
   const { esc, $, $$, toast, modal } = UI;
-  const VERSION = '3.67';
+  const VERSION = '3.68';
   const TOUR_KEY = 'raincy-tour-seen', ERR_KEY = 'raincy-errors';
 
   /* ---------- error log ---------- */
@@ -4420,6 +4420,92 @@ begin
     'reasons', (select coalesce(jsonb_object_agg(a.match_id, a.note), '{}'::jsonb) from answers a where a.player_id = pl.id and a.status = 'non' and a.note is not null and a.updated_at > now() - interval '120 days'));
 end $;
 grant execute on function member_reply(text, text, text, text, int, text), member_replies(text) to anon, authenticated;
+-- (3.68) les joueurs et les parents prévenus sur leur téléphone : convocation envoyée, changement d'horaire ou de lieu, match ou séance annulés
+create table if not exists member_subs (id uuid primary key default gen_random_uuid(), player_id text not null,
+  endpoint text not null, page text not null default 'parents.html', created_at timestamptz not null default now(), unique (endpoint, player_id));
+create table if not exists member_notifs (id bigserial primary key, player_id text not null,
+  title text, body text, created_at timestamptz not null default now(), delivered boolean not null default false);
+create index if not exists member_notifs_player on member_notifs (player_id, delivered);
+alter table member_subs enable row level security;
+alter table member_notifs enable row level security;
+create or replace function member_arr(j jsonb) returns text[] language sql immutable as $
+  select array(select jsonb_array_elements_text(case when jsonb_typeof(j) = 'array' then j else '[]'::jsonb end)) $;
+-- ce téléphone est prévenu (ou plus) pour ce joueur ; renvoie la clé publique des notifications
+create or replace function member_push(p_code text, p_endpoint text default null, p_on boolean default null, p_page text default null) returns jsonb language plpgsql security definer set search_path = public as $
+declare pl items := raincy_member(p_code);
+begin
+  if coalesce(p_endpoint, '') <> '' and p_on is not null then
+    if p_on then insert into member_subs (player_id, endpoint, page) values (pl.id, left(p_endpoint, 1000), case when p_page = 'joueurs.html' then 'joueurs.html' else 'parents.html' end)
+      on conflict (endpoint, player_id) do update set page = excluded.page;
+    else delete from member_subs where endpoint = p_endpoint and player_id = pl.id; end if;
+  end if;
+  return jsonb_build_object('key', (select vapid_public from push_config where id = 1),
+    'on', exists (select 1 from member_subs where endpoint = coalesce(p_endpoint, '') and player_id = pl.id)); end $;
+-- le téléphone réveillé lit ses notifications (celles des joueurs suivis sur ce téléphone)
+create or replace function member_news(p_endpoint text) returns jsonb language plpgsql security definer set search_path = public as $
+declare r jsonb;
+begin
+  if coalesce(p_endpoint, '') = '' then return '[]'::jsonb; end if;
+  select coalesce(jsonb_agg(jsonb_build_object('title', n.title, 'body', n.body, 'url', s.page, 'tag', 'm' || n.id) order by n.id desc), '[]'::jsonb) into r
+    from member_notifs n join member_subs s on s.player_id = n.player_id and s.endpoint = p_endpoint
+    where not n.delivered and n.created_at > now() - interval '2 days';
+  update member_notifs n set delivered = true from member_subs s where s.player_id = n.player_id and s.endpoint = p_endpoint and not n.delivered;
+  delete from member_notifs where created_at < now() - interval '30 days';
+  return r; end $;
+-- une notification pour ces joueurs (seulement ceux qui ont un téléphone abonné), puis les téléphones sont réveillés
+create or replace function member_note(c text, p_players text[], p_title text, p_body text) returns void language plpgsql security definer set search_path = public as $
+declare subs jsonb; cfg push_config;
+begin
+  if coalesce(array_length(p_players, 1), 0) = 0 then return; end if;
+  insert into member_notifs (player_id, title, body)
+    select distinct s.player_id, left(p_title, 120), left(p_body, 240) from member_subs s where s.player_id = any(p_players);
+  select jsonb_agg(jsonb_build_object('id', x.id, 'endpoint', x.endpoint)) into subs
+    from (select distinct on (endpoint) id, endpoint from member_subs where player_id = any(p_players)) x;
+  select * into cfg from push_config where id = 1;
+  if subs is null or cfg.fn_url is null then return; end if;
+  begin perform net.http_post(url := cfg.fn_url, body := jsonb_build_object('subs', subs), headers := jsonb_build_object('Content-Type', 'application/json', 'x-raincy-secret', cfg.secret));
+  exception when others then raise notice 'notification des familles : %', sqlerrm; end;
+end $;
+create or replace function raincy_on_item_members() returns trigger language plpgsql security definer set search_path = public as $
+declare d jsonb; o jsonb; ismatch boolean := new.col = 'matches'; dt date; team text; lbl text; body text; conv text[]; added text[];
+begin
+  if new.col not in ('matches', 'trainings') then return null; end if;
+  begin
+    if tg_op = 'UPDATE' and not old.deleted then o := old.data; end if;
+    d := case when new.deleted then o else new.data end;
+    if d is null or coalesce((d->>'model')::boolean, false) or coalesce((d->>'exempt')::boolean, false) then return null; end if;
+    begin dt := (d->>'date')::date; exception when others then return null; end;
+    if dt is null or dt < current_date or dt > current_date + 30 then return null; end if;
+    team := d->>'teamId'; if coalesce(team, '') = '' then return null; end if;
+    lbl := coalesce((select data->>'name' from items where col = 'teams' and id = team), '');
+    body := raincy_day(dt) || coalesce(' · ' || replace(nullif(d->>'time', ''), ':', 'h'), '');
+    if ismatch then
+      body := (case when coalesce((d->>'home')::boolean, false) then 'contre ' else 'chez ' end) || coalesce(d->>'opponent', '?') || ' · ' || body
+        || coalesce(' · RDV ' || replace(nullif(d->>'rdv', ''), ':', 'h'), '') || coalesce(' · ' || nullif(d->>'place', ''), '');
+      conv := member_arr(d->'convoked');
+      if new.deleted then perform member_note(null, conv, '❌ Match annulé · ' || lbl, body); return null; end if;
+      if (d->>'convSent') is null then return null; end if; -- la convocation n'est pas encore envoyée par le coach
+      if o is null or (o->>'convSent') is distinct from (d->>'convSent') then perform member_note(null, conv, '📣 Convocation · ' || lbl, body); return null; end if;
+      added := array(select x from unnest(conv) x where not (coalesce(o->'convoked', '[]'::jsonb) ? x));
+      if coalesce(array_length(added, 1), 0) > 0 then perform member_note(null, added, '📣 Convocation · ' || lbl, body); end if;
+      if (d->>'date') is distinct from (o->>'date') or (d->>'time') is distinct from (o->>'time') or (d->>'rdv') is distinct from (o->>'rdv') or (d->>'place') is distinct from (o->>'place') then
+        perform member_note(null, array(select x from unnest(conv) x where not (x = any(added))), '🕘 Changement · match ' || lbl, body);
+      end if;
+    else
+      if dt > current_date + 7 then return null; end if;
+      body := body || coalesce(' · ' || nullif(d->>'title', ''), '');
+      conv := array(select i.id from items i where i.col = 'players' and not i.deleted and coalesce(i.data->'teamIds', '[]'::jsonb) ? team);
+      if new.deleted then perform member_note(null, conv, '❌ Séance annulée · ' || lbl, body);
+      elsif o is not null and ((d->>'date') is distinct from (o->>'date') or (d->>'time') is distinct from (o->>'time')) then perform member_note(null, conv, '🕘 Changement · séance ' || lbl, body); end if;
+    end if;
+  exception when others then raise notice 'notification des familles : %', sqlerrm; end;
+  return null;
+end $;
+drop trigger if exists raincy_item_members on items;
+create trigger raincy_item_members after insert or update on items for each row execute function raincy_on_item_members();
+revoke all on function member_note(text, text[], text, text), raincy_on_item_members() from public, anon, authenticated;
+revoke all on function member_push(text, text, boolean, text), member_news(text) from public;
+grant execute on function member_push(text, text, boolean, text), member_news(text) to anon, authenticated;
 notify pgrst, 'reload schema';
 `;
   }
@@ -13666,7 +13752,7 @@ var App = (() => {
   })();
   /* Updates: version.json on the site says which build is online. When it is newer than this one,
      the app empties its offline copy and reloads (an iPhone can keep an old copy open for days). */
-  const BUILD = 107, UPD = 'raincy-update-tried';
+  const BUILD = 108, UPD = 'raincy-update-tried';
   async function onlineBuild() {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
     return (await r.json()).build || 0;
