@@ -932,6 +932,38 @@ grant execute on function club_member_codes(text, text, text[], text[]), club_me
 -- les anciens liens d'équipe montraient les noms, réponses et temps de jeu de toute l'équipe : ils sont fermés
 revoke execute on function parent_view(text), parent_answer(text, text, text, text, int, text), parent_volunteer(text, text, text, text, text, boolean), parent_photo(text, uuid),
   player_view(text), player_answer(text, text, text, text, text), player_wellness(text, text, int, int, int, int, int, text) from public, anon, authenticated;
+-- (3.65) un joueur ou un parent répond présent / absent à un match OU à un entraînement, avec la raison de l'absence (malade, blessé, vacances…)
+create or replace function member_reply(p_code text, p_kind text, p_id text, p_status text, p_seats int default 0, p_reason text default null) returns jsonb language plpgsql security definer set search_path = public as $
+declare pl items := raincy_member(p_code); m items; r text := nullif(left(trim(coalesce(p_reason, '')), 120), '');
+begin
+  if p_kind = 'match' then
+    select * into m from items where col = 'matches' and id = p_id and not deleted;
+    if m.id is null or not (m.data->>'teamId' = any(raincy_member_teams(pl))) or not (coalesce(m.data->'convoked', '[]'::jsonb) ? pl.id) then raise exception 'DONNEES'; end if;
+    if coalesce((m.data->>'played')::boolean, false) then raise exception 'MATCH_PASSE'; end if;
+  elsif p_kind = 'training' then
+    select * into m from items where col = 'trainings' and id = p_id and not deleted;
+    if m.id is null or not (m.data->>'teamId' = any(raincy_member_teams(pl))) then raise exception 'DONNEES'; end if;
+  else raise exception 'DONNEES'; end if;
+  if m.data->>'date' < to_char(current_date, 'YYYY-MM-DD') then raise exception 'MATCH_PASSE'; end if;
+  if coalesce(p_status, '') = '' then delete from answers where match_id = p_id and player_id = pl.id; return to_jsonb(true); end if;
+  if p_status not in ('oui', 'non') then raise exception 'DONNEES'; end if;
+  insert into answers (match_id, player_id, status, seats, note, by_coach)
+    values (p_id, pl.id, p_status, case when p_kind = 'match' and p_status = 'oui' then greatest(0, least(coalesce(p_seats, 0), 8)) else 0 end, case when p_status = 'non' then r end, false)
+    on conflict (match_id, player_id) do update set status = excluded.status, seats = excluded.seats, note = excluded.note, by_coach = false, updated_at = now();
+  return to_jsonb(true); end $;
+-- ses réponses : les entraînements des 2 semaines à venir (avec sa réponse) et les raisons de ses absences aux matchs
+create or replace function member_replies(p_code text) returns jsonb language plpgsql stable security definer set search_path = public as $
+declare pl items := raincy_member(p_code); tids text[] := raincy_member_teams(pl); d0 text := to_char(current_date, 'YYYY-MM-DD');
+begin
+  return jsonb_build_object(
+    'trainings', (select coalesce(jsonb_agg(jsonb_build_object('id', i.id, 'date', i.data->>'date', 'time', i.data->>'time', 'title', i.data->>'title', 'answer', a.status, 'reason', a.note)
+        order by i.data->>'date', i.data->>'time'), '[]'::jsonb)
+      from items i left join answers a on a.match_id = i.id and a.player_id = pl.id
+      where i.col = 'trainings' and not i.deleted and not coalesce((i.data->>'model')::boolean, false) and i.data->>'teamId' = any(tids)
+        and i.data->>'date' between d0 and to_char(current_date + 14, 'YYYY-MM-DD')),
+    'reasons', (select coalesce(jsonb_object_agg(a.match_id, a.note), '{}'::jsonb) from answers a where a.player_id = pl.id and a.status = 'non' and a.note is not null and a.updated_at > now() - interval '120 days'));
+end $;
+grant execute on function member_reply(text, text, text, text, int, text), member_replies(text) to anon, authenticated;
 notify pgrst, 'reload schema';
 `;
   }
