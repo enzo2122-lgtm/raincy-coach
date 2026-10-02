@@ -916,6 +916,17 @@ create or replace function member_photo(p_code text, p_id uuid) returns text lan
 declare pl items := raincy_member(p_code);
 begin return (select ph.data from match_photos ph join items i on i.col = 'matches' and i.id = ph.match_id and not i.deleted where ph.id = p_id and i.data->>'teamId' = any(raincy_member_teams(pl))); end $$;
 revoke all on function raincy_member(text), raincy_code() from public, anon, authenticated;
+
+-- un joueur ou un parent (avec son code personnel) envoie un message aux coachs de sa catégorie : son entraînement perso, ses footings. 10 par jour au plus.
+create or replace function member_message(p_code text, p_body text, p_parent boolean default false) returns boolean language plpgsql security definer set search_path = public as $fn$
+declare pl items := raincy_member(p_code); tids text[] := raincy_member_teams(pl); who text;
+begin
+  if coalesce(trim(p_body), '') = '' or coalesce(array_length(tids, 1), 0) = 0 then raise exception 'DONNEES'; end if;
+  if (select count(*) from messages where author_id = 'member:' || pl.id and created_at > now() - interval '1 day') >= 10 then raise exception 'LIMITE'; end if;
+  who := trim(coalesce(pl.data->>'firstName', '') || ' ' || coalesce(pl.data->>'lastName', '')) || case when p_parent then ' (parent)' else ' (joueur)' end;
+  insert into messages (channel, author_id, author_name, body) values ('team:' || tids[1], 'member:' || pl.id, who, left(p_body, 2000));
+  return true; end $fn$;
+grant execute on function member_message(text, text, boolean) to anon, authenticated;
 grant execute on function club_member_codes(text, text, text[], text[]), club_member_given(text, text, text, boolean), member_view(text, boolean), member_answer(text, text, text, int), member_wellness(text, int, int, int, int, int, text),
   member_volunteer(text, text, text, text, text, boolean), member_photo(text, uuid) to anon, authenticated;
 -- les anciens liens d'équipe montraient les noms, réponses et temps de jeu de toute l'équipe : ils sont fermés
