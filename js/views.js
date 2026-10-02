@@ -720,7 +720,7 @@ const Views = (() => {
     const t = teamOf(m.teamId); if (!t) return toast('Choisis une équipe', 'err');
     const fmt = Formations[t.format] ? t.format : '11', forms = Object.keys(Formations[fmt]); // a team without a known format plays at 11
     const nConv = Store.rosterOf(t.id).filter(p => (m.convoked || []).includes(p.id)).length;
-    modal({ title: 'Composition', body: `<label class="fld"><span>Système</span><select id="lf">${forms.map(f => `<option>${esc(f)}</option>`).join('')}</select></label>
+    modal({ title: 'Composition', body: `<label class="fld"><span>Système</span><select id="lf">${formationOptions(Formations[t.format] ? t.format : fmt)}</select></label>
       ${nConv ? `<p class="tip">Les ${nConv} convoqués sont placés selon leur poste (le DC dans l'axe, le LD à droite, l'AG à gauche…). Les autres sont notés comme remplaçants. Tu pourras tout déplacer.</p>`
         : '<p class="tip">⚠️ Aucun joueur convoqué pour ce match : les postes seront placés sans prénoms. Pour avoir les prénoms, coche d\'abord les convoqués (liste « Convoqués » du match), puis refais la composition.</p>'}`,
       actions: [{ label: 'Annuler' }, { label: 'Créer', kind: 'primary', onClick: (c, r) => {
