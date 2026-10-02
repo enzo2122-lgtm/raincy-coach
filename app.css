@@ -1767,3 +1767,4 @@ body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 
 body.editing .save-pill { display: none; }
 @media (max-width: 760px) { .save-pill { bottom: calc(env(safe-area-inset-bottom) + 84px); font-size: 12px; } }
 @media (pointer: coarse) { .linkish { padding-top: 8px; padding-bottom: 8px; } }
+.lv-ctl .btn:not(.primary) { color: var(--navy); background: #fff; } /* « Mi-temps » was white on white on the dark scoreboard */
