@@ -1,9 +1,9 @@
 /* Service worker: keeps the app working without internet. Bump VERSION after each update. */
-const VERSION = 'raincy-coach-v106';
+const VERSION = 'raincy-coach-v107';
 const JSPDF = 'https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js';
 const FILES = [
   './', 'index.html', 'app.css', 'manifest.webmanifest',
-  'js/config.js', 'js/codes.js', 'js/imports.js', 'js/icons.js', 'js/board.js', 'js/store.js', 'js/ui.js', 'js/clubs.js', 'js/exporter.js', 'js/auth.js', 'js/media.js', 'js/ratings.js', 'js/library.js', 'js/importer.js', 'js/help.js', 'js/cloud.js', 'js/sync.js', 'js/planning.js', 'js/results.js', 'js/messages.js', 'js/people.js', 'js/templates.js', 'js/autoschema.js', 'js/editor.js', 'js/clublife.js', 'js/weather.js', 'js/notify.js', 'js/supporters.js', 'js/vestiaires.js', 'js/prepa.js', 'js/live.js', 'js/health.js', 'js/progress.js', 'js/exos.js', 'js/sessions-foot.js', 'js/seslib.js', 'js/volunteers.js', 'js/referees.js', 'js/perso.js', 'js/roles.js', 'js/gestion.js', 'js/season.js', 'js/tests.js', 'js/acimport.js', 'js/telestrator.js', 'js/analyse.js', 'js/clubadmin.js', 'js/parents.js', 'js/president.js', 'js/quick.js', 'confidentialite.html', 'js/views.js', 'js/app.js',
+  'js/config.js', 'js/app.bundle.js', 'confidentialite.html',
   'icons/crest.png', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png',
 ];
 self.addEventListener('install', e => {
