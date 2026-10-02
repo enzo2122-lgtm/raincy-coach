@@ -352,7 +352,7 @@ const Views = (() => {
     const item = t => { const tm = teamOf(t.teamId), dur = t.exercises.reduce((a, e) => a + (+e.duration || 0), 0);
       return `<a class="list-item" href="#/entrainement/${t.id}"><div class="date-box"><b>${new Date(t.date + 'T12:00').getDate()}</b><span>${esc(fmtDate(t.date, { month: 'short' }))}</span></div>
         <div class="li-main"><b>${esc(t.title || 'Entraînement')}</b><span class="muted">${tm ? esc(tm.name) + ' · ' : ''}${t.exercises.length} exercice${t.exercises.length > 1 ? 's' : ''} · ${dur} min</span></div>${I.next}</a>`; };
-    root.innerHTML = `${header('Entraînements', 'Séances, exercices et présences', `<button class="btn" data-act="import">${I.upload}<span>Recevoir</span></button><button class="btn" data-act="ics">${I.calendar}<span>Agenda (.ics)</span></button><a class="btn" href="#/bibliotheque">${I.pdf}<span>Importer une fiche PDF</span></a><a class="btn" href="#/exercices">📚<span>Exercices du club</span></a><button class="btn" data-exgen>✨<span>Générer une séance</span></button><button class="btn primary" data-act="new">${I.plus}<span>Nouvel entraînement</span></button>`)}
+    root.innerHTML = `${header('Entraînements', 'Séances, exercices et présences', `<a class="btn primary" href="#/systemes">📚<span>Séances par système de jeu</span></a><button class="btn" data-act="import">${I.upload}<span>Recevoir</span></button><button class="btn" data-act="ics">${I.calendar}<span>Agenda (.ics)</span></button><a class="btn" href="#/bibliotheque">${I.pdf}<span>Importer une fiche PDF</span></a><a class="btn" href="#/exercices">📚<span>Exercices du club</span></a><button class="btn" data-exgen>✨<span>Générer une séance</span></button><button class="btn primary" data-act="new">${I.plus}<span>Nouvel entraînement</span></button>`)}
       ${teamSwitch()}
       <details class="card models-card" ${S().ui.modelsOpen ? 'open' : ''}><summary><b>📚 Séances types du club (${models.length})</b><span class="muted small"> · des séances prêtes, pour toutes les catégories</span></summary>
         ${models.length ? `<div class="list">${models.map(t => `<div class="list-item model-item"><a class="li-main" href="#/entrainement/${t.id}"><b>${esc(t.title || 'Séance type')}</b><span class="muted">${t.exercises.length} exercice${t.exercises.length > 1 ? 's' : ''} · ${t.exercises.reduce((a, e) => a + (+e.duration || 0), 0)} min${t.goal ? ' · ' + esc(String(t.goal).slice(0, 60)) : ''}</span></a><button class="btn primary" data-use="${t.id}">${I.plus}<span>Utiliser</span></button></div>`).join('')}</div>`
@@ -453,7 +453,8 @@ const Views = (() => {
             <label class="fld"><span>Matériel</span><input data-f="materiel" value="${esc(e.materiel || '')}" placeholder="plots, chasubles, ballons"></label>
           </div>
           <div class="ex-schema">${sc ? `<a href="#/schema/${sc.id}" class="thumb"><img alt="" src="${UI.thumb(sc)}"></a><div class="chips"><a class="btn soft" href="#/schema/${sc.id}">${I.edit}<span>Modifier le schéma</span></a><button class="btn soft" data-pick>${I.layers}<span>Changer</span></button></div>`
-            : `<div class="no-schema"><button class="btn primary" data-draw>${I.board}<span>Dessiner le schéma</span></button><button class="btn soft" data-pick>${I.layers}<span>Choisir un schéma</span></button></div>`}</div>
+            : `<button type="button" class="thumb auto-thumb" data-big title="Voir en grand"><img alt="" src="${UI.thumb(AutoSchema.preview(e))}"><span class="auto-tag">✨ Schéma proposé</span></button><div class="chips"><button class="btn primary" data-auto>✨<span>Utiliser ce schéma animé</span></button><button class="btn soft" data-draw>${I.board}<span>Dessiner moi-même</span></button><button class="btn soft" data-pick>${I.layers}<span>Choisir</span></button></div>`}
+            <button type="button" class="btn soft ex-bigbtn" data-big>🔍<span>Voir en grand (à montrer aux joueurs)</span></button></div>
         </div></article>`;
     };
     render();
@@ -484,6 +485,8 @@ const Views = (() => {
       if (b.dataset.unstaff) { tr.staffIds = (tr.staffIds || []).filter(x => x !== b.dataset.unstaff); save(); return render(); }
       if (b.dataset.mv) { const i = tr.exercises.indexOf(ex), j = i + +b.dataset.mv; [tr.exercises[i], tr.exercises[j]] = [tr.exercises[j], tr.exercises[i]]; save(); return render(); }
       if (b.hasAttribute('data-delex')) { if (await confirmBox(`Retirer l'exercice « ${ex.title || 'sans nom'} » ?`, 'Retirer')) { tr.exercises = tr.exercises.filter(x => x !== ex); save(); render(); } return; }
+      if (b.hasAttribute('data-big')) return AutoSchema.big(ex, ex.schemaId && Store.get('schemas', ex.schemaId));
+      if (b.hasAttribute('data-auto')) { const s = AutoSchema.save(ex, tr.teamId); ex.schemaId = s.id; save(); toast('Schéma animé ajouté : touche-le pour le modifier'); return render(); }
       if (b.hasAttribute('data-draw')) return newSchema({ name: ex.title, teamId: tr.teamId, onCreate: s => { ex.schemaId = s.id; save(); } });
       if (b.hasAttribute('data-pick')) return pickSchema(s => { ex.schemaId = s.id; save(); render(); });
       switch (b.dataset.act) {
