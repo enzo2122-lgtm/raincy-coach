@@ -117,7 +117,7 @@ const App = (() => {
   })();
   /* Updates: version.json on the site says which build is online. When it is newer than this one,
      the app empties its offline copy and reloads (an iPhone can keep an old copy open for days). */
-  const BUILD = 108, UPD = 'raincy-update-tried';
+  const BUILD = 109, UPD = 'raincy-update-tried';
   async function onlineBuild() {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
     return (await r.json()).build || 0;
@@ -150,7 +150,8 @@ const App = (() => {
     await Store.load();
     // Invitation link sent by the responsable: …#rejoindre=CODE
     const join = (location.hash.match(/^#rejoindre=([A-Za-z0-9]+)/) || [])[1];
-    if (join) { Auth.setInvite(join); history.replaceState(null, '', location.pathname + location.search); }
+    const who = (location.hash.match(/[#&]qui=([\w-]+)/) || [])[1];
+    if (join) { Auth.setInvite(join, who); history.replaceState(null, '', location.pathname + location.search); }
     refreshChrome();
     await Auth.gate({ joined: !!join });
     try { await Board.preloadBackgrounds(Store.state.schemas); } catch (e) {}

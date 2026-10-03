@@ -22,6 +22,7 @@ const Cloud = (() => {
     MOT_DE_PASSE: 'Mot de passe incorrect.',
     BLOQUE: 'Trop d\'essais : attends 5 minutes avant de réessayer.',
     DEJA_INSCRIT: 'Ce dirigeant a déjà un mot de passe : connecte-toi, ou demande au responsable de le réinitialiser.',
+    ACCES_RETIRE: 'Ton accès à l\'appli du club a été retiré par un responsable.',
     SESSION: 'Ta connexion a expiré : reconnecte-toi.',
     DONNEES: 'Informations incomplètes.',
     CRENEAU_PRIS: 'Ce créneau est déjà pris sur cette partie du terrain. Choisis un autre horaire ou l\'autre moitié.',
@@ -1050,6 +1051,23 @@ create trigger raincy_item_members after insert or update on items for each row 
 revoke all on function member_note(text, text[], text, text), raincy_on_item_members() from public, anon, authenticated;
 revoke all on function member_push(text, text, boolean, text), member_news(text) from public;
 grant execute on function member_push(text, text, boolean, text), member_news(text) to anon, authenticated;
+-- (3.69) « Retirer l'accès » : un dirigeant marqué « blocked » ne peut plus créer de compte (même avec le lien d'invitation)
+create or replace function club_register(k text, admin_k text, p jsonb) returns jsonb language plpgsql security definer set search_path = public as $
+declare is_adm boolean := admin_ok(admin_k); sid text := p->>'staff_id'; s text := raincy_token(); a accounts;
+begin
+  if not (is_adm or club_ok(k)) then raise exception 'CLE_CLUB'; end if;
+  if coalesce(sid, '') = '' or coalesce(p->>'last_key', '') = '' or length(coalesce(p->>'h', '')) < 32 then raise exception 'DONNEES'; end if;
+  if not is_adm and exists (select 1 from items where col = 'staff' and id = sid and not deleted and coalesce(data->>'blocked', '') not in ('', 'false', 'null')) then raise exception 'ACCES_RETIRE'; end if;
+  select * into a from accounts where staff_id = sid;
+  if a.pw_hash is not null and not is_adm then raise exception 'DEJA_INSCRIT'; end if;
+  insert into accounts (staff_id, last_key, first_keys, display, salt, pw_hash, admin)
+    values (sid, p->>'last_key', array(select jsonb_array_elements_text(coalesce(p->'first_keys', '[]'::jsonb))), coalesce(p->>'display', ''), s,
+            raincy_hash(s || (p->>'h')), coalesce((p->>'admin')::boolean, false) and is_adm)
+    on conflict (staff_id) do update set last_key = excluded.last_key, first_keys = excluded.first_keys, display = excluded.display, salt = excluded.salt,
+      pw_hash = excluded.pw_hash, admin = accounts.admin or excluded.admin, updated_at = now();
+  delete from sessions where staff_id = sid;
+  return raincy_new_session(sid);
+end $;
 notify pgrst, 'reload schema';
 `;
   }
@@ -1112,6 +1130,19 @@ notify pgrst, 'reload schema';
     backupAuto: () => rpc('club_backup_auto'),
   };
   const inviteLink = code => `${location.origin}${location.pathname.replace(/index\.html$/, '')}#rejoindre=${encodeURIComponent(code)}`;
+  // (3.69) the link of one person: his name is already chosen when he opens it
+  async function invitePerson(p) {
+    let code;
+    try { code = await api.invite(false); } catch (e) { return toast(e.message, 'err'); }
+    const link = inviteLink(code) + '&qui=' + encodeURIComponent(p.id), first = p.firstName || '';
+    const text = `Bonjour ${first}, voici ton accès à l'appli du club ${Store.state.club.name || ''} : ouvre ce lien, ton nom est déjà choisi, il te reste à créer ton mot de passe. Ensuite, ajoute l'appli à ton écran d'accueil.\n${link}`;
+    const ph = String(p.phone || '').replace(/[^\d+]/g, ''), intl = ph.startsWith('+') ? ph.slice(1) : ph.startsWith('0') ? '33' + ph.slice(1) : ph;
+    modal({ title: `Le lien de ${first || 'ce dirigeant'}`, noFocus: true, body: `<p class="muted small">Envoie-le à lui seulement : en l'ouvrant, son nom est déjà choisi.</p><textarea id="invTxt" rows="6">${esc(text)}</textarea>`,
+      actions: [
+        { label: 'WhatsApp', kind: 'primary', icon: I.share, onClick: (c, r) => { window.open(`https://wa.me/${intl}?text=${encodeURIComponent($('#invTxt', r).value)}`, '_blank'); return false; } },
+        ...(navigator.share ? [{ label: 'Autre appli', icon: I.share, onClick: (c, r) => { navigator.share({ text: $('#invTxt', r).value }).catch(() => {}); return false; } }] : []),
+        { label: 'Copier', icon: I.copy, onClick: (c, r) => { navigator.clipboard.writeText($('#invTxt', r).value).then(() => toast('Message copié')).catch(() => toast('Sélectionne le texte et copie-le')); return false; } }] });
+  }
   async function shareInvite(renew) {
     let code;
     try { code = await api.invite(renew); } catch (e) { return toast(e.message, 'err'); }
@@ -1203,5 +1234,5 @@ notify pgrst, 'reload schema';
     }
   }
 
-  return Object.assign(api, { ready, canLogin, cfg, adminKey, token, genKey, sql, settingsSection, onSettingsClick, shareInvite });
+  return Object.assign(api, { ready, invitePerson, canLogin, cfg, adminKey, token, genKey, sql, settingsSection, onSettingsClick, shareInvite });
 })();
