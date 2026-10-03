@@ -5,7 +5,9 @@ const Cloud = (() => {
   const builtIn = () => (typeof CLUB_SERVER !== 'undefined' && CLUB_SERVER.url && CLUB_SERVER.key ? CLUB_SERVER : null);
   const session = () => (Store.state.auth && Store.state.auth.session) || null;
   const token = () => { const s = session(); return (s && s.token) || ''; };
-  const ownAdminKey = () => (Store.state.auth && Store.state.auth.cloudAdminKey) || '';
+  // (3.72) FA Le Raincy is a club of the Clubbo server: the codes made for the old server are not used there
+  const platform = () => !!(builtIn() || {}).club;
+  const ownAdminKey = () => (!platform() && Store.state.auth && Store.state.auth.cloudAdminKey) || '';
   // Server address: the one of the club file / setup if any, otherwise the one built into the app
   function cfg() {
     const c = Store.state.club.cloud || {}, b = builtIn() || {}, own = c.url && !b.club; // (3.70) the club moved to the Clubbo server: an address kept on the phone is ignored
@@ -1167,7 +1169,7 @@ notify pgrst, 'reload schema';
       ${admin ? `<div class="chips">${ready() ? `<button class="btn primary" data-cloud="invite">${I.share}<span>Inviter les éducateurs</span></button>` : ''}
         ${!ready() && builtIn() ? `<button class="btn primary" data-cloud="connect">${I.check}<span>Me connecter au serveur du club</span></button>` : ''}
         ${!builtIn() ? `<button class="btn" data-cloud="setup">${I.edit}<span>${ready() ? 'Reconfigurer' : 'Configurer le serveur'}</span></button>` : ''}
-        ${ready() ? `<button class="btn" data-cloud="test">${I.check}<span>Tester</span></button><button class="btn" data-cloud="update">${I.rotate}<span>Mettre à jour le serveur</span></button><button class="btn" data-cloud="adminkey">${I.whistle}<span>Code responsable</span></button>` : ''}</div>
+        ${ready() ? `<button class="btn" data-cloud="test">${I.check}<span>Tester</span></button>${platform() ? '' : `<button class="btn" data-cloud="update">${I.rotate}<span>Mettre à jour le serveur</span></button><button class="btn" data-cloud="adminkey">${I.whistle}<span>Code responsable</span></button>`}` : ''}</div>
         ${ready() ? Notify.adminCard() : ''}
         <p class="muted small">Les éducateurs rejoignent le club avec le lien d'invitation, puis se connectent sur n'importe quel appareil avec leur nom et leur mot de passe.</p>`
       : !ready() && builtIn() ? `<div class="chips"><button class="btn primary" data-cloud="connect">${I.check}<span>Me connecter au serveur du club</span></button></div>`
@@ -1212,7 +1214,7 @@ notify pgrst, 'reload schema';
     if (b.dataset.cloud === 'test') {
       try { await api.ping(); const adm = adminKey() ? await api.adminPing() : false; toast(`Connexion OK${adm ? ' · code responsable valide' : ''}`); } catch (e) { toast(e.message, 'err'); }
     }
-    if (b.dataset.cloud === 'update') {
+    if (b.dataset.cloud === 'update' && !platform()) {
       const script = sqlUpdate();
       return modal({ title: 'Mettre à jour le serveur', body: `
         <p>Après une mise à jour de l'appli, le serveur a parfois besoin de nouvelles fonctions. Ce script les ajoute <b>sans changer les codes du club</b> ni effacer les messages et réservations.</p>
@@ -1234,5 +1236,5 @@ notify pgrst, 'reload schema';
     }
   }
 
-  return Object.assign(api, { ready, invitePerson, canLogin, cfg, adminKey, token, genKey, sql, settingsSection, onSettingsClick, shareInvite });
+  return Object.assign(api, { platform, ready, invitePerson, canLogin, cfg, adminKey, token, genKey, sql, settingsSection, onSettingsClick, shareInvite });
 })();

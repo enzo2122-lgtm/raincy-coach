@@ -10,7 +10,7 @@ const Notify = (() => {
   const prefs = () => Object.assign({ messages: true, planning: true }, S().ui.notifPrefs || {});
   const b64 = s => { const r = atob((s + '='.repeat((4 - s.length % 4) % 4)).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(r, c => c.charCodeAt(0)); };
   const fnUrl = () => { const c = Cloud.cfg(); return c ? c.url.replace(/\/+$/, '') + '/functions/v1/raincy-push' : ''; };
-  const why = e => e && e.code === 'MISE_A_JOUR' ? 'Le serveur du club doit être mis à jour (Réglages → Serveur du club → Mettre à jour le serveur).' : (e && e.message) || 'Erreur';
+  const why = e => e && e.code === 'MISE_A_JOUR' ? (Cloud.platform && Cloud.platform() ? 'Le serveur Clubbo est en cours de mise à jour : réessaie dans quelques minutes.' : 'Le serveur du club doit être mis à jour (Réglages → Serveur du club → Mettre à jour le serveur).') : (e && e.message) || 'Erreur';
   // the app's service worker (it shows the notifications); null if it does not answer within 4 s
   const ready = () => Promise.race([navigator.serviceWorker.ready, new Promise(r => setTimeout(() => r(null), 4000))]);
   async function current() { if (!supported()) return null; try { const reg = await ready(); return reg ? await reg.pushManager.getSubscription() : null; } catch (e) { return null; } }
@@ -82,7 +82,7 @@ const Notify = (() => {
   /* ---------- responsable: once for the club ---------- */
   function adminCard() {
     return `<div class="notif-admin"><b>🔔 Notifications des coachs</b> <span class="muted small" id="notifSrv"></span>
-      <button class="btn soft" data-notif="setup">${I.settings}<span>Activer / vérifier</span></button></div>`;
+      ${Cloud.platform && Cloud.platform() ? '<span class="muted small">Chaque coach les active sur son téléphone : Réglages → Mon compte.</span>' : `<button class="btn soft" data-notif="setup">${I.settings}<span>Activer / vérifier</span></button>`}</div>`;
   }
   async function mountAdmin(root) {
     const el = $('#notifSrv', root); if (!el) return;

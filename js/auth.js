@@ -320,7 +320,7 @@ const Auth = (() => {
     if (!c.cloud.url) { delete c.cloud.url; delete c.cloud.key; }
     Store.save();
   }
-  const hasAccess = () => { const c = Cloud.cfg(); return !!(c && (c.clubKey || Cloud.token() || A().cloudAdminKey)); };
+  const hasAccess = () => { const c = Cloud.cfg(); return !!(c && (c.clubKey || Cloud.token() || (!Cloud.platform() && A().cloudAdminKey))); };
   function firstScreen() {
     if (hasAccess()) return pickScreen();
     const el = frame(`<p class="lead"><b>Première connexion</b></p>

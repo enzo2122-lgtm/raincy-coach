@@ -1744,7 +1744,7 @@ var Auth = (() => {
     if (!c.cloud.url) { delete c.cloud.url; delete c.cloud.key; }
     Store.save();
   }
-  const hasAccess = () => { const c = Cloud.cfg(); return !!(c && (c.clubKey || Cloud.token() || A().cloudAdminKey)); };
+  const hasAccess = () => { const c = Cloud.cfg(); return !!(c && (c.clubKey || Cloud.token() || (!Cloud.platform() && A().cloudAdminKey))); };
   function firstScreen() {
     if (hasAccess()) return pickScreen();
     const el = frame(`<p class="lead"><b>Première connexion</b></p>
@@ -3247,7 +3247,7 @@ var Importer = (() => {
    Errors are caught and kept so a coach can attach them to a report. */
 var Help = (() => {
   const { esc, $, $$, toast, modal } = UI;
-  const VERSION = '3.71';
+  const VERSION = '3.72';
   const TOUR_KEY = 'raincy-tour-seen', ERR_KEY = 'raincy-errors';
 
   /* ---------- error log ---------- */
@@ -3511,7 +3511,9 @@ var Cloud = (() => {
   const builtIn = () => (typeof CLUB_SERVER !== 'undefined' && CLUB_SERVER.url && CLUB_SERVER.key ? CLUB_SERVER : null);
   const session = () => (Store.state.auth && Store.state.auth.session) || null;
   const token = () => { const s = session(); return (s && s.token) || ''; };
-  const ownAdminKey = () => (Store.state.auth && Store.state.auth.cloudAdminKey) || '';
+  // (3.72) FA Le Raincy is a club of the Clubbo server: the codes made for the old server are not used there
+  const platform = () => !!(builtIn() || {}).club;
+  const ownAdminKey = () => (!platform() && Store.state.auth && Store.state.auth.cloudAdminKey) || '';
   // Server address: the one of the club file / setup if any, otherwise the one built into the app
   function cfg() {
     const c = Store.state.club.cloud || {}, b = builtIn() || {}, own = c.url && !b.club; // (3.70) the club moved to the Clubbo server: an address kept on the phone is ignored
@@ -4673,7 +4675,7 @@ notify pgrst, 'reload schema';
       ${admin ? `<div class="chips">${ready() ? `<button class="btn primary" data-cloud="invite">${I.share}<span>Inviter les éducateurs</span></button>` : ''}
         ${!ready() && builtIn() ? `<button class="btn primary" data-cloud="connect">${I.check}<span>Me connecter au serveur du club</span></button>` : ''}
         ${!builtIn() ? `<button class="btn" data-cloud="setup">${I.edit}<span>${ready() ? 'Reconfigurer' : 'Configurer le serveur'}</span></button>` : ''}
-        ${ready() ? `<button class="btn" data-cloud="test">${I.check}<span>Tester</span></button><button class="btn" data-cloud="update">${I.rotate}<span>Mettre à jour le serveur</span></button><button class="btn" data-cloud="adminkey">${I.whistle}<span>Code responsable</span></button>` : ''}</div>
+        ${ready() ? `<button class="btn" data-cloud="test">${I.check}<span>Tester</span></button>${platform() ? '' : `<button class="btn" data-cloud="update">${I.rotate}<span>Mettre à jour le serveur</span></button><button class="btn" data-cloud="adminkey">${I.whistle}<span>Code responsable</span></button>`}` : ''}</div>
         ${ready() ? Notify.adminCard() : ''}
         <p class="muted small">Les éducateurs rejoignent le club avec le lien d'invitation, puis se connectent sur n'importe quel appareil avec leur nom et leur mot de passe.</p>`
       : !ready() && builtIn() ? `<div class="chips"><button class="btn primary" data-cloud="connect">${I.check}<span>Me connecter au serveur du club</span></button></div>`
@@ -4718,7 +4720,7 @@ notify pgrst, 'reload schema';
     if (b.dataset.cloud === 'test') {
       try { await api.ping(); const adm = adminKey() ? await api.adminPing() : false; toast(`Connexion OK${adm ? ' · code responsable valide' : ''}`); } catch (e) { toast(e.message, 'err'); }
     }
-    if (b.dataset.cloud === 'update') {
+    if (b.dataset.cloud === 'update' && !platform()) {
       const script = sqlUpdate();
       return modal({ title: 'Mettre à jour le serveur', body: `
         <p>Après une mise à jour de l'appli, le serveur a parfois besoin de nouvelles fonctions. Ce script les ajoute <b>sans changer les codes du club</b> ni effacer les messages et réservations.</p>
@@ -4740,7 +4742,7 @@ notify pgrst, 'reload schema';
     }
   }
 
-  return Object.assign(api, { ready, invitePerson, canLogin, cfg, adminKey, token, genKey, sql, settingsSection, onSettingsClick, shareInvite });
+  return Object.assign(api, { platform, ready, invitePerson, canLogin, cfg, adminKey, token, genKey, sql, settingsSection, onSettingsClick, shareInvite });
 })();
 
 ;
@@ -7812,7 +7814,7 @@ var Notify = (() => {
   const prefs = () => Object.assign({ messages: true, planning: true }, S().ui.notifPrefs || {});
   const b64 = s => { const r = atob((s + '='.repeat((4 - s.length % 4) % 4)).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(r, c => c.charCodeAt(0)); };
   const fnUrl = () => { const c = Cloud.cfg(); return c ? c.url.replace(/\/+$/, '') + '/functions/v1/raincy-push' : ''; };
-  const why = e => e && e.code === 'MISE_A_JOUR' ? 'Le serveur du club doit être mis à jour (Réglages → Serveur du club → Mettre à jour le serveur).' : (e && e.message) || 'Erreur';
+  const why = e => e && e.code === 'MISE_A_JOUR' ? (Cloud.platform && Cloud.platform() ? 'Le serveur Clubbo est en cours de mise à jour : réessaie dans quelques minutes.' : 'Le serveur du club doit être mis à jour (Réglages → Serveur du club → Mettre à jour le serveur).') : (e && e.message) || 'Erreur';
   // the app's service worker (it shows the notifications); null if it does not answer within 4 s
   const ready = () => Promise.race([navigator.serviceWorker.ready, new Promise(r => setTimeout(() => r(null), 4000))]);
   async function current() { if (!supported()) return null; try { const reg = await ready(); return reg ? await reg.pushManager.getSubscription() : null; } catch (e) { return null; } }
@@ -7884,7 +7886,7 @@ var Notify = (() => {
   /* ---------- responsable: once for the club ---------- */
   function adminCard() {
     return `<div class="notif-admin"><b>🔔 Notifications des coachs</b> <span class="muted small" id="notifSrv"></span>
-      <button class="btn soft" data-notif="setup">${I.settings}<span>Activer / vérifier</span></button></div>`;
+      ${Cloud.platform && Cloud.platform() ? '<span class="muted small">Chaque coach les active sur son téléphone : Réglages → Mon compte.</span>' : `<button class="btn soft" data-notif="setup">${I.settings}<span>Activer / vérifier</span></button>`}</div>`;
   }
   async function mountAdmin(root) {
     const el = $('#notifSrv', root); if (!el) return;
@@ -13831,7 +13833,7 @@ var App = (() => {
   })();
   /* Updates: version.json on the site says which build is online. When it is newer than this one,
      the app empties its offline copy and reloads (an iPhone can keep an old copy open for days). */
-  const BUILD = 111, UPD = 'raincy-update-tried';
+  const BUILD = 112, UPD = 'raincy-update-tried';
   async function onlineBuild() {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
     return (await r.json()).build || 0;
