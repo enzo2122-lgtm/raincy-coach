@@ -28,30 +28,21 @@ Le fichier `FA-Le-Raincy-Effectif-2026-2027.raincy.json` est à part, sur le Bur
 
 Pour les prochains licenciés, va dans **Équipes**, puis **Tous les joueurs**, puis **Coller une liste**. Colle les lignes copiées depuis Footclubs : l'appli les range dans leur catégorie selon leur sous-catégorie.
 
-## Comptes des éducateurs (version 2.1)
+## Comptes des éducateurs
 
-Le serveur du club (Supabase) est déjà réglé dans l'appli (`js/config.js`). Personne n'a besoin de le configurer.
+Depuis la version 3.70, FA Le Raincy est un club du serveur **Clubbo** (code du club : `fa-le-raincy`, réglé dans `js/config.js`). Personne n'a rien à configurer, et il n'y a plus de « code responsable » : la connexion d'un responsable suffit.
 
-**Le responsable, une seule fois :**
+**Les éducateurs :** le responsable envoie le lien d'invitation (**Réglages → Serveur du club → Inviter les éducateurs**, ou **📲 Envoyer son lien** sur la fiche d'un dirigeant). Chacun ouvre le lien, choisit son nom (ou s'inscrit s'il n'est pas dans la liste) et crée son mot de passe. Ensuite, il se connecte sur n'importe quel appareil avec son **nom, prénom et mot de passe**.
 
-1. Ouvre l'appli, puis touche **Première connexion**, puis **Je suis le responsable du club**.
-2. Entre ton nom, ton prénom, le **code responsable** et un mot de passe.
-   - Le code se trouve dans **Réglages → Serveur du club → Code responsable**, sur l'appareil où le serveur a été configuré.
-   - Si tu l'as perdu, touche **J'ai perdu le code responsable**. L'appli te donne un script à coller dans Supabase (SQL Editor → Run), puis affiche le nouveau code. Note-le sur papier.
-3. Recharge le fichier des licenciés (**Réglages → Recevoir un fichier**). Il part sur le serveur pour tous les éducateurs.
-4. Va dans **Réglages → Serveur du club → Inviter les éducateurs** et envoie le lien par WhatsApp.
+**Mot de passe oublié :** un responsable va dans **Réglages → Comptes des dirigeants → Réinitialiser**. L'éducateur ouvre ensuite le lien d'invitation et crée un nouveau mot de passe. Pour un responsable : un autre responsable du club le réinitialise.
 
-**Les éducateurs :** ils ouvrent le lien d'invitation, choisissent leur nom et créent leur mot de passe. Ensuite, ils se connectent sur n'importe quel appareil avec leur **nom, prénom et mot de passe**.
-
-**Mot de passe oublié :** le responsable va dans **Réglages → Comptes des dirigeants → Réinitialiser**. L'éducateur touche ensuite **Première connexion** et crée un nouveau mot de passe.
+**Le serveur** se met à jour avec Clubbo (fichier `supabase/ea-schema.sql` de l'appli Clubbo). Il n'y a plus de script à coller depuis Raincy.
 
 La messagerie, le planning du terrain et les effectifs sont partagés par le serveur. L'appli marche aussi sans internet et envoie les changements au retour du réseau.
 
-Tu peux toujours envoyer un fichier à la main : **Réglages → Envoyer toutes mes données**, ou **Envoyer** sur un entraînement ou un schéma (AirDrop, WhatsApp ou mail).
+Pour envoyer une séance à un autre coach : **Envoyer → Envoyer le lien** sur la séance (WhatsApp, SMS…). En touchant le lien, il l'ouvre dans son appli. Tu peux aussi envoyer un fichier : **Réglages → Envoyer toutes mes données**, ou **Envoyer** sur un schéma.
 
 ## Nouveautés de la version 3.8
-
-**À faire une fois par le responsable, après la mise en ligne :** Réglages → Serveur du club → **Mettre à jour le serveur** → Copier le script → le coller dans Supabase (SQL Editor → New query → Run) → « Success » → revenir et toucher **Tester**. Sans cette étape, tout marche comme avant, mais la page des parents, leurs réponses et les sauvegardes automatiques ne fonctionnent pas encore (l'appli l'indique).
 
 - **Schémas** : « Modèles » (rondo, 3 contre 2, conservation, sortie de balle, centre-tir, déjà animés), bouton copie pour dupliquer un schéma, « Tableau blanc » en plein écran sans enregistrement (« Garder » pour le transformer en schéma).
 - **Joueurs** : présences d'un toucher avec le % de la saison, temps de jeu par match (rubrique « Temps de jeu » d'un match joué), fiche joueur complète (toucher un joueur).
@@ -62,8 +53,6 @@ Tu peux toujours envoyer un fichier à la main : **Réglages → Envoyer toutes 
 
 ## Nouveautés de la version 3.10
 
-**À faire une fois par le responsable :** Réglages → Serveur du club → Mettre à jour le serveur (photos des matchs pour les parents).
-
 - Composition selon les postes précis (DC, LD, AG…), remplaçants notés dans le schéma.
 - Relance WhatsApp des parents qui n'ont pas répondu ; temps de jeu à surveiller (Stats et convocation).
 - Séances types du club, et « Dupliquer » vers une autre catégorie.
@@ -72,15 +61,19 @@ Tu peux toujours envoyer un fichier à la main : **Réglages → Envoyer toutes 
 - « Qui encadre ? » : encadrants de la semaine et absences des dirigeants.
 - Page des parents : « Ajouter à mon agenda » et photos du match choisies par le coach (effacées après 90 jours).
 
+## Vérifier avant de publier
+
+1. **Les fichiers et le serveur** : `node tools/verifier.js`. Il contrôle la syntaxe, le fichier `js/app.bundle.js` (sinon : `node build.js`), les appels entre modules, les fichiers de l'appli hors ligne, le numéro de version partout, et chaque fonction du serveur appelée par l'appli (avec de faux codes : le serveur refuse tout, rien n'est écrit). Il doit afficher « ✅ Aucun problème trouvé ».
+2. **Les pages et les boutons** : `node tools/serveur.js`, puis ouvre http://localhost:8790/tools/verif.html et touche **Lancer la vérification**. Un club inventé est chargé, chaque page est ouverte et ses boutons touchés (sauf supprimer, importer, se déconnecter…), en responsable et en coach, sur ordinateur et sur téléphone. Rien n'est envoyé au serveur. Cette page ne marche qu'en local : elle remplace les données de l'appli du navigateur.
+
 ## Mettre à jour l'appli
 
-Remplace les fichiers sur GitHub. Augmente ensuite le même numéro partout :
+Augmente le même numéro partout, puis relance `node build.js` et `node tools/verifier.js` (il signale un numéro oublié) :
 
-- `sw.js` : `raincy-coach-v28` devient `raincy-coach-v29` ;
-- `index.html` : `?v=28` devient `?v=29` ;
-- `js/app.js` : `BUILD = 28` devient `BUILD = 29` ;
-- `version.json` : `"build": 28` devient `"build": 29`.
+- `sw.js` : `raincy-coach-v115` devient `raincy-coach-v116` ;
+- les pages `.html` : `?v=115` devient `?v=116` ;
+- `js/app.js` : `BUILD = 115` devient `BUILD = 116` ;
+- `version.json` : `"build": 115` devient `"build": 116`, avec la nouvelle version ;
+- `js/help.js` : le numéro affiché (`VERSION = '3.75'`).
 
-Change aussi le numéro affiché dans `js/help.js` (`VERSION = '2.7'`).
-
-Au retour sur l'appli, elle compare son numéro à `version.json`. Si le site est plus récent, elle se met à jour toute seule. Sinon, touche **Mettre à jour l'appli** en bas de l'écran de connexion ou des Réglages.
+Au retour sur l'appli, elle compare son numéro à `version.json`. Si le site est plus récent, elle installe la nouvelle version puis se recharge toute seule. Sinon, touche **Mettre à jour l'appli** en bas de l'écran de connexion ou des Réglages.

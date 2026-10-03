@@ -320,21 +320,19 @@ const Auth = (() => {
     if (!c.cloud.url) { delete c.cloud.url; delete c.cloud.key; }
     Store.save();
   }
-  const hasAccess = () => { const c = Cloud.cfg(); return !!(c && (c.clubKey || Cloud.token() || (!Cloud.platform() && A().cloudAdminKey))); };
+  const hasAccess = () => { const c = Cloud.cfg(); return !!(c && (c.clubKey || Cloud.token())); };
   function firstScreen() {
     if (hasAccess()) return pickScreen();
     const el = frame(`<p class="lead"><b>Première connexion</b></p>
       <p>Ouvre le <b>lien d'invitation</b> envoyé par le responsable du club (WhatsApp, SMS, e-mail) : tu pourras choisir ton nom et créer ton mot de passe.</p>
       <label class="fld"><span>Ou colle le lien d'invitation ici</span><input id="inv" placeholder="https://…#rejoindre=…" autocapitalize="off" autocorrect="off"></label>
       <button class="btn primary wide" id="useInv">Continuer</button>
-      <div class="lock-links"><button class="btn wide" id="resp">${I.whistle}<span>Je suis le responsable du club</span></button>
-      <button class="btn wide link" id="back">Retour</button></div>`);
+      <div class="lock-links"><button class="btn wide link" id="back">Retour</button></div>`);
     $('#useInv', el).onclick = () => {
       const v = $('#inv', el).value.trim(), m = v.match(/rejoindre=([A-Za-z0-9]+)/) || v.match(/^([A-Za-z0-9]{8,})$/);
       if (!m) return toast('Colle le lien reçu du responsable', 'err');
       setInvite(m[1]); pickScreen();
     };
-    $('#resp', el).onclick = () => respScreen();
     $('#back', el).onclick = () => loginScreen();
   }
   async function pickScreen() {
@@ -404,60 +402,11 @@ const Auth = (() => {
       } catch (e) { toast(e.message, 'err'); }
     };
   }
-  // Responsable: account made or recovered with the responsable code
-  function respScreen(code = '') {
-    const n = lastNames();
-    const el = frame(`<p class="lead"><b>Responsable du club</b> : crée ou retrouve ton compte avec le <b>code responsable</b> (Réglages → Serveur du club → Code responsable).</p>
-      ${nameFields(n.ln, n.fn)}
-      <label class="fld"><span>Code responsable</span><input id="code" value="${esc(code || A().cloudAdminKey || '')}" autocapitalize="off" autocorrect="off" autocomplete="off"></label>
-      ${pwFields('Mot de passe')}${keepBox}
-      <button class="btn primary wide" id="go">Valider</button>
-      <div class="lock-links"><button class="btn wide" id="lost">J'ai perdu le code responsable</button><button class="btn wide link" id="back">Retour</button></div>`);
-    $('#back', el).onclick = () => loginScreen();
-    $('#lost', el).onclick = () => lostScreen();
-    $('#go', el).onclick = async () => {
-      const ln = $('#ln', el).value.trim(), fn = $('#fn', el).value.trim(), code = $('#code', el).value.trim();
-      if (!ln || !fn) return toast('Écris ton nom et ton prénom', 'err');
-      if (!code) return toast('Écris le code responsable', 'err');
-      const pw = readNewPw(el); if (!pw) return; const keep = $('#keep', el).checked;
-      const before = A().cloudAdminKey; A().cloudAdminKey = code;
-      try {
-        const ok = await withBusy('Vérification du code…', () => Cloud.adminPing());
-        if (!ok) throw Object.assign(new Error('Code responsable incorrect'), { code: 'CLE_CLUB' });
-        await withBusy('Chargement des données du club…', () => Sync.run());
-        let s = findStaff(ln, fn);
-        if (!s) s = Store.upsert('staff', { id: Store.uid(), lastName: ln.toUpperCase(), firstName: fn, role: 'Responsable de catégorie', phone: '', email: '', notes: '', teamIds: [] });
-        const r = await withBusy('Création de ton compte…', async () => Cloud.register(regPayload(s, await proof(lastKeyOf(s), pw), true), code));
-        Store.save();
-        await withBusy('Connexion…', () => afterServerLogin(r, pw, keep, s.lastName, s.firstName));
-      } catch (e) {
-        if (before) A().cloudAdminKey = before; else delete A().cloudAdminKey;
-        toast(e.code === 'CLE_CLUB' ? 'Code responsable incorrect' : e.message, 'err');
-      }
-    };
-  }
-  // New codes for the club server: the responsable pastes a script in Supabase
-  function lostScreen() {
-    const clubKey = Cloud.genKey(), adm = Cloud.genKey(), script = Cloud.sql(clubKey, adm);
-    const el = frame(`<p class="lead"><b>Nouveau code responsable</b></p>
-      <ol class="wizard"><li>Touche <b>Copier le script</b>.</li>
-      <li>Ouvre <a href="https://supabase.com/dashboard" target="_blank" rel="noopener">supabase.com/dashboard</a>, ton projet, puis <b>SQL Editor</b> → <b>New query</b>. Colle le script et touche <b>Run</b> : il doit afficher « Success ».</li>
-      <li>Reviens ici et touche <b>C'est fait</b>.</li></ol>
-      <p class="tip">Ton nouveau code responsable (note-le sur papier) :</p><p class="code">${esc(adm)}</p>
-      <textarea id="lostSql" rows="3" readonly>${esc(script)}</textarea>
-      <p class="muted small">Les dirigeants déjà connectés le restent. Les anciens liens d'invitation ne marcheront plus : tu en enverras un nouveau.</p>
-      <button class="btn wide" id="copy">${I.copy}<span>Copier le script</span></button>
-      <button class="btn primary wide" id="ok">C'est fait</button><button class="btn wide link" id="back">Retour</button>`);
-    $('#copy', el).onclick = () => navigator.clipboard.writeText(script).then(() => toast('Script copié : colle-le dans Supabase')).catch(() => { const t = $('#lostSql', el); t.focus(); t.select(); toast('Sélectionne le texte et copie-le'); });
-    $('#back', el).onclick = () => respScreen();
-    $('#ok', el).onclick = () => { setInvite(clubKey); respScreen(adm); };
-  }
   function forgotServer() {
     const el = frame(`<p class="lead"><b>Mot de passe oublié</b></p>
       <p><b>Éducateur</b> : demande au responsable de réinitialiser ton mot de passe (Réglages → Comptes des dirigeants → Réinitialiser). Ensuite, touche « Première connexion » et crée un nouveau mot de passe.</p>
-      <p><b>Responsable</b> : touche « Je suis le responsable » et utilise ton code responsable.</p>
-      <div class="lock-links"><button class="btn wide" id="resp">${I.whistle}<span>Je suis le responsable</span></button><button class="btn wide link" id="back">Retour</button></div>`);
-    $('#resp', el).onclick = () => respScreen();
+      <p><b>Responsable</b> : un autre responsable du club peut le réinitialiser. Sinon, contacte Clubbo.</p>
+      <div class="lock-links"><button class="btn wide link" id="back">Retour</button></div>`);
     $('#back', el).onclick = () => loginScreen();
   }
 
@@ -548,7 +497,7 @@ const Auth = (() => {
     ss.del(KEY); ss.del(TMP); try { localStorage.removeItem(KEY); } catch (e) {}
     user = null; App.refreshChrome();
     gate().then(() => App.route());
-    if (wasAdmin) respScreen(); else firstScreen();
+    if (wasAdmin) loginScreen(); else firstScreen();
   }
 
   /* ---------- settings section ---------- */
