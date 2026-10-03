@@ -117,17 +117,26 @@ const App = (() => {
   })();
   /* Updates: version.json on the site says which build is online. When it is newer than this one,
      the app empties its offline copy and reloads (an iPhone can keep an old copy open for days). */
-  const BUILD = 114, UPD = 'raincy-update-tried';
+  const BUILD = 115, UPD = 'raincy-update-tried';
   async function onlineBuild() {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
     return (await r.json()).build || 0;
   }
   async function forceUpdate() {
     // with notifications on, the service worker is updated rather than removed (removing it would cancel the notifications)
+    // (3.75) …and the new one is waited for (8 s at most) before reloading: reloading in the middle left a blank page on iPhone
+    let kept = false;
     try { const regs = await navigator.serviceWorker.getRegistrations(), keep = Store.state && Store.state.ui && Store.state.ui.notifOn;
-      await Promise.all(regs.map(r => keep ? r.update().catch(() => {}) : r.unregister())); } catch (e) {}
-    try { const keys = await caches.keys(); await Promise.all(keys.map(k => caches.delete(k))); } catch (e) {}
-    location.reload();
+      await Promise.all(regs.map(async r => {
+        if (!keep) return r.unregister();
+        kept = true;
+        await r.update().catch(() => {});
+        const w = r.installing || r.waiting;
+        if (w) await new Promise(ok => { const to = setTimeout(ok, 8000); w.addEventListener('statechange', () => { if (w.state === 'activated' || w.state === 'redundant') { clearTimeout(to); ok(); } }); });
+      })); } catch (e) {}
+    if (!kept) { try { const keys = await caches.keys(); await Promise.all(keys.map(k => caches.delete(k))); } catch (e) {} }
+    try { Store.persistNow(); } catch (e) {}
+    setTimeout(() => location.reload(), 250); // the page going away closes the database (pagehide)
   }
   async function checkUpdate(manual) {
     let online;
@@ -147,7 +156,9 @@ const App = (() => {
       navigator.serviceWorker.addEventListener('message', e => { const u = e.data && e.data.raincyOpen; if (u) { const h = u.slice(u.indexOf('#')); if (h.startsWith('#/')) location.hash = h; } });
     }
     if (location.protocol !== 'file:') { checkUpdate(); document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkUpdate(); }); }
-    await Store.load();
+    try { await Store.load(); }
+    catch (e) { document.getElementById('app-stuck') || document.body.insertAdjacentHTML('beforeend', `<div id="app-stuck" style="position:fixed;inset:0;z-index:300;display:flex;align-items:center;justify-content:center;padding:16px;background:#f2f0ee"><div style="max-width:380px;text-align:center;font:16px system-ui;color:#14172b"><p><b>L'appli n'a pas pu s'ouvrir.</b><br>Tes données sont toujours sur le téléphone.</p><button style="font:inherit;padding:12px 18px;border-radius:12px;border:0;background:#8c1024;color:#fff" onclick="location.reload()">Recharger</button></div></div>`); return; }
+    window.__appStarted = true; // the data are read: the safety net of index.html is not needed
     // Invitation link sent by the responsable: …#rejoindre=CODE
     const join = (location.hash.match(/^#rejoindre=([A-Za-z0-9]+)/) || [])[1];
     // (3.74) a session received as a link: …#/recevoir/CODE
