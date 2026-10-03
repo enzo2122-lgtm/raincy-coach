@@ -3247,7 +3247,7 @@ var Importer = (() => {
    Errors are caught and kept so a coach can attach them to a report. */
 var Help = (() => {
   const { esc, $, $$, toast, modal } = UI;
-  const VERSION = '3.70';
+  const VERSION = '3.71';
   const TOUR_KEY = 'raincy-tour-seen', ERR_KEY = 'raincy-errors';
 
   /* ---------- error log ---------- */
@@ -3514,8 +3514,8 @@ var Cloud = (() => {
   const ownAdminKey = () => (Store.state.auth && Store.state.auth.cloudAdminKey) || '';
   // Server address: the one of the club file / setup if any, otherwise the one built into the app
   function cfg() {
-    const c = Store.state.club.cloud || {}, b = builtIn() || {};
-    const url = c.url || b.url, key = c.url ? c.key : b.key;
+    const c = Store.state.club.cloud || {}, b = builtIn() || {}, own = c.url && !b.club; // (3.70) the club moved to the Clubbo server: an address kept on the phone is ignored
+    const url = own ? c.url : b.url, key = own ? c.key : b.key;
     return url && key ? { url, key, clubKey: c.clubKey || '' } : null;
   }
   const canLogin = () => !!cfg();
@@ -4598,7 +4598,7 @@ notify pgrst, 'reload schema';
     unbook: id => rpc('club_unbook', { p_id: id, p_author: Auth.current().id, admin_k: adminKey() || null }),
     unbookSeries: series => rpc('club_unbook_series', { p_series: series, p_author: Auth.current().id, admin_k: adminKey() || null }),
     // accounts
-    login: (last, first, h) => rpc('club_login', { p_last: last, p_first: first, p_h: h }),
+    login: (last, first, h) => rpc('club_login', Object.assign({ p_last: last, p_first: first, p_h: h }, (builtIn() || {}).club ? { p_club: builtIn().club } : {})),
     register: (p, admK) => rpc('club_register', { admin_k: admK || adminKey() || null, p }),
     accounts: () => rpc('club_accounts'),
     accountSet: p => rpc('club_account_set', { admin_k: adminKey(), p }),
@@ -4865,6 +4865,7 @@ var Sync = (() => {
     running = (async () => {
       let changed = false;
       try {
+        const srv = (Cloud.cfg() || {}).url || ''; if (meta().server !== srv) { meta().rev = 0; meta().server = srv; } // (3.70) moved to another server
         const fresh = !meta().rev && !Object.keys(meta().h).length;
         changed = await pull();
         if (fresh && meta().rev > 0) adoptStale();
@@ -11705,18 +11706,10 @@ var Parents = (() => {
     const base = S().teams.find(x => catKey(x.name) === key);
     return { key, ids: ids.length ? ids : [t.id], name: base ? base.name : (t.category || t.name) };
   }
-  const pageUrl = token => `${location.origin}${location.pathname.replace(/index\.html$/, '')}parents.html#t=${encodeURIComponent(token)}`;
-  async function linkOf(teamId, renew) {
-    const f = family(teamId); if (!f) throw new Error('Choisis d\'abord une catégorie.');
-    const links = S().ui.parentLinks = S().ui.parentLinks || {};
-    if (!renew && links[f.key]) return pageUrl(links[f.key]);
-    const token = await Cloud.parentLink(f.key, f.ids, f.name, renew);
-    links[f.key] = token; Store.persistNow();
-    return pageUrl(token);
-  }
+  const familyName = id => (family(id) || {}).name || '';
   // Explanation shown when the server has not been updated yet (3.8 functions missing)
   const needUpdate = e => e && e.code === 'MISE_A_JOUR'
-    ? 'Le serveur du club doit d\'abord être mis à jour par le responsable : Réglages → Serveur du club → Mettre à jour le serveur.' : (e && e.message) || 'Erreur';
+    ? 'Le serveur du club est en cours de mise à jour : réessaie dans quelques minutes.' : (e && e.message) || 'Erreur';
   // (3.42) The pages of the players and of the parents are opened with each licensee's personal code: the category has a QR code
   // that leads to the page where the code is typed, and the codes are handed out from « Codes personnels ».
   function shareDialog(teamId) {
@@ -11761,10 +11754,10 @@ var Parents = (() => {
   async function remind(m, conv) {
     const rows = (cache[m.id] || {}).rows || {}, missing = conv.filter(p => !rows[p.id]);
     if (!missing.length) return toast('Tout le monde a répondu 👍');
-    let url = ''; try { url = await linkOf(m.teamId); } catch (e) {}
+    const url = Codes.catUrl(familyName(m.teamId)); // the category's page: each family types its personal code
     const t = Store.get('teams', m.teamId);
     const text = [`⚽ *${S().club.name}${t ? ' · ' + t.name : ''}* – match ${m.home ? 'contre' : 'chez'} ${m.opponent || '?'}, ${fmtDate(m.date, { weekday: 'long', day: 'numeric', month: 'long' })}`, '',
-      `Nous attendons encore la réponse pour : ${missing.map(short).join(', ').replace(/\.?$/, '.')}`, url ? `Merci de répondre présent ou absent ici : ${url}` : 'Merci de répondre présent ou absent au coach.'].join('\n');
+      `Nous attendons encore la réponse pour : ${missing.map(short).join(', ').replace(/\.?$/, '.')}`, url ? `Merci de répondre présent ou absent ici (avec votre code personnel) : ${url}` : 'Merci de répondre présent ou absent au coach.'].join('\n');
     modal({ title: `Relancer (${missing.length})`, noFocus: true, body: `<p class="muted small">Message prêt pour le groupe WhatsApp des parents.</p><textarea id="rmTxt" rows="8">${esc(text)}</textarea>`,
       actions: [{ label: 'Copier', icon: I.copy, onClick: (c, r) => { navigator.clipboard.writeText($('#rmTxt', r).value).then(() => toast('Message copié')).catch(() => toast('Sélectionne le texte et copie-le')); return false; } },
         { label: 'WhatsApp', kind: 'primary', icon: I.share, onClick: (c, r) => { window.open('https://wa.me/?text=' + encodeURIComponent($('#rmTxt', r).value), '_blank'); return false; } }] });
@@ -11932,7 +11925,7 @@ var Parents = (() => {
       ${yes.length ? `<button class="btn soft" data-ansfill>${I.check}<span>Cocher les ${yes.length} présents annoncés</span></button>` : ''}</section>`;
     const f = box.querySelector('[data-ansfill]'); if (f) f.onclick = () => onPresent(yes.map(r => r.player_id));
   }
-  return { mountTraining, shareDialog, sharePlayers, teamCard, linkOf, familyName: id => (family(id) || {}).name || '', mountMatch, carText };
+  return { mountTraining, shareDialog, sharePlayers, teamCard, familyName, mountMatch, carText };
 })();
 
 ;
@@ -13838,7 +13831,7 @@ var App = (() => {
   })();
   /* Updates: version.json on the site says which build is online. When it is newer than this one,
      the app empties its offline copy and reloads (an iPhone can keep an old copy open for days). */
-  const BUILD = 110, UPD = 'raincy-update-tried';
+  const BUILD = 111, UPD = 'raincy-update-tried';
   async function onlineBuild() {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
     return (await r.json()).build || 0;

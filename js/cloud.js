@@ -8,8 +8,8 @@ const Cloud = (() => {
   const ownAdminKey = () => (Store.state.auth && Store.state.auth.cloudAdminKey) || '';
   // Server address: the one of the club file / setup if any, otherwise the one built into the app
   function cfg() {
-    const c = Store.state.club.cloud || {}, b = builtIn() || {};
-    const url = c.url || b.url, key = c.url ? c.key : b.key;
+    const c = Store.state.club.cloud || {}, b = builtIn() || {}, own = c.url && !b.club; // (3.70) the club moved to the Clubbo server: an address kept on the phone is ignored
+    const url = own ? c.url : b.url, key = own ? c.key : b.key;
     return url && key ? { url, key, clubKey: c.clubKey || '' } : null;
   }
   const canLogin = () => !!cfg();
@@ -1092,7 +1092,7 @@ notify pgrst, 'reload schema';
     unbook: id => rpc('club_unbook', { p_id: id, p_author: Auth.current().id, admin_k: adminKey() || null }),
     unbookSeries: series => rpc('club_unbook_series', { p_series: series, p_author: Auth.current().id, admin_k: adminKey() || null }),
     // accounts
-    login: (last, first, h) => rpc('club_login', { p_last: last, p_first: first, p_h: h }),
+    login: (last, first, h) => rpc('club_login', Object.assign({ p_last: last, p_first: first, p_h: h }, (builtIn() || {}).club ? { p_club: builtIn().club } : {})),
     register: (p, admK) => rpc('club_register', { admin_k: admK || adminKey() || null, p }),
     accounts: () => rpc('club_accounts'),
     accountSet: p => rpc('club_account_set', { admin_k: adminKey(), p }),

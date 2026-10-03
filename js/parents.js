@@ -15,18 +15,10 @@ const Parents = (() => {
     const base = S().teams.find(x => catKey(x.name) === key);
     return { key, ids: ids.length ? ids : [t.id], name: base ? base.name : (t.category || t.name) };
   }
-  const pageUrl = token => `${location.origin}${location.pathname.replace(/index\.html$/, '')}parents.html#t=${encodeURIComponent(token)}`;
-  async function linkOf(teamId, renew) {
-    const f = family(teamId); if (!f) throw new Error('Choisis d\'abord une catégorie.');
-    const links = S().ui.parentLinks = S().ui.parentLinks || {};
-    if (!renew && links[f.key]) return pageUrl(links[f.key]);
-    const token = await Cloud.parentLink(f.key, f.ids, f.name, renew);
-    links[f.key] = token; Store.persistNow();
-    return pageUrl(token);
-  }
+  const familyName = id => (family(id) || {}).name || '';
   // Explanation shown when the server has not been updated yet (3.8 functions missing)
   const needUpdate = e => e && e.code === 'MISE_A_JOUR'
-    ? 'Le serveur du club doit d\'abord être mis à jour par le responsable : Réglages → Serveur du club → Mettre à jour le serveur.' : (e && e.message) || 'Erreur';
+    ? 'Le serveur du club est en cours de mise à jour : réessaie dans quelques minutes.' : (e && e.message) || 'Erreur';
   // (3.42) The pages of the players and of the parents are opened with each licensee's personal code: the category has a QR code
   // that leads to the page where the code is typed, and the codes are handed out from « Codes personnels ».
   function shareDialog(teamId) {
@@ -71,10 +63,10 @@ const Parents = (() => {
   async function remind(m, conv) {
     const rows = (cache[m.id] || {}).rows || {}, missing = conv.filter(p => !rows[p.id]);
     if (!missing.length) return toast('Tout le monde a répondu 👍');
-    let url = ''; try { url = await linkOf(m.teamId); } catch (e) {}
+    const url = Codes.catUrl(familyName(m.teamId)); // the category's page: each family types its personal code
     const t = Store.get('teams', m.teamId);
     const text = [`⚽ *${S().club.name}${t ? ' · ' + t.name : ''}* – match ${m.home ? 'contre' : 'chez'} ${m.opponent || '?'}, ${fmtDate(m.date, { weekday: 'long', day: 'numeric', month: 'long' })}`, '',
-      `Nous attendons encore la réponse pour : ${missing.map(short).join(', ').replace(/\.?$/, '.')}`, url ? `Merci de répondre présent ou absent ici : ${url}` : 'Merci de répondre présent ou absent au coach.'].join('\n');
+      `Nous attendons encore la réponse pour : ${missing.map(short).join(', ').replace(/\.?$/, '.')}`, url ? `Merci de répondre présent ou absent ici (avec votre code personnel) : ${url}` : 'Merci de répondre présent ou absent au coach.'].join('\n');
     modal({ title: `Relancer (${missing.length})`, noFocus: true, body: `<p class="muted small">Message prêt pour le groupe WhatsApp des parents.</p><textarea id="rmTxt" rows="8">${esc(text)}</textarea>`,
       actions: [{ label: 'Copier', icon: I.copy, onClick: (c, r) => { navigator.clipboard.writeText($('#rmTxt', r).value).then(() => toast('Message copié')).catch(() => toast('Sélectionne le texte et copie-le')); return false; } },
         { label: 'WhatsApp', kind: 'primary', icon: I.share, onClick: (c, r) => { window.open('https://wa.me/?text=' + encodeURIComponent($('#rmTxt', r).value), '_blank'); return false; } }] });
@@ -242,5 +234,5 @@ const Parents = (() => {
       ${yes.length ? `<button class="btn soft" data-ansfill>${I.check}<span>Cocher les ${yes.length} présents annoncés</span></button>` : ''}</section>`;
     const f = box.querySelector('[data-ansfill]'); if (f) f.onclick = () => onPresent(yes.map(r => r.player_id));
   }
-  return { mountTraining, shareDialog, sharePlayers, teamCard, linkOf, familyName: id => (family(id) || {}).name || '', mountMatch, carText };
+  return { mountTraining, shareDialog, sharePlayers, teamCard, familyName, mountMatch, carText };
 })();
