@@ -4,7 +4,7 @@
    Without a club server (another club, no setup yet) accounts stay on the device, as in the first versions. */
 const Auth = (() => {
   const { esc, $, toast, modal, confirmBox } = UI;
-  const KEY = 'raincy-session', TMP = 'raincy-session-tmp', NAMES = 'raincy-last-names', ITER = 150000, MIN = 6;
+  const KEY = AppCfg.key('session'), TMP = AppCfg.key('session-tmp'), NAMES = AppCfg.key('last-names'), ITER = 150000, MIN = 6;
   const enc = new TextEncoder();
   const b64 = buf => btoa(String.fromCharCode(...new Uint8Array(buf)));
   const unb64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
@@ -38,7 +38,7 @@ const Auth = (() => {
   const current = () => user;
   const realAdmin = () => { if (!user) return false; const s = sess(); if (s && s.staff_id === user.id) return !!s.admin; return !!(U(user.id) && U(user.id).admin); };
   // « Voir comme un coach »: a responsable sees the app exactly as a coach of the chosen categories (this device and tab only)
-  const PREVIEW = 'raincy-preview';
+  const PREVIEW = AppCfg.key('preview');
   const preview = () => { if (!realAdmin()) return null; try { const v = JSON.parse(localStorage.getItem(PREVIEW)); return v && Array.isArray(v.teamIds) ? v : null; } catch (e) { return null; } };
   const isAdmin = () => realAdmin() && !preview();
   // a responsable looking at the app as a volunteer: only the volunteers' tasks and the club's events
@@ -173,9 +173,9 @@ const Auth = (() => {
   const lock = () => document.getElementById('lock');
   function frame(inner) {
     const el = lock(); el.hidden = false;
-    el.innerHTML = `<div class="lock-card">${Supporters.coin('lock-crest')}<p class="eyebrow">Espace éducateurs</p><h1>${esc(Store.state.club.name)}</h1>${inner}
+    el.innerHTML = `<div class="lock-card">${Supporters.coin('lock-crest')}<p class="eyebrow">${esc(AppCfg.name)}</p><h1>${esc(Store.state.club.name || 'Espace éducateurs')}</h1>${inner}
       <button class="btn wide link how-btn" id="howTo">${I.help}<span>Comment utiliser l'appli ?</span></button>
-      <p class="lock-version">Appli créée par <b>Coach Enzo</b> · version ${Help.VERSION} · <button class="linkish" id="updApp">Mettre à jour l'appli</button> · <a href="confidentialite.html">Confidentialité</a></p></div>`;
+      <p class="lock-version">${esc(AppCfg.name)} · créée par <b>Coach Enzo</b> · version ${Help.VERSION} · <button class="linkish" id="updApp">Mettre à jour l'appli</button> · <a href="confidentialite.html">Confidentialité</a></p></div>`;
     el.querySelector('#howTo').onclick = () => Help.tour();
     el.querySelector('#updApp').onclick = () => App.checkUpdate(true);
     el.scrollTop = 0;
@@ -241,75 +241,75 @@ const Auth = (() => {
     const byPw = list => list.find(s => U(s.id) && U(s.id).hash) || list[0];
     return byPw(match(L, F)) || byPw(match(F, L)) || null;
   }
-  async function serverLogin(ln, fn, pw) {
+  // the club of this device (its code, remembered for the next connection)
+  const CLUB = AppCfg.key('club-code');
+  const lastClub = () => { if (AppCfg.fixed) return AppCfg.club; try { return localStorage.getItem(CLUB) || ''; } catch (e) { return ''; } };
+  const saveClub = c => { try { localStorage.setItem(CLUB, c); } catch (e) {} };
+  async function serverLogin(club, ln, fn, pw) {
     let last = null;
     for (const [a, b] of [[ln, fn], [fn, ln]]) { // also works if nom and prénom were swapped
       const lk = nkey(a), f = noPar(nkey(b)); if (!lk || !f) continue;
-      last = await Cloud.login(lk, f, await proof(lk, pw));
+      last = await Cloud.login(club, lk, f, await proof(lk, pw));
       if (!last || last.error !== 'COMPTE_INCONNU') return last;
     }
     return last || { error: 'COMPTE_INCONNU' };
   }
   async function afterServerLogin(r, pw, keep, ln, fn) {
-    A().session = { token: r.token, staff_id: r.staff_id, admin: !!r.admin, teams_set: !!r.teams_set, last_key: r.last_key, temp: !keep, at: Date.now() };
+    A().session = { token: r.token, staff_id: r.staff_id, admin: !!r.admin, teams_set: !!r.teams_set, last_key: r.last_key, club: r.club || null, temp: !keep, at: Date.now() };
+    if (r.club) { Store.state.club.cloud = { slug: r.club.slug }; if (!Store.state.club.name || Store.state.club.name === 'Mon club') Store.state.club.name = r.club.name; saveClub(r.club.slug); }
     if (!keep) ss.set(TMP, '1');
     Store.save();
     if (!Store.get('staff', r.staff_id)) await withBusy('Chargement des données du club…', () => Sync.run());
     let s = Store.get('staff', r.staff_id);
-    if (!s) s = Store.upsert('staff', { id: r.staff_id, lastName: String(ln || '').toUpperCase(), firstName: fn || '', role: r.admin ? 'Responsable de catégorie' : 'Dirigeant', phone: '', email: '', notes: '', teamIds: [] });
+    if (!s) s = Store.upsert('staff', { id: r.staff_id, lastName: String(ln || '').toUpperCase(), firstName: fn || '', role: r.admin ? 'Responsable du club' : 'Dirigeant', phone: '', email: '', notes: '', teamIds: [] });
     await setPassword(s.id, pw, { admin: !!r.admin, teamsSet: !!r.teams_set });
     saveNames(s.lastName, s.firstName);
     done(s.id, keep);
   }
-  const errText = code => ({ MOT_DE_PASSE: 'Mot de passe incorrect', BLOQUE: 'Trop d\'essais : attends 5 minutes avant de réessayer', COMPTE_INCONNU: 'Aucun compte à ce nom' }[code] || 'Connexion impossible');
+  const errText = code => ({ MOT_DE_PASSE: 'Mot de passe incorrect', BLOQUE: 'Trop d\'essais : attends 5 minutes avant de réessayer', COMPTE_INCONNU: 'Aucun compte à ce nom dans ce club',
+    CLUB_INCONNU: 'Aucun club avec ce code', CLUB_SUSPENDU: 'L\'accès de ce club est suspendu : contacte Clubbo' }[code] || 'Connexion impossible');
+  const clubField = (v = '') => AppCfg.fixed ? `<input id="club" type="hidden" value="${esc(AppCfg.club)}">` : `<label class="fld"><span>Code du club</span><input id="club" value="${esc(v)}" placeholder="ex : fc-exemple" autocapitalize="off" autocorrect="off" autocomplete="organization"></label>`;
 
   function loginScreen() {
     const n = lastNames();
-    const el = frame(`<p class="lead">Connecte-toi avec ton nom, ton prénom et ton mot de passe.</p>
-      ${nameFields(n.ln, n.fn)}
+    const el = frame(`<p class="lead">Connecte-toi avec ${AppCfg.fixed ? '' : 'le code de ton club, '}ton nom, ton prénom et ton mot de passe.</p>
+      ${clubField(lastClub())}${nameFields(n.ln, n.fn)}
       <label class="fld"><span>Mot de passe</span><input id="pw" type="password" autocomplete="current-password"></label>${keepBox}
       <button class="btn primary wide" id="go">Se connecter</button>
-      <div class="lock-links"><button class="btn wide" id="first">${I.plus}<span>Première connexion</span></button>
+      <div class="lock-links"><button class="btn wide" id="first">${I.plus}<span>Première connexion (lien d'invitation)</span></button>
+      ${AppCfg.fixed ? '' : `<button class="btn wide" id="create">${I.whistle}<span>Créer mon club</span></button>
+      ${!Store.state.staff.length ? '<button class="btn wide" id="demo">👀<span>Essayer avec un club de démonstration</span></button>' : ''}
+      <a class="btn wide link" href="decouvrir.html">Découvrir Clubbo</a>`}
       <button class="btn wide link" id="forgot">Mot de passe oublié ?</button></div>`);
     const go = async () => {
-      const ln = $('#ln', el).value.trim(), fn = $('#fn', el).value.trim(), pw = $('#pw', el).value, keep = $('#keep', el).checked;
+      const club = $('#club', el).value.trim(), ln = $('#ln', el).value.trim(), fn = $('#fn', el).value.trim(), pw = $('#pw', el).value, keep = $('#keep', el).checked;
+      if (!club) return toast('Écris le code de ton club', 'err');
       if (!ln || !fn) return toast('Écris ton nom et ton prénom', 'err');
       if (!pw) return toast('Écris ton mot de passe', 'err');
       if (Date.now() < lockedUntil) return toast(`Trop d'essais : attends ${Math.ceil((lockedUntil - Date.now()) / 1000)} secondes`, 'err');
       const b = UI.busy('Connexion…');
       let r;
-      try { r = await serverLogin(ln, fn, pw); }
+      try { r = await serverLogin(club, ln, fn, pw); }
       catch (e) {
         b.done();
-        // No internet (or server not updated yet): accounts already used on this device still open
+        // No internet: an account already used on this device still opens
         const loc = findStaff(ln, fn);
-        if (loc && U(loc.id) && U(loc.id).hash) {
-          if (await check(loc.id, pw)) { if (e.code === 'MISE_A_JOUR') toast(e.message, 'err'); return done(loc.id, keep); }
-          return failed();
-        }
+        if (loc && U(loc.id) && U(loc.id).hash) { if (await check(loc.id, pw)) return done(loc.id, keep); return failed(); }
         return toast(e.offline ? 'Pas de connexion internet : la première connexion sur un appareil a besoin d\'internet.' : e.message, 'err');
       }
       b.done();
       if (r && r.token) return withBusy('Connexion…', () => afterServerLogin(r, pw, keep, ln, fn));
-      if (r && r.error === 'COMPTE_INCONNU') {
-        // An account created on this device before the club server: put it on the server now
-        const loc = findStaff(ln, fn);
-        if (loc && U(loc.id) && U(loc.id).hash) {
-          if (!(await check(loc.id, pw))) return failed();
-          try { const r2 = await withBusy('Enregistrement de ton compte sur le serveur…', async () => Cloud.register(regPayload(loc, await proof(lastKeyOf(loc), pw), U(loc.id).admin)));
-            return withBusy('Connexion…', () => afterServerLogin(r2, pw, keep, ln, fn)); }
-          catch (e) { return done(loc.id, keep); }
-        }
-        return toast('Aucun compte à ce nom. Si c\'est ta première connexion, touche « Première connexion ».', 'err');
-      }
+      if (r && r.error === 'COMPTE_INCONNU') return toast('Aucun compte à ce nom dans ce club. Si c\'est ta première connexion, ouvre le lien d\'invitation envoyé par ton responsable.', 'err');
       if (r && r.error === 'MOT_DE_PASSE') return failed();
       toast(errText(r && r.error), 'err');
     };
     const failed = () => { fails++; if (fails >= 5) { lockedUntil = Date.now() + 30000; fails = 0; } toast('Mot de passe incorrect', 'err'); const p = $('#pw', el); if (p) p.select(); };
     $('#go', el).onclick = go; $('#pw', el).onkeydown = e => { if (e.key === 'Enter') go(); };
     $('#first', el).onclick = () => firstScreen();
+    const cr = $('#create', el); if (cr) cr.onclick = () => createClubScreen();
     $('#forgot', el).onclick = () => forgotServer();
-    setTimeout(() => { const f = n.ln ? $('#pw', el) : $('#ln', el); if (f) f.focus(); }, 60);
+    const dm = $('#demo', el); if (dm) dm.onclick = () => Demo.start();
+    setTimeout(() => { const f = !lastClub() ? $('#club', el) : n.ln ? $('#pw', el) : $('#ln', el); if (f) f.focus(); }, 60);
   }
 
   // Invitation code from the link sent by the responsable
@@ -317,22 +317,23 @@ const Auth = (() => {
     try { if (who) sessionStorage.setItem('join-who', who); } catch (e) {}
     const c = Store.state.club;
     c.cloud = Object.assign({}, c.cloud || {}, { clubKey: code });
-    if (!c.cloud.url) { delete c.cloud.url; delete c.cloud.key; }
     Store.save();
   }
   const hasAccess = () => { const c = Cloud.cfg(); return !!(c && (c.clubKey || Cloud.token())); };
   function firstScreen() {
     if (hasAccess()) return pickScreen();
     const el = frame(`<p class="lead"><b>Première connexion</b></p>
-      <p>Ouvre le <b>lien d'invitation</b> envoyé par le responsable du club (WhatsApp, SMS, e-mail) : tu pourras choisir ton nom et créer ton mot de passe.</p>
+      <p>Ouvre le <b>lien d'invitation</b> envoyé par le responsable de ton club (WhatsApp, SMS, e-mail) : tu pourras choisir ton nom et créer ton mot de passe.</p>
       <label class="fld"><span>Ou colle le lien d'invitation ici</span><input id="inv" placeholder="https://…#rejoindre=…" autocapitalize="off" autocorrect="off"></label>
       <button class="btn primary wide" id="useInv">Continuer</button>
-      <div class="lock-links"><button class="btn wide link" id="back">Retour</button></div>`);
+      <div class="lock-links">${AppCfg.fixed ? '' : `<button class="btn wide" id="create">${I.whistle}<span>Je suis responsable : créer mon club</span></button>`}
+      <button class="btn wide link" id="back">Retour</button></div>`);
     $('#useInv', el).onclick = () => {
       const v = $('#inv', el).value.trim(), m = v.match(/rejoindre=([A-Za-z0-9]+)/) || v.match(/^([A-Za-z0-9]{8,})$/);
       if (!m) return toast('Colle le lien reçu du responsable', 'err');
       setInvite(m[1]); pickScreen();
     };
+    const cr = $('#create', el); if (cr) cr.onclick = () => createClubScreen();
     $('#back', el).onclick = () => loginScreen();
   }
   async function pickScreen() {
@@ -348,7 +349,7 @@ const Auth = (() => {
     const el = frame(`<p class="lead"><b>Première connexion</b> : choisis ton nom, puis crée ton mot de passe.</p>
       ${staff.length ? `<label class="fld"><span>Qui es-tu ?</span><select id="who"><option value="">Choisis ton nom…</option>
       ${staff.map(s => `<option value="${s.id}" ${reg.has(s.id) ? 'disabled' : ''}>${esc(Store.fullName(s))}${reg.has(s.id) ? ' · déjà inscrit' : [s.role, (s.teamIds || []).map(id => (Store.get('teams', id) || {}).name).filter(Boolean).join(', ')].filter(Boolean).map(esc).map(x => ' · ' + x).join('')}</option>`).join('')}</select></label>
-      <div id="step"></div>` : '<p class="tip">La liste des dirigeants n\'est pas encore sur le serveur du club : le responsable doit d\'abord se connecter avec la nouvelle version de l\'appli.</p>'}
+      <div id="step"></div>` : '<p class="tip">La liste des dirigeants du club est vide : le responsable doit d\'abord les ajouter (Équipes → Dirigeants).</p>'}
       <button class="btn wide" id="notListed" type="button">＋ Je ne suis pas dans la liste</button>
       <p class="muted small">Déjà inscrit ? Reviens à la connexion.</p>
       <button class="btn wide link" id="back">Retour à la connexion</button>`);
@@ -369,6 +370,42 @@ const Auth = (() => {
       };
     };
     preselect(el);
+  }
+  // A new club: the activation code given by Clubbo, the name of the club, its code, and its first responsable
+  const slugOf = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30);
+  function createClubScreen() {
+    const n = lastNames();
+    const el = frame(`<p class="lead"><b>Créer mon club</b> sur Clubbo</p>
+      <label class="fld"><span>Code d'activation (remis par Clubbo)</span><input id="act" placeholder="EA-XXXX-XXXX" autocapitalize="characters" autocorrect="off" autocomplete="off"></label>
+      <label class="fld"><span>Nom du club</span><input id="cname" placeholder="ex : FC Exemple" autocomplete="organization"></label>
+      <label class="fld"><span>Code du club (pour se connecter, sans espace)</span><input id="cslug" placeholder="fc-exemple" autocapitalize="off" autocorrect="off"></label>
+      <p class="muted small">Toi, le premier responsable du club :</p>
+      ${nameFields(n.ln, n.fn)}${pwFields('Ton mot de passe')}${keepBox}
+      <button class="btn primary wide" id="go">Créer le club</button>
+      <div class="lock-links"><button class="btn wide link" id="back">Retour</button></div>
+      <p class="muted small">Pas de code d'activation ? <a href="decouvrir.html#code">Demande-le ici</a>.</p>`);
+    let slugTouched = false;
+    $('#cname', el).oninput = () => { if (!slugTouched) $('#cslug', el).value = slugOf($('#cname', el).value); };
+    $('#cslug', el).oninput = () => { slugTouched = true; };
+    $('#back', el).onclick = () => loginScreen();
+    $('#go', el).onclick = async () => {
+      const code = $('#act', el).value.trim(), name = $('#cname', el).value.trim(), slug = slugOf($('#cslug', el).value || name);
+      const ln = $('#ln', el).value.trim(), fn = $('#fn', el).value.trim();
+      if (!code) return toast('Écris le code d\'activation', 'err');
+      if (name.length < 2) return toast('Écris le nom du club', 'err');
+      if (slug.length < 3) return toast('Le code du club doit faire au moins 3 lettres', 'err');
+      if (!ln || !fn) return toast('Écris ton nom et ton prénom', 'err');
+      const pw = readNewPw(el); if (!pw) return; const keep = $('#keep', el).checked;
+      const s = { id: Store.uid(), lastName: ln.toUpperCase(), firstName: fn, role: 'Responsable du club', phone: '', email: '', notes: '', teamIds: [] };
+      try {
+        const r = await withBusy('Création du club…', async () => Cloud.createClub(code, name, slug, regPayload(s, await proof(lastKeyOf(s), pw), true)));
+        // a brand-new app on this device: the club starts empty
+        Store.reset(); Store.state.club.name = name;
+        Store.upsert('staff', s); Store.save();
+        await withBusy('Ouverture du club…', () => afterServerLogin(r, pw, keep, s.lastName, s.firstName));
+        setTimeout(() => { if (typeof Onboard !== 'undefined') Onboard.start(); }, 400);
+      } catch (e) { toast(e.message, 'err'); }
+    };
   }
   function preselect(el) {
     let id = ''; try { id = sessionStorage.getItem('join-who') || ''; } catch (e) {}
@@ -404,72 +441,10 @@ const Auth = (() => {
   }
   function forgotServer() {
     const el = frame(`<p class="lead"><b>Mot de passe oublié</b></p>
-      <p><b>Éducateur</b> : demande au responsable de réinitialiser ton mot de passe (Réglages → Comptes des dirigeants → Réinitialiser). Ensuite, touche « Première connexion » et crée un nouveau mot de passe.</p>
-      <p><b>Responsable</b> : un autre responsable du club peut le réinitialiser. Sinon, contacte Clubbo.</p>
+      <p><b>Éducateur</b> : demande au responsable de ton club de réinitialiser ton mot de passe (Réglages → Comptes des dirigeants → Réinitialiser). Ensuite, ouvre le lien d'invitation et crée un nouveau mot de passe.</p>
+      <p><b>Responsable</b> : un autre responsable de ton club peut le réinitialiser. Sinon, contacte Clubbo.</p>
       <div class="lock-links"><button class="btn wide link" id="back">Retour</button></div>`);
     $('#back', el).onclick = () => loginScreen();
-  }
-
-  /* ---------- accounts on this device only (no club server) ---------- */
-  function setupScreen() {
-    const el = frame(`<p class="lead">Première utilisation : crée le compte du responsable. Tu pourras ajouter les autres dirigeants ensuite.</p>
-      ${nameFields()}${pwFields()}${keepBox}
-      <button class="btn primary wide" id="go">Créer mon compte</button>`);
-    $('#go', el).onclick = async () => {
-      const ln = $('#ln', el).value.trim().toUpperCase(), fn = $('#fn', el).value.trim();
-      if (!ln && !fn) return toast('Écris ton nom et ton prénom', 'err');
-      const pw = readNewPw(el); if (!pw) return;
-      let s = Store.state.staff.find(x => (x.lastName || '').toUpperCase() === ln && (x.firstName || '').toLowerCase() === fn.toLowerCase());
-      if (!s) s = Store.upsert('staff', { id: Store.uid(), lastName: ln, firstName: fn, role: 'Responsable de catégorie', phone: '', email: '', notes: '', teamIds: [] });
-      await setPassword(s.id, pw, { admin: true });
-      const code = await newRecovery(), keep = $('#keep', el).checked;
-      const el2 = frame(`<p class="lead">Voici ton <b>code de secours</b>. Note-le sur papier et range-le bien : il permet de retrouver l'accès si un mot de passe est oublié.</p>
-        <p class="code">${code}</p><button class="btn primary wide" id="ok">J'ai noté le code</button>`);
-      $('#ok', el2).onclick = () => done(s.id, keep);
-    };
-  }
-  function localLoginScreen(preset) {
-    const staff = Store.state.staff.slice().sort(Store.byName);
-    const el = frame(`<label class="fld"><span>Qui es-tu ?</span><select id="who"><option value="">Choisis ton nom…</option>
-      ${staff.map(s => `<option value="${s.id}" ${s.id === preset ? 'selected' : ''}>${esc(Store.fullName(s))}${s.role ? ' · ' + esc(s.role) : ''}</option>`).join('')}</select></label>
-      <div id="step"></div>
-      <p class="muted small">Tu n'es pas dans la liste ? Demande à un responsable de t'ajouter dans Équipes → Dirigeants.</p>`);
-    const step = $('#step', el);
-    const render = () => {
-      const id = $('#who', el).value;
-      if (!id) { step.innerHTML = ''; return; }
-      if (U(id) && U(id).hash) {
-        step.innerHTML = `<label class="fld"><span>Mot de passe</span><input id="pw" type="password" autocomplete="current-password"></label>${keepBox}
-          <button class="btn primary wide" id="go">Se connecter</button><button class="btn wide link" id="forgot">Mot de passe oublié ?</button>`;
-        const go = async () => {
-          if (Date.now() < lockedUntil) return toast(`Trop d'essais : attends ${Math.ceil((lockedUntil - Date.now()) / 1000)} secondes`, 'err');
-          if (await check(id, $('#pw', el).value)) return done(id, $('#keep', el).checked);
-          fails++; if (fails >= 5) { lockedUntil = Date.now() + 30000; fails = 0; }
-          toast('Mot de passe incorrect', 'err'); $('#pw', el).select();
-        };
-        $('#go', el).onclick = go; $('#pw', el).onkeydown = e => { if (e.key === 'Enter') go(); };
-        $('#forgot', el).onclick = () => forgotLocal(id);
-        setTimeout(() => $('#pw', el).focus(), 50);
-      } else {
-        step.innerHTML = `<p class="tip">Première connexion : choisis ton mot de passe. Garde-le pour toi.</p>${pwFields('Nouveau mot de passe')}${keepBox}
-          <button class="btn primary wide" id="go">Créer mon mot de passe</button>`;
-        $('#go', el).onclick = async () => { const pw = readNewPw(el); if (!pw) return; await setPassword(id, pw); done(id, $('#keep', el).checked); };
-      }
-    };
-    $('#who', el).onchange = render; render();
-  }
-  function forgotLocal(id) {
-    const s = Store.get('staff', id);
-    const el = frame(`<p class="lead">${esc(Store.fullName(s))} : demande à un responsable de réinitialiser ton mot de passe (Réglages → Comptes des dirigeants). Il pourra aussi utiliser le code de secours ici.</p>
-      <label class="fld"><span>Code de secours</span><input id="code" autocapitalize="characters" placeholder="XXXXX-XXXXX"></label>
-      ${pwFields('Nouveau mot de passe')}
-      <button class="btn primary wide" id="go">Changer le mot de passe</button><button class="btn wide link" id="back">Retour</button>`);
-    $('#back', el).onclick = () => localLoginScreen(id);
-    $('#go', el).onclick = async () => {
-      if (!(await checkRecovery($('#code', el).value))) return toast('Code de secours incorrect', 'err');
-      const pw = readNewPw(el); if (!pw) return;
-      await setPassword(id, pw); toast('Mot de passe changé'); done(id, false);
-    };
   }
 
   function gate(opts = {}) {
@@ -482,22 +457,21 @@ const Auth = (() => {
         if (restore()) { res(); return; }
       }
       resolveGate = res;
+      const want = AppCfg.fixed ? '' : (location.hash.match(/^#(demo|creer)$/) || [])[1];
+      if (want) history.replaceState(null, '', location.pathname + location.search);
       if (s && s.token && Store.get('staff', s.staff_id) && needsTeams(s.staff_id)) teamsScreen(s.staff_id, !s.temp);
-      else if (Cloud.canLogin()) { if (opts.joined) pickScreen(); else loginScreen(); }
-      else if (!hasAccounts()) setupScreen(); else localLoginScreen();
-      if (!Help.tourSeen() && !opts.joined) Help.tour();
+      else if (opts.joined) pickScreen(); else if (want === 'creer') createClubScreen(); else loginScreen();
+      if (want === 'demo' && !Store.state.staff.length) setTimeout(() => Demo.start(), 200);
+      else if (!Help.tourSeen() && !opts.joined && !want) Help.tour();
     });
   }
 
-  // Logged in with an account kept only on this device while the club has a server: log in again on the server
-  const localOnly = () => !!(user && !sess() && Cloud.canLogin());
+  const localOnly = () => false;
   function connectServer() {
-    const wasAdmin = isAdmin();
     if (user) saveNames(user.lastName, user.firstName);
     ss.del(KEY); ss.del(TMP); try { localStorage.removeItem(KEY); } catch (e) {}
     user = null; App.refreshChrome();
     gate().then(() => App.route());
-    if (wasAdmin) loginScreen(); else firstScreen();
   }
 
   /* ---------- settings section ---------- */

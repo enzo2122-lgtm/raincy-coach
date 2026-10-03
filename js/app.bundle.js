@@ -1,4 +1,152 @@
 /* Fichier généré par build.js : ne pas modifier ici, modifier les fichiers de js/ puis relancer « node build.js ». */
+/* ===== appcfg.js ===== */
+/* AppCfg: which app this is. The same code makes Clubbo (every club) and the app of one club (js/config.js « club »,
+   e.g. FA Le Raincy). From js/config.js: the app's name, the names of its memory on the phone (so a club's app keeps the data
+   its phones already have), its default crest, and the club settings filled once when they are missing (« defaults »).
+   Loaded first (app, family pages and service worker). */
+var AppCfg = (() => {
+  const c = typeof CLUB_SERVER !== 'undefined' && CLUB_SERVER ? CLUB_SERVER : {};
+  const pre = c.store || 'ea';
+  return {
+    name: c.app || 'Clubbo',            // shown to the users (title, login screen, notifications…)
+    club: c.club || '',                 // the code of the club on the Clubbo server, for the app of one club
+    fixed: !!c.club,                    // one club: no club code to type, no « Créer mon club », no demo, no owner's space
+    db: c.db || 'ea-club-manager',      // the database of the app on the phone
+    key: s => pre + '-' + s,            // the other names of its memory on the phone (« ea-msgs », « raincy-msgs »…)
+    crest: c.crest || 'icons/ea-logo.png',
+    defaults: c.defaults || {},
+  };
+})();
+
+;
+/* ===== sport.js ===== */
+/* Sport: what changes from one sport to another. The club chooses its sport when it is created (club.sport);
+   the app then takes from here the playing formats and their courts, the positions, the age categories, the way to score,
+   the periods of a match, the actions of the live match and the words (but / panier / essai, terrain / salle…).
+   Football is the default: a club created before the choice stays a football club. */
+var Sport = (() => {
+  // [code, name, abbreviation, type]: the first one of each type is the type itself
+  const SPORTS = {
+    foot: {
+      label: 'Football', icon: '⚽', ball: '⚽', place: 'terrain', catPrefix: 'U',
+      fed: ['FFF', 'Fédération Française de Football', 'https://epreuves.fff.fr/', 'epreuves.fff.fr'],
+      formats: [['11', 'Foot à 11', 11], ['8', 'Foot à 8', 8], ['5', 'Foot à 5', 5]],
+      formatOfCat: c => /^U(6|7|8|9)$/.test(c) ? '5' : /^U(10|11|12|13)$/.test(c) ? '8' : '11',
+      cats: ['U6', 'U7', 'U8', 'U9', 'U10', 'U11', 'U12', 'U13', 'U14', 'U15', 'U16', 'U17', 'U18', 'U19', 'Seniors', 'Vétérans'],
+      posts: [['GB', 'Gardien', 'G', 'GB'],
+        ['DEF', 'Défenseur', 'DEF', 'DEF'], ['DC', 'Défenseur central', 'DC', 'DEF'], ['LD', 'Latéral droit', 'LD', 'DEF'], ['LG', 'Latéral gauche', 'LG', 'DEF'],
+        ['MIL', 'Milieu', 'MIL', 'MIL'], ['MDC', 'Milieu défensif', 'MDC', 'MIL'], ['MC', 'Milieu relayeur', 'MC', 'MIL'], ['MOC', 'Milieu offensif', 'MOC', 'MIL'], ['MD', 'Milieu droit', 'MD', 'MIL'], ['MG', 'Milieu gauche', 'MG', 'MIL'],
+        ['ATT', 'Attaquant', 'ATT', 'ATT'], ['AD', 'Ailier droit', 'AD', 'ATT'], ['AG', 'Ailier gauche', 'AG', 'ATT'], ['SA', 'Second attaquant', 'SA', 'ATT'], ['BU', 'Avant-centre', 'BU', 'ATT']],
+      lines: [['GB', 'Gardiens'], ['DEF', 'Défenseurs'], ['MIL', 'Milieux'], ['ATT', 'Attaquants']],
+      gk: 'Gardien', periods: 2, periodName: 'mi-temps', periodWord: 'période', periodLen: f => f === '5' ? 20 : f === '8' ? 30 : 45,
+      unit: ['but', 'buts'], scorer: ['Buteur', 'Buteurs'], assist: 'Passe décisive',
+      score: [{ k: 'goal', ic: '⚽', l: 'But pour nous', pts: 1, us: 1 }, { k: 'against', ic: '🥅', l: 'But encaissé', pts: 1 }],
+      extra: [['yellow', '🟨', 'Carton jaune', '#ca8a04'], ['red', '🟥', 'Carton rouge', '#dc2626', 'out']],
+      arrows: { course: 'Course', conduite: 'Conduite', passe: 'Passe', tir: 'Tir', pressing: 'Pressing', bascule: 'Bascule' },
+      ai: 'football', school: 'École de foot',
+    },
+    basket: {
+      label: 'Basket', icon: '🏀', ball: '🏀', place: 'salle', catPrefix: 'U',
+      fed: ['FFBB', 'Fédération Française de Basket-Ball', 'https://competitions.ffbb.com/', 'competitions.ffbb.com'],
+      formats: [['b5', 'Basket 5 contre 5', 5], ['b3', 'Basket 3x3', 3]],
+      formatOfCat: () => 'b5',
+      cats: ['U7', 'U9', 'U11', 'U13', 'U15', 'U17', 'U18', 'U20', 'Seniors', 'Loisirs'],
+      posts: [['MEN', 'Meneur', '1', 'MEN'], ['ARR', 'Arrière', '2', 'ARR'], ['AIL', 'Ailier', '3', 'AIL'], ['AF', 'Ailier fort', '4', 'AF'], ['PIV', 'Pivot', '5', 'PIV']],
+      lines: [['MEN', 'Meneurs'], ['ARR', 'Arrières'], ['AIL', 'Ailiers'], ['AF', 'Ailiers forts'], ['PIV', 'Pivots']],
+      gk: '', periods: 4, periodName: 'quart-temps', periodWord: 'quart-temps', periodLen: f => f === 'b3' ? 10 : 10,
+      unit: ['point', 'points'], scorer: ['Marqueur', 'Marqueurs'], assist: 'Passe décisive',
+      score: [{ k: 'p2', ic: '🏀', l: 'Panier à 2 pts', pts: 2, us: 1 }, { k: 'p3', ic: '🎯', l: 'Panier à 3 pts', pts: 3, us: 1 }, { k: 'p1', ic: '🆓', l: 'Lancer franc', pts: 1, us: 1 },
+        { k: 'a2', ic: '🔻', l: '2 pts encaissés', pts: 2 }, { k: 'a3', ic: '🔻', l: '3 pts encaissés', pts: 3 }, { k: 'a1', ic: '🔻', l: '1 pt encaissé', pts: 1 }],
+      extra: [['reb', '🙌', 'Rebond', '#0d9488'], ['stl', '🧤', 'Interception', '#0891b2'], ['foul', '✋', 'Faute', '#ca8a04']],
+      arrows: { course: 'Déplacement', conduite: 'Dribble', passe: 'Passe', tir: 'Tir', pressing: 'Défense', bascule: 'Écran' },
+      ai: 'basket-ball', school: 'Mini-basket', catOf: a => a >= 21 ? 'Seniors' : a >= 18 ? 'U20' : a >= 17 ? 'U18' : 'U' + Math.max(7, a % 2 ? a : a + 1),
+    },
+    hand: {
+      label: 'Handball', icon: '🤾', ball: '🤾', place: 'salle', catPrefix: 'U',
+      fed: ['FFHB', 'Fédération Française de Handball', 'https://www.ffhandball.fr/competitions/', 'ffhandball.fr'],
+      formats: [['h7', 'Hand à 7', 7]],
+      formatOfCat: () => 'h7',
+      cats: ['U7', 'U9', 'U11', 'U13', 'U15', 'U17', 'U18', 'Seniors', 'Loisirs'],
+      posts: [['GB', 'Gardien', 'G', 'GB'], ['AIL', 'Ailier', 'AIL', 'AIL'], ['AIG', 'Ailier gauche', 'AG', 'AIL'], ['AID', 'Ailier droit', 'AD', 'AIL'],
+        ['ARR', 'Arrière', 'ARR', 'ARR'], ['ARG', 'Arrière gauche', 'ArG', 'ARR'], ['ARD', 'Arrière droit', 'ArD', 'ARR'], ['DC', 'Demi-centre', 'DC', 'ARR'], ['PIV', 'Pivot', 'PIV', 'PIV']],
+      lines: [['GB', 'Gardiens'], ['AIL', 'Ailiers'], ['ARR', 'Arrières et demi-centres'], ['PIV', 'Pivots']],
+      gk: 'Gardien', periods: 2, periodName: 'mi-temps', periodWord: 'période', periodLen: () => 30,
+      unit: ['but', 'buts'], scorer: ['Buteur', 'Buteurs'], assist: 'Passe décisive',
+      score: [{ k: 'goal', ic: '🤾', l: 'But pour nous', pts: 1, us: 1 }, { k: 'against', ic: '🥅', l: 'But encaissé', pts: 1 }],
+      extra: [['save', '🧤', 'Arrêt du gardien', '#0d9488'], ['yellow', '🟨', 'Avertissement', '#ca8a04'], ['two', '⏱️', 'Exclusion 2 min', '#ea580c'], ['red', '🟥', 'Disqualification', '#dc2626', 'out']],
+      arrows: { course: 'Course', conduite: 'Dribble', passe: 'Passe', tir: 'Tir', pressing: 'Défense', bascule: 'Croisé' },
+      ai: 'handball', school: 'École de hand', catOf: a => a >= 18 ? 'Seniors' : a === 17 ? 'U18' : 'U' + Math.max(7, a % 2 ? a : a + 1),
+    },
+    rugby: {
+      label: 'Rugby', icon: '🏉', ball: '🏉', place: 'terrain', catPrefix: 'M',
+      fed: ['FFR', 'Fédération Française de Rugby', 'https://www.ffr.fr/competitions', 'ffr.fr'],
+      formats: [['r15', 'Rugby à XV', 15], ['r10', 'Rugby à X (école)', 10], ['r7', 'Rugby à 7', 7]],
+      formatOfCat: c => /^M(6|8|10|12)$/.test(c) ? 'r10' : 'r15',
+      cats: ['M6', 'M8', 'M10', 'M12', 'M14', 'M16', 'M19', 'Seniors', 'Vétérans'],
+      posts: [['PL', 'Première ligne', '1L', 'PL'], ['PIL', 'Pilier', 'PIL', 'PL'], ['TAL', 'Talonneur', 'TAL', 'PL'],
+        ['DL', 'Deuxième ligne', '2L', 'DL'], ['TL', 'Troisième ligne', '3L', 'TL'], ['FL', 'Troisième ligne aile', '3LA', 'TL'], ['N8', 'Numéro 8', 'N8', 'TL'],
+        ['DEM', 'Demi', 'DEM', 'DEM'], ['DM', 'Demi de mêlée', 'DM', 'DEM'], ['DO', 'Demi d\'ouverture', 'DO', 'DEM'],
+        ['TQ', 'Trois-quarts', '3/4', 'TQ'], ['CEN', 'Centre', 'CEN', 'TQ'], ['AIL', 'Ailier', 'AIL', 'TQ'], ['ARR', 'Arrière', 'ARR', 'ARR']],
+      lines: [['PL', 'Première ligne'], ['DL', 'Deuxième ligne'], ['TL', 'Troisième ligne'], ['DEM', 'Demis'], ['TQ', 'Trois-quarts'], ['ARR', 'Arrières']],
+      gk: '', periods: 2, periodName: 'mi-temps', periodWord: 'période', periodLen: f => f === 'r7' ? 7 : f === 'r10' ? 15 : 40,
+      unit: ['point', 'points'], scorer: ['Marqueur', 'Marqueurs'], assist: 'Dernière passe',
+      score: [{ k: 'try', ic: '🏉', l: 'Essai', pts: 5, us: 1 }, { k: 'conv', ic: '🥅', l: 'Transformation', pts: 2, us: 1 }, { k: 'pen', ic: '🎯', l: 'Pénalité', pts: 3, us: 1 }, { k: 'drop', ic: '🦶', l: 'Drop', pts: 3, us: 1 },
+        { k: 'atry', ic: '🔻', l: 'Essai encaissé', pts: 5 }, { k: 'aconv', ic: '🔻', l: 'Transfo. encaissée', pts: 2 }, { k: 'apen', ic: '🔻', l: 'Pénalité / drop encaissé', pts: 3 }],
+      extra: [['yellow', '🟨', 'Carton jaune', '#ca8a04'], ['red', '🟥', 'Carton rouge', '#dc2626', 'out']],
+      arrows: { course: 'Course', conduite: 'Course avec ballon', passe: 'Passe', tir: 'Jeu au pied', pressing: 'Plaquage / montée', bascule: 'Soutien' },
+      ai: 'rugby', school: 'École de rugby', catOf: a => a >= 20 ? 'Seniors' : a >= 17 ? 'M19' : 'M' + Math.max(6, a % 2 ? a + 1 : a),
+    },
+    volley: {
+      label: 'Volley', icon: '🏐', ball: '🏐', place: 'salle', catPrefix: 'M',
+      fed: ['FFVolley', 'Fédération Française de Volley', 'https://www.ffvbbeach.org/ffvbapp/resu/', 'ffvbbeach.org'],
+      formats: [['v6', 'Volley 6 contre 6', 6], ['v4', 'Volley 4 contre 4', 4]],
+      formatOfCat: c => /^M(9|11|13)$/.test(c) ? 'v4' : 'v6',
+      cats: ['M9', 'M11', 'M13', 'M15', 'M18', 'M21', 'Seniors', 'Loisirs'],
+      posts: [['PAS', 'Passeur', 'PAS', 'PAS'], ['OPP', 'Pointu (opposé)', 'OPP', 'OPP'], ['R4', 'Réceptionneur-attaquant', 'R4', 'R4'], ['CEN', 'Central', 'CEN', 'CEN'], ['LIB', 'Libéro', 'LIB', 'LIB']],
+      lines: [['PAS', 'Passeurs'], ['OPP', 'Pointus'], ['R4', 'Réceptionneurs-attaquants'], ['CEN', 'Centraux'], ['LIB', 'Libéros']],
+      gk: '', periods: 5, periodName: 'set', periodWord: 'set', sets: true, setsToWin: f => f === 'v4' ? 2 : 3, setPoints: (n, f) => (n === (f === 'v4' ? 3 : 5) ? 15 : 25), periodLen: () => 0,
+      unit: ['point', 'points'], scorer: ['Marqueur', 'Marqueurs'], assist: 'Passe',
+      score: [{ k: 'pt', ic: '🏐', l: 'Point pour nous', pts: 1, us: 1 }, { k: 'apt', ic: '🔻', l: 'Point pour eux', pts: 1 }],
+      extra: [['ace', '🎯', 'Ace', '#0d9488'], ['block', '🧱', 'Contre', '#0891b2'], ['err', '❌', 'Faute', '#ca8a04']],
+      arrows: { course: 'Déplacement', conduite: 'Course', passe: 'Passe', tir: 'Attaque', pressing: 'Contre', bascule: 'Rotation' },
+      ai: 'volley-ball', school: 'Baby-volley', catOf: a => a >= 22 ? 'Seniors' : a >= 19 ? 'M21' : a >= 16 ? 'M18' : 'M' + Math.max(9, a % 2 ? a : a + 1),
+    },
+  };
+  const KEYS = Object.keys(SPORTS);
+  const id = () => { const s = (typeof Store !== 'undefined' && Store.state && Store.state.club && Store.state.club.sport) || (typeof window !== 'undefined' && window.CLUB_SPORT) || 'foot'; return SPORTS[s] ? s : 'foot'; };
+  const cur = () => SPORTS[id()];
+  // the format of a team, of a schema: the sport is known by its format (old football schemas have no prefix)
+  const sportOfFormat = f => KEYS.find(k => SPORTS[k].formats.some(x => x[0] === f)) || 'foot';
+  const formatLabel = f => { for (const k of KEYS) { const x = SPORTS[k].formats.find(y => y[0] === f); if (x) return x[1]; } return f === 'zone' ? 'Zone libre' : f; };
+  const players = f => { for (const k of KEYS) { const x = SPORTS[k].formats.find(y => y[0] === f); if (x) return x[2]; } return 11; };
+  const defFormat = () => cur().formats[0][0];
+  const isFoot = () => id() === 'foot';
+  const fed = () => cur().fed || SPORTS.foot.fed;
+  // live references used by the modules (People, Board…): filled again when the club's sport changes
+  const POSTS = [], TYPES = [], LINES = [];
+  function apply() {
+    const s = cur();
+    POSTS.length = 0; POSTS.push(...s.posts);
+    TYPES.length = 0; TYPES.push(...s.posts.filter(p => p[0] === p[3]).map(p => [p[0], p[1]]));
+    LINES.length = 0; LINES.push(...s.lines, ['', 'Poste non renseigné']);
+    if (typeof Board !== 'undefined' && Board.ARROWS) Object.entries(s.arrows).forEach(([k, l]) => { if (Board.ARROWS[k]) Board.ARROWS[k].label = l; });
+    if (typeof document !== 'undefined') document.documentElement.dataset.sport = id();
+  }
+  // the scoring actions and the other actions of the live match
+  const scoreEv = () => cur().score;
+  const isScore = k => KEYS.some(s => SPORTS[s].score.some(e => e.k === k));
+  const scoreOf = k => { for (const s of KEYS) { const e = SPORTS[s].score.find(x => x.k === k); if (e) return e; } return null; };
+  // the words of the sport: W().Units (« Buts » / « Points »), W().Scorers (« Buteurs » / « Marqueurs »)…
+  const cap = x => x[0].toUpperCase() + x.slice(1);
+  const W = () => { const s = cur(); return { units: s.unit[1], Units: cap(s.unit[1]), unit: s.unit[0], scorers: s.scorer[1].toLowerCase(), Scorers: s.scorer[1], Scorer: s.scorer[0], icon: s.icon, assist: s.assist, Assists: s.assist === 'Passe' ? 'Passes' : s.assist === 'Dernière passe' ? 'Dernières passes' : 'Passes déc.', place: s.place }; };
+  // the points of the table: win / draw / loss of each sport
+  const leaguePts = (V, N, D) => ({ basket: V * 2 + D, hand: V * 3 + N * 2 + D, rugby: V * 4 + N * 2, volley: V * 3 })[id()] ?? V * 3 + N;
+  const word = (n, w = cur().unit) => `${n} ${n > 1 ? w[1] : w[0]}`;
+  return { W, leaguePts, SPORTS, KEYS, id, cur, apply, isFoot, fed, sportOfFormat, formatLabel, players, defFormat, POSTS, TYPES, LINES, scoreEv, isScore, scoreOf, word };
+})();
+Sport.apply();
+
+;
 /* ===== icons.js ===== */
 /* Line icons (24×24, stroke = currentColor). */
 var I = (() => {
@@ -68,6 +216,14 @@ var Board = (() => {
     '11': { L: 105, W: 68, box: [16.5, 40.32], six: [5.5, 18.32], spot: 11, circle: 9.15, goal: 7.32, label: 'Foot à 11' },
     '8':  { L: 64,  W: 48, box: [13, 26],      six: null,         spot: 9,  circle: 6,    goal: 6,    label: 'Foot à 8' },
     '5':  { L: 35,  W: 25, box: [6, 12],       six: null,         spot: 6,  circle: 4,    goal: 4,    label: 'Foot à 5' },
+    b5:  { kind: 'basket', L: 28, W: 15, goal: 1, label: 'Basket 5 contre 5' },
+    b3:  { kind: 'basket', half: true, L: 11, W: 15, goal: 1, label: 'Basket 3x3' },
+    h7:  { kind: 'hand', L: 40, W: 20, goal: 3, label: 'Hand à 7' },
+    r15: { kind: 'rugby', ig: 7, L: 114, W: 70, goal: 5.6, label: 'Rugby à XV' },
+    r10: { kind: 'rugby', ig: 5, L: 70, W: 40, goal: 5.6, label: 'Rugby à X (école)' },
+    r7:  { kind: 'rugby', ig: 7, L: 114, W: 70, goal: 5.6, label: 'Rugby à 7' },
+    v6:  { kind: 'volley', free: 3, attack: 3, L: 24, W: 15, goal: 1, label: 'Volley 6 contre 6' },
+    v4:  { kind: 'volley', free: 2, attack: 0, L: 16, W: 10, goal: 1, label: 'Volley 4 contre 4' },
   };
   const ARROWS = {
     course:   { label: 'Course',   color: '#ffffff', w: .2 },
@@ -98,7 +254,8 @@ var Board = (() => {
   function dims(f) {
     if (f.format === 'zone') return { L: f.w || 30, W: f.h || 20 };
     if (f.format === 'bg') return { L: f.w || 100, W: f.h || 60 };
-    return { L: PITCH[f.format].L, W: PITCH[f.format].W };
+    const P = PITCH[f.format] || PITCH['11'];
+    return { L: P.L, W: P.W };
   }
   function extents(f) {
     const { L, W } = dims(f);
@@ -244,8 +401,73 @@ var Board = (() => {
     ctx.save(); ctx.globalCompositeOperation = 'multiply'; ctx.globalAlpha = tr.opacity == null ? .7 : tr.opacity; ctx.drawImage(img, ...cam.rect(0, 0, L, FW)); ctx.restore();
   }
   const preloadBackgrounds = list => Promise.all((list || []).map(ensureBg));
+  /* ---------- the courts of the other sports (basket, hand, rugby, volley) ---------- */
+  function drawCourt(ctx, cam, sc, W, H) {
+    const f = sc.field, { L, W: FW } = dims(f), s = cam.s, P = PITCH[f.format];
+    const line = (x1, y1, x2, y2, dash) => { ctx.setLineDash(dash ? dash.map(d => d * s) : []); ctx.beginPath(); ctx.moveTo(...cam.toS([x1, y1])); ctx.lineTo(...cam.toS([x2, y2])); ctx.stroke(); ctx.setLineDash([]); };
+    const arc = (x, y, r, a0, a1, dash) => { ctx.setLineDash(dash ? dash.map(d => d * s) : []); ctx.beginPath(); for (let i = 0; i <= 32; i++) { const a = a0 + (a1 - a0) * i / 32, p = cam.toS([x + r * Math.cos(a), y + r * Math.sin(a)]); i ? ctx.lineTo(...p) : ctx.moveTo(...p); } ctx.stroke(); ctx.setLineDash([]); };
+    const rect = (x, y, w, h, fill) => { const r = cam.rect(x, y, w, h); if (fill) { ctx.fillStyle = fill; ctx.fillRect(...r); } else ctx.strokeRect(...r); };
+    const lw = Math.max(1, .1 * s), white = 'rgba(255,255,255,.9)', cy = FW / 2;
+    if (P.kind === 'basket') {
+      ctx.fillStyle = '#7a4a24'; ctx.fillRect(0, 0, W, H); rect(0, 0, L, FW, '#c98c55');
+      for (let x = 0; x < L; x += 1.2) rect(x, 0, .6, FW, 'rgba(255,255,255,.04)');
+      ctx.strokeStyle = white; ctx.lineWidth = lw; rect(0, 0, L, FW);
+      const ends = P.half ? [[L, -1]] : [[0, 1], [L, -1]];
+      if (!P.half) { line(L / 2, 0, L / 2, FW); arc(L / 2, cy, 1.8, 0, Math.PI * 2); }
+      ends.forEach(([x0, d]) => {
+        rect(d > 0 ? x0 : x0 - 5.8, cy - 2.45, 5.8, 4.9, 'rgba(140,16,36,.35)'); ctx.strokeStyle = white; rect(d > 0 ? x0 : x0 - 5.8, cy - 2.45, 5.8, 4.9);
+        arc(x0 + d * 5.8, cy, 1.8, d > 0 ? -Math.PI / 2 : Math.PI / 2, d > 0 ? Math.PI / 2 : Math.PI * 1.5);
+        const bx = x0 + d * 1.575, k = Math.sqrt(6.75 * 6.75 - (cy - .9) * (cy - .9)), ang = Math.asin((cy - .9) / 6.75);
+        line(x0, .9, bx + d * k, .9); line(x0, FW - .9, bx + d * k, FW - .9);
+        if (d > 0) arc(bx, cy, 6.75, -ang, ang); else arc(bx, cy, 6.75, Math.PI - ang, Math.PI + ang);
+        line(x0 + d * 1.2, cy - .9, x0 + d * 1.2, cy + .9);
+        ctx.strokeStyle = '#ff7a1a'; arc(bx, cy, .23, 0, Math.PI * 2); ctx.strokeStyle = white;
+      });
+      return;
+    }
+    if (P.kind === 'hand') {
+      ctx.fillStyle = '#183a6b'; ctx.fillRect(0, 0, W, H); rect(0, 0, L, FW, '#2f6fb3');
+      ctx.strokeStyle = white; ctx.lineWidth = lw; rect(0, 0, L, FW); line(L / 2, 0, L / 2, FW);
+      ctx.save(); ctx.beginPath(); ctx.rect(...cam.rect(0, 0, L, FW)); ctx.clip();
+      [[0, 1], [L, -1]].forEach(([x0, d]) => {
+        const zone = (r, dash) => { const a = d > 0 ? [-Math.PI / 2, 0] : [Math.PI, Math.PI * 1.5], b = d > 0 ? [0, Math.PI / 2] : [Math.PI / 2, Math.PI];
+          arc(x0, cy - 1.5, r, a[0], a[1], dash); arc(x0, cy + 1.5, r, b[0], b[1], dash); line(x0 + d * r, cy - 1.5, x0 + d * r, cy + 1.5, dash); };
+        ctx.fillStyle = 'rgba(226,194,125,.35)'; ctx.beginPath(); ctx.moveTo(...cam.toS([x0, cy - 7.5]));
+        for (let i = 0; i <= 16; i++) { const a = -Math.PI / 2 + Math.PI / 2 * i / 16; ctx.lineTo(...cam.toS([x0 + d * 6 * Math.cos(a), cy - 1.5 + 6 * Math.sin(a)])); }
+        for (let i = 0; i <= 16; i++) { const a = Math.PI / 2 * i / 16; ctx.lineTo(...cam.toS([x0 + d * 6 * Math.cos(a), cy + 1.5 + 6 * Math.sin(a)])); }
+        ctx.closePath(); ctx.fill();
+        zone(6); zone(9, [.4, .3]); line(x0 + d * 7, cy - .5, x0 + d * 7, cy + .5);
+        const g = cam.rect(d > 0 ? x0 - 1 : x0, cy - 1.5, 1, 3); ctx.fillStyle = 'rgba(255,255,255,.3)'; ctx.fillRect(...g); ctx.strokeRect(...g);
+      });
+      ctx.restore(); ctx.strokeStyle = white; ctx.lineWidth = lw;
+      [[0, 1], [L, -1]].forEach(([x0, d]) => { const g = cam.rect(d > 0 ? x0 - 1 : x0, cy - 1.5, 1, 3); ctx.fillStyle = 'rgba(255,255,255,.3)'; ctx.fillRect(...g); ctx.strokeRect(...g); });
+      return;
+    }
+    if (P.kind === 'rugby') {
+      ctx.fillStyle = '#1f5137'; ctx.fillRect(0, 0, W, H); rect(0, 0, L, FW, '#2c6646');
+      const ig = P.ig, F = L - 2 * ig; rect(0, 0, ig, FW, '#275c3f'); rect(L - ig, 0, ig, FW, '#275c3f');
+      ctx.strokeStyle = white; ctx.lineWidth = lw; rect(0, 0, L, FW);
+      line(ig, 0, ig, FW); line(L - ig, 0, L - ig, FW); line(L / 2, 0, L / 2, FW);
+      if (F >= 90) { line(ig + 22, 0, ig + 22, FW); line(L - ig - 22, 0, L - ig - 22, FW); }
+      line(L / 2 - 10, 0, L / 2 - 10, FW, [1.2, 1]); line(L / 2 + 10, 0, L / 2 + 10, FW, [1.2, 1]);
+      line(ig + 5, 0, ig + 5, FW, [1.2, 1.6]); line(L - ig - 5, 0, L - ig - 5, FW, [1.2, 1.6]);
+      if (FW >= 50) [5, 15, FW - 15, FW - 5].forEach(y => line(ig, y, L - ig, y, [1, 4]));
+      [[ig, 1], [L - ig, -1]].forEach(([x0]) => { ctx.lineWidth = lw * 2.4; line(x0, cy - 2.8, x0, cy + 2.8); ctx.lineWidth = lw;
+        ctx.fillStyle = '#fff'; [cy - 2.8, cy + 2.8].forEach(y => { ctx.beginPath(); ctx.arc(...cam.toS([x0, y]), Math.max(2, .35 * s), 0, Math.PI * 2); ctx.fill(); }); });
+      return;
+    }
+    if (P.kind === 'volley') {
+      ctx.fillStyle = '#244f8a'; ctx.fillRect(0, 0, W, H); rect(0, 0, L, FW, '#2f63a8');
+      const m = P.free, cl = L - 2 * m, cw = FW - 2 * m; rect(m, m, cl, cw, '#d9824a');
+      ctx.strokeStyle = white; ctx.lineWidth = lw; rect(m, m, cl, cw);
+      if (P.attack) { line(L / 2 - P.attack, m, L / 2 - P.attack, m + cw); line(L / 2 + P.attack, m, L / 2 + P.attack, m + cw); }
+      ctx.lineWidth = lw * 3; ctx.strokeStyle = '#f8fafc'; line(L / 2, m - .6, L / 2, m + cw + .6); ctx.lineWidth = lw;
+      ctx.fillStyle = '#111827'; [m - .9, m + cw + .9].forEach(y => { ctx.beginPath(); ctx.arc(...cam.toS([L / 2, y]), Math.max(2, .25 * s), 0, Math.PI * 2); ctx.fill(); });
+    }
+  }
   function drawPitch(ctx, cam, sc, W, H) {
     const f = sc.field, { L, W: FW } = dims(f), s = cam.s, P = PITCH[f.format];
+    if (P && P.kind) return drawCourt(ctx, cam, sc, W, H);
     if (f.format === 'bg') {
       ctx.fillStyle = '#10182e'; ctx.fillRect(0, 0, W, H);
       const img = BG.get(f.bgId), rc = cam.rect(0, 0, L, FW);
@@ -257,10 +479,13 @@ var Board = (() => {
       ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 1; ctx.strokeRect(...rc);
       return;
     }
-    ctx.fillStyle = '#1f5137'; ctx.fillRect(0, 0, W, H);
-    ctx.fillStyle = '#2c6646'; ctx.fillRect(...cam.rect(0, 0, L, FW));
+    // a free zone of an indoor sport: the floor of the hall (wood for basket, blue for hand, orange for volley)
+    const floor = typeof Sport !== 'undefined' && !P ? ({ basket: ['#7a4a24', '#c98c55', '#c4864f'], hand: ['#183a6b', '#2f6fb3', '#2b68a8'], volley: ['#244f8a', '#d9824a', '#d27c45'] })[Sport.id()] : null;
+    const [c0, c1, c2] = floor || ['#1f5137', '#2c6646', '#306d4b'];
+    ctx.fillStyle = c0; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = c1; ctx.fillRect(...cam.rect(0, 0, L, FW));
     const sw = L > 50 ? 5.25 : 3.2;
-    ctx.fillStyle = '#306d4b';
+    ctx.fillStyle = c2;
     for (let x = 0; x < L; x += sw * 2) ctx.fillRect(...cam.rect(x, 0, Math.min(sw, L - x), FW));
     const ov = sc.overlays || {};
     if (ov.phases) drawPhases(ctx, cam, sc);
@@ -456,7 +681,7 @@ var Board = (() => {
 /* Store: the whole club lives in one object, saved in IndexedDB on the device.
    Sharing between coaches goes through export/import of a .json file (AirDrop, WhatsApp, mail). */
 var Store = (() => {
-  const DB = 'raincy-coach', OS = 'kv', KEY = 'state';
+  const DB = AppCfg.db, OS = 'kv', KEY = 'state';
   const COLS = ['teams', 'players', 'staff', 'schemas', 'trainings', 'matches', 'reports'];
   let state = null, saveTimer = null;
   const listeners = new Set();
@@ -497,7 +722,8 @@ var Store = (() => {
   }
 
   function blank() {
-    return { version: 2, club: { name: 'FA Le Raincy', homeBib: 'bordeaux', awayBib: 'blanc', brand: 1 }, ui: {}, teams: [], players: [], staff: [], schemas: [], trainings: [], matches: [] };
+    return { version: 2, club: Object.assign({ name: '', homeBib: 'bleu', awayBib: 'blanc', brand: 1 }, AppCfg.defaults), // the app of one club starts with its name, slogan, town…
+      ui: {}, teams: [], players: [], staff: [], schemas: [], trainings: [], matches: [], reports: [] };
   }
   // v1 kept players inside each team; v2 keeps one club-wide list where a player can belong to several categories.
   function migrate() {
@@ -597,8 +823,8 @@ var Store = (() => {
   }
   function exportSchema(s) { return pack({ schemas: [s] }); }
   function importText(txt) {
-    let obj; try { obj = JSON.parse(txt); } catch (e) { throw new Error("Ce fichier n'est pas un fichier Raincy Coach."); }
-    if (!obj || obj.app !== 'raincy-coach' || !obj.data) throw new Error("Ce fichier n'est pas un fichier Raincy Coach.");
+    let obj; try { obj = JSON.parse(txt); } catch (e) { throw new Error("Ce fichier n'est pas un fichier de l'appli."); }
+    if (!obj || obj.app !== 'raincy-coach' || !obj.data) throw new Error("Ce fichier n'est pas un fichier de l'appli.");
     const res = { added: 0, updated: 0, kept: 0, byCol: {} };
     const count = c => res.byCol[c] = (res.byCol[c] || 0) + 1;
     COLS.forEach(c => (obj.data[c] || []).forEach(it => {
@@ -689,6 +915,23 @@ var Formations = {
     '2-3-2': [['G', .03, .5, 1], ['4', .16, .33], ['5', .16, .67], ['3', .3, .15], ['6', .28, .5], ['2', .3, .85], ['9', .45, .35], ['10', .45, .65]],
     '3-1-3': [['G', .03, .5, 1], ['3', .18, .2], ['4', .15, .5], ['2', .18, .8], ['6', .28, .5], ['7', .42, .15], ['9', .46, .5], ['11', .42, .85]],
   },
+  b5: {
+    '1-2-2': [['1', .62, .5, 0, ['MEN']], ['2', .72, .18, 0, ['ARR']], ['3', .72, .82, 0, ['AIL']], ['4', .86, .3, 0, ['AF']], ['5', .88, .66, 0, ['PIV']]],
+    '2-1-2': [['1', .64, .35, 0, ['MEN']], ['2', .64, .65, 0, ['ARR']], ['3', .78, .5, 0, ['AF', 'PIV']], ['4', .88, .2, 0, ['AIL']], ['5', .88, .8, 0, ['PIV', 'AF']]],
+    '1-3-1': [['1', .6, .5, 0, ['MEN']], ['2', .74, .12, 0, ['ARR', 'AIL']], ['3', .74, .5, 0, ['AF']], ['4', .74, .88, 0, ['AIL', 'ARR']], ['5', .9, .5, 0, ['PIV']]],
+  },
+  b3: { '3 ouverts': [['1', .25, .5, 0, ['MEN']], ['2', .6, .15, 0, ['ARR', 'AIL']], ['3', .7, .8, 0, ['AF', 'PIV']]] },
+  h7: {
+    '3-3 (attaque)': [['G', .03, .5, 1, ['GB']], ['AG', .9, .04, 0, ['AIG', 'AIL']], ['ArG', .72, .22, 0, ['ARG', 'ARR']], ['DC', .7, .5, 0, ['DC', 'ARR']], ['ArD', .72, .78, 0, ['ARD', 'ARR']], ['AD', .9, .96, 0, ['AID', 'AIL']], ['PIV', .88, .5, 0, ['PIV']]],
+    '0-6 (défense)': [['G', .03, .5, 1, ['GB']], ['1', .18, .08, 0, ['AIL']], ['2', .17, .27, 0, ['ARR']], ['3', .16, .44, 0, ['PIV']], ['4', .16, .56, 0, ['PIV', 'ARR']], ['5', .17, .73, 0, ['ARR']], ['6', .18, .92, 0, ['AIL']]],
+  },
+  r15: { 'Lancement de jeu': [['1', .47, .44, 0, ['PIL']], ['2', .47, .5, 0, ['TAL']], ['3', .47, .56, 0, ['PIL']], ['4', .45, .47, 0, ['DL']], ['5', .45, .53, 0, ['DL']], ['6', .45, .4, 0, ['FL']], ['7', .45, .6, 0, ['FL']], ['8', .43, .5, 0, ['N8']],
+    ['9', .41, .44, 0, ['DM']], ['10', .36, .36, 0, ['DO']], ['12', .33, .28, 0, ['CEN']], ['13', .3, .2, 0, ['CEN']], ['14', .28, .1, 0, ['AIL']], ['11', .4, .9, 0, ['AIL']], ['15', .15, .5, 0, ['ARR']]] },
+  r10: { 'Lancement de jeu': [['1', .47, .44, 0, ['PIL']], ['2', .47, .5, 0, ['TAL']], ['3', .47, .56, 0, ['PIL']], ['8', .44, .5, 0, ['N8', 'FL']], ['9', .41, .42, 0, ['DM']], ['10', .36, .34, 0, ['DO']], ['12', .32, .25, 0, ['CEN']], ['13', .29, .16, 0, ['CEN']], ['11', .4, .88, 0, ['AIL']], ['15', .16, .5, 0, ['ARR']]] },
+  r7: { 'Lancement de jeu': [['1', .47, .45, 0, ['PIL']], ['2', .47, .5, 0, ['TAL']], ['3', .47, .55, 0, ['PIL']], ['9', .43, .42, 0, ['DM']], ['10', .38, .32, 0, ['DO']], ['12', .33, .2, 0, ['CEN']], ['11', .28, .08, 0, ['AIL']]] },
+  v6: { 'Rotation 1 (passeur en 1)': [['4', .44, .3, 0, ['OPP']], ['3', .44, .5, 0, ['CEN']], ['2', .44, .7, 0, ['R4']], ['5', .25, .3, 0, ['R4']], ['6', .25, .5, 0, ['CEN', 'LIB']], ['1', .25, .7, 0, ['PAS']]],
+    'Rotation 2 (passeur en 6)': [['4', .44, .3, 0, ['R4']], ['3', .44, .5, 0, ['OPP']], ['2', .44, .7, 0, ['CEN']], ['5', .25, .3, 0, ['CEN', 'LIB']], ['6', .25, .5, 0, ['PAS']], ['1', .25, .7, 0, ['R4']]] },
+  v4: { 'Carré': [['A', .42, .32, 0, ['PAS']], ['B', .42, .68, 0, ['R4']], ['C', .25, .32, 0, ['CEN']], ['D', .25, .68, 0, ['OPP', 'LIB']]] },
   '5': {
     '2-2': [['G', .04, .5, 1], ['2', .2, .28], ['3', .2, .72], ['4', .4, .28], ['5', .4, .72]],
     '1-2-1': [['G', .04, .5, 1], ['2', .17, .5], ['3', .3, .2], ['4', .3, .8], ['5', .43, .5]],
@@ -805,7 +1048,7 @@ var Seed = {
     state.trainings.push({ id: uid(), teamId: u11.id, date: iso(d), time: '18:00', title: 'Passes et déplacements (exemple)', updatedAt: now, presents: [],
       exercises: [{ id: uid(), title: 'Passe et suis', duration: 15, org: 'Carré de 24 × 16 m, 4 plots, 3 joueurs par carré, 1 ballon.', consignes: 'Passe au sol\nJe suis mon ballon\nJe parle à mon partenaire', materiel: '4 plots, 1 ballon par carré', schemaId: s1.id }] });
     state.matches.push(
-      { id: uid(), teamId: u11.id, date: iso(prev), time: '10:00', opponent: 'US Exemple', home: true, competition: 'Plateau', place: 'Stade du Raincy', rdv: '09:15', played: true, gf: 3, ga: 1, convoked: u11.players.map(p => p.id), stats: { [u11.players[8].id]: { g: 2, a: 0 }, [u11.players[9].id]: { g: 1, a: 1 } }, notes: '', updatedAt: now },
+      { id: uid(), teamId: u11.id, date: iso(prev), time: '10:00', opponent: 'US Exemple', home: true, competition: 'Plateau', place: 'Stade municipal', rdv: '09:15', played: true, gf: 3, ga: 1, convoked: u11.players.map(p => p.id), stats: { [u11.players[8].id]: { g: 2, a: 0 }, [u11.players[9].id]: { g: 1, a: 1 } }, notes: '', updatedAt: now },
       { id: uid(), teamId: u11.id, date: iso(next), time: '10:30', opponent: 'AS Exemple', home: false, competition: 'Championnat', place: '', rdv: '09:30', played: false, gf: 0, ga: 0, convoked: [], stats: {}, notes: '', updatedAt: now });
     state.ui.teamId = u11.id;
   },
@@ -1022,7 +1265,7 @@ var Clubs = (() => {
     flamengo: ['Flamengo', 'CR Flamengo', '#c8102e', '#000000', 'CRF', 'hoops'],
     raincy: ['FA Le Raincy', '', '#8b1426', '#0e1d45', 'FAR', 'halves'],
   };
-  const KEY = 'raincy-crests';
+  const KEY = AppCfg.key('crests');
   const cache = (() => { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { return {}; } })();
   const saveCache = () => { try { localStorage.setItem(KEY, JSON.stringify(cache)); } catch (e) {} };
   const asking = new Set(), inFlight = new Set(), waiting = new Set();
@@ -1093,7 +1336,8 @@ var Clubs = (() => {
 var Exporter = (() => {
   // Club crest, drawn on images, videos and PDFs
   const crest = new Image(); let crestOk = false;
-  crest.onload = () => { crestOk = true; }; crest.src = 'icons/crest.png';
+  crest.onload = () => { crestOk = true; }; crest.src = AppCfg.crest; // then the club's own crest, once the app is loaded
+  setTimeout(() => { try { const c = Supporters.crest(); if (c && c !== crest.src) { crestOk = false; crest.src = c; } } catch (e) {} }, 1500);
   const crestData = () => { if (!crestOk) return null; const c = document.createElement('canvas'); c.width = c.height = 256; c.getContext('2d').drawImage(crest, 0, 0, 256, 256); return c.toDataURL('image/png'); };
   const isTouch = () => matchMedia('(pointer: coarse)').matches;
   const safeName = s => (s || 'schema').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'schema';
@@ -1377,14 +1621,14 @@ var Exporter = (() => {
     }
   }
   const fmtDate = d => d ? new Date(d + 'T12:00').toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) : '';
-  const fieldLabel = f => f.format === 'bg' ? 'Dessin sur image' : f.format === 'zone' ? `Zone ${f.w} x ${f.h} m` : (Board.PITCH[f.format].label + (f.view === 'half' ? ' · demi-terrain' : ''));
+  const fieldLabel = f => f.format === 'bg' ? 'Dessin sur image' : f.format === 'zone' ? `Zone ${f.w} x ${f.h} m` : ((Board.PITCH[f.format] || {}).label || Sport.formatLabel(f.format) + (f.view === 'half' ? ' · demi-terrain' : ''));
   // Attached documents (images, PDF pages, videos) at the end of a printable PDF
   async function addDocs(P, ids) {
     const docs = await Library.docImages(ids); if (!docs.length) return;
     P.doc.addPage(); P.y = P.M; P.h2('Documents joints');
     for (const d of docs) {
       P.label(d.name || 'Document');
-      if (d.video) { P.para('Vidéo : à regarder dans l\'appli Raincy Coach.'); continue; }
+      if (d.video) { P.para('Vidéo : à regarder dans l\'appli ' + AppCfg.name + '.'); continue; }
       if (d.link) { P.para('Lien : ' + d.link); continue; }
       for (const url of d.images) {
         const img = await Media.loadImage(url), ratio = img.naturalHeight / img.naturalWidth;
@@ -1467,7 +1711,7 @@ var Exporter = (() => {
    Without a club server (another club, no setup yet) accounts stay on the device, as in the first versions. */
 var Auth = (() => {
   const { esc, $, toast, modal, confirmBox } = UI;
-  const KEY = 'raincy-session', TMP = 'raincy-session-tmp', NAMES = 'raincy-last-names', ITER = 150000, MIN = 6;
+  const KEY = AppCfg.key('session'), TMP = AppCfg.key('session-tmp'), NAMES = AppCfg.key('last-names'), ITER = 150000, MIN = 6;
   const enc = new TextEncoder();
   const b64 = buf => btoa(String.fromCharCode(...new Uint8Array(buf)));
   const unb64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
@@ -1501,7 +1745,7 @@ var Auth = (() => {
   const current = () => user;
   const realAdmin = () => { if (!user) return false; const s = sess(); if (s && s.staff_id === user.id) return !!s.admin; return !!(U(user.id) && U(user.id).admin); };
   // « Voir comme un coach »: a responsable sees the app exactly as a coach of the chosen categories (this device and tab only)
-  const PREVIEW = 'raincy-preview';
+  const PREVIEW = AppCfg.key('preview');
   const preview = () => { if (!realAdmin()) return null; try { const v = JSON.parse(localStorage.getItem(PREVIEW)); return v && Array.isArray(v.teamIds) ? v : null; } catch (e) { return null; } };
   const isAdmin = () => realAdmin() && !preview();
   // a responsable looking at the app as a volunteer: only the volunteers' tasks and the club's events
@@ -1636,9 +1880,9 @@ var Auth = (() => {
   const lock = () => document.getElementById('lock');
   function frame(inner) {
     const el = lock(); el.hidden = false;
-    el.innerHTML = `<div class="lock-card">${Supporters.coin('lock-crest')}<p class="eyebrow">Espace éducateurs</p><h1>${esc(Store.state.club.name)}</h1>${inner}
+    el.innerHTML = `<div class="lock-card">${Supporters.coin('lock-crest')}<p class="eyebrow">${esc(AppCfg.name)}</p><h1>${esc(Store.state.club.name || 'Espace éducateurs')}</h1>${inner}
       <button class="btn wide link how-btn" id="howTo">${I.help}<span>Comment utiliser l'appli ?</span></button>
-      <p class="lock-version">Appli créée par <b>Coach Enzo</b> · version ${Help.VERSION} · <button class="linkish" id="updApp">Mettre à jour l'appli</button> · <a href="confidentialite.html">Confidentialité</a></p></div>`;
+      <p class="lock-version">${esc(AppCfg.name)} · créée par <b>Coach Enzo</b> · version ${Help.VERSION} · <button class="linkish" id="updApp">Mettre à jour l'appli</button> · <a href="confidentialite.html">Confidentialité</a></p></div>`;
     el.querySelector('#howTo').onclick = () => Help.tour();
     el.querySelector('#updApp').onclick = () => App.checkUpdate(true);
     el.scrollTop = 0;
@@ -1704,75 +1948,75 @@ var Auth = (() => {
     const byPw = list => list.find(s => U(s.id) && U(s.id).hash) || list[0];
     return byPw(match(L, F)) || byPw(match(F, L)) || null;
   }
-  async function serverLogin(ln, fn, pw) {
+  // the club of this device (its code, remembered for the next connection)
+  const CLUB = AppCfg.key('club-code');
+  const lastClub = () => { if (AppCfg.fixed) return AppCfg.club; try { return localStorage.getItem(CLUB) || ''; } catch (e) { return ''; } };
+  const saveClub = c => { try { localStorage.setItem(CLUB, c); } catch (e) {} };
+  async function serverLogin(club, ln, fn, pw) {
     let last = null;
     for (const [a, b] of [[ln, fn], [fn, ln]]) { // also works if nom and prénom were swapped
       const lk = nkey(a), f = noPar(nkey(b)); if (!lk || !f) continue;
-      last = await Cloud.login(lk, f, await proof(lk, pw));
+      last = await Cloud.login(club, lk, f, await proof(lk, pw));
       if (!last || last.error !== 'COMPTE_INCONNU') return last;
     }
     return last || { error: 'COMPTE_INCONNU' };
   }
   async function afterServerLogin(r, pw, keep, ln, fn) {
-    A().session = { token: r.token, staff_id: r.staff_id, admin: !!r.admin, teams_set: !!r.teams_set, last_key: r.last_key, temp: !keep, at: Date.now() };
+    A().session = { token: r.token, staff_id: r.staff_id, admin: !!r.admin, teams_set: !!r.teams_set, last_key: r.last_key, club: r.club || null, temp: !keep, at: Date.now() };
+    if (r.club) { Store.state.club.cloud = { slug: r.club.slug }; if (!Store.state.club.name || Store.state.club.name === 'Mon club') Store.state.club.name = r.club.name; saveClub(r.club.slug); }
     if (!keep) ss.set(TMP, '1');
     Store.save();
     if (!Store.get('staff', r.staff_id)) await withBusy('Chargement des données du club…', () => Sync.run());
     let s = Store.get('staff', r.staff_id);
-    if (!s) s = Store.upsert('staff', { id: r.staff_id, lastName: String(ln || '').toUpperCase(), firstName: fn || '', role: r.admin ? 'Responsable de catégorie' : 'Dirigeant', phone: '', email: '', notes: '', teamIds: [] });
+    if (!s) s = Store.upsert('staff', { id: r.staff_id, lastName: String(ln || '').toUpperCase(), firstName: fn || '', role: r.admin ? 'Responsable du club' : 'Dirigeant', phone: '', email: '', notes: '', teamIds: [] });
     await setPassword(s.id, pw, { admin: !!r.admin, teamsSet: !!r.teams_set });
     saveNames(s.lastName, s.firstName);
     done(s.id, keep);
   }
-  const errText = code => ({ MOT_DE_PASSE: 'Mot de passe incorrect', BLOQUE: 'Trop d\'essais : attends 5 minutes avant de réessayer', COMPTE_INCONNU: 'Aucun compte à ce nom' }[code] || 'Connexion impossible');
+  const errText = code => ({ MOT_DE_PASSE: 'Mot de passe incorrect', BLOQUE: 'Trop d\'essais : attends 5 minutes avant de réessayer', COMPTE_INCONNU: 'Aucun compte à ce nom dans ce club',
+    CLUB_INCONNU: 'Aucun club avec ce code', CLUB_SUSPENDU: 'L\'accès de ce club est suspendu : contacte Clubbo' }[code] || 'Connexion impossible');
+  const clubField = (v = '') => AppCfg.fixed ? `<input id="club" type="hidden" value="${esc(AppCfg.club)}">` : `<label class="fld"><span>Code du club</span><input id="club" value="${esc(v)}" placeholder="ex : fc-exemple" autocapitalize="off" autocorrect="off" autocomplete="organization"></label>`;
 
   function loginScreen() {
     const n = lastNames();
-    const el = frame(`<p class="lead">Connecte-toi avec ton nom, ton prénom et ton mot de passe.</p>
-      ${nameFields(n.ln, n.fn)}
+    const el = frame(`<p class="lead">Connecte-toi avec ${AppCfg.fixed ? '' : 'le code de ton club, '}ton nom, ton prénom et ton mot de passe.</p>
+      ${clubField(lastClub())}${nameFields(n.ln, n.fn)}
       <label class="fld"><span>Mot de passe</span><input id="pw" type="password" autocomplete="current-password"></label>${keepBox}
       <button class="btn primary wide" id="go">Se connecter</button>
-      <div class="lock-links"><button class="btn wide" id="first">${I.plus}<span>Première connexion</span></button>
+      <div class="lock-links"><button class="btn wide" id="first">${I.plus}<span>Première connexion (lien d'invitation)</span></button>
+      ${AppCfg.fixed ? '' : `<button class="btn wide" id="create">${I.whistle}<span>Créer mon club</span></button>
+      ${!Store.state.staff.length ? '<button class="btn wide" id="demo">👀<span>Essayer avec un club de démonstration</span></button>' : ''}
+      <a class="btn wide link" href="decouvrir.html">Découvrir Clubbo</a>`}
       <button class="btn wide link" id="forgot">Mot de passe oublié ?</button></div>`);
     const go = async () => {
-      const ln = $('#ln', el).value.trim(), fn = $('#fn', el).value.trim(), pw = $('#pw', el).value, keep = $('#keep', el).checked;
+      const club = $('#club', el).value.trim(), ln = $('#ln', el).value.trim(), fn = $('#fn', el).value.trim(), pw = $('#pw', el).value, keep = $('#keep', el).checked;
+      if (!club) return toast('Écris le code de ton club', 'err');
       if (!ln || !fn) return toast('Écris ton nom et ton prénom', 'err');
       if (!pw) return toast('Écris ton mot de passe', 'err');
       if (Date.now() < lockedUntil) return toast(`Trop d'essais : attends ${Math.ceil((lockedUntil - Date.now()) / 1000)} secondes`, 'err');
       const b = UI.busy('Connexion…');
       let r;
-      try { r = await serverLogin(ln, fn, pw); }
+      try { r = await serverLogin(club, ln, fn, pw); }
       catch (e) {
         b.done();
-        // No internet (or server not updated yet): accounts already used on this device still open
+        // No internet: an account already used on this device still opens
         const loc = findStaff(ln, fn);
-        if (loc && U(loc.id) && U(loc.id).hash) {
-          if (await check(loc.id, pw)) { if (e.code === 'MISE_A_JOUR') toast(e.message, 'err'); return done(loc.id, keep); }
-          return failed();
-        }
+        if (loc && U(loc.id) && U(loc.id).hash) { if (await check(loc.id, pw)) return done(loc.id, keep); return failed(); }
         return toast(e.offline ? 'Pas de connexion internet : la première connexion sur un appareil a besoin d\'internet.' : e.message, 'err');
       }
       b.done();
       if (r && r.token) return withBusy('Connexion…', () => afterServerLogin(r, pw, keep, ln, fn));
-      if (r && r.error === 'COMPTE_INCONNU') {
-        // An account created on this device before the club server: put it on the server now
-        const loc = findStaff(ln, fn);
-        if (loc && U(loc.id) && U(loc.id).hash) {
-          if (!(await check(loc.id, pw))) return failed();
-          try { const r2 = await withBusy('Enregistrement de ton compte sur le serveur…', async () => Cloud.register(regPayload(loc, await proof(lastKeyOf(loc), pw), U(loc.id).admin)));
-            return withBusy('Connexion…', () => afterServerLogin(r2, pw, keep, ln, fn)); }
-          catch (e) { return done(loc.id, keep); }
-        }
-        return toast('Aucun compte à ce nom. Si c\'est ta première connexion, touche « Première connexion ».', 'err');
-      }
+      if (r && r.error === 'COMPTE_INCONNU') return toast('Aucun compte à ce nom dans ce club. Si c\'est ta première connexion, ouvre le lien d\'invitation envoyé par ton responsable.', 'err');
       if (r && r.error === 'MOT_DE_PASSE') return failed();
       toast(errText(r && r.error), 'err');
     };
     const failed = () => { fails++; if (fails >= 5) { lockedUntil = Date.now() + 30000; fails = 0; } toast('Mot de passe incorrect', 'err'); const p = $('#pw', el); if (p) p.select(); };
     $('#go', el).onclick = go; $('#pw', el).onkeydown = e => { if (e.key === 'Enter') go(); };
     $('#first', el).onclick = () => firstScreen();
+    const cr = $('#create', el); if (cr) cr.onclick = () => createClubScreen();
     $('#forgot', el).onclick = () => forgotServer();
-    setTimeout(() => { const f = n.ln ? $('#pw', el) : $('#ln', el); if (f) f.focus(); }, 60);
+    const dm = $('#demo', el); if (dm) dm.onclick = () => Demo.start();
+    setTimeout(() => { const f = !lastClub() ? $('#club', el) : n.ln ? $('#pw', el) : $('#ln', el); if (f) f.focus(); }, 60);
   }
 
   // Invitation code from the link sent by the responsable
@@ -1780,22 +2024,23 @@ var Auth = (() => {
     try { if (who) sessionStorage.setItem('join-who', who); } catch (e) {}
     const c = Store.state.club;
     c.cloud = Object.assign({}, c.cloud || {}, { clubKey: code });
-    if (!c.cloud.url) { delete c.cloud.url; delete c.cloud.key; }
     Store.save();
   }
   const hasAccess = () => { const c = Cloud.cfg(); return !!(c && (c.clubKey || Cloud.token())); };
   function firstScreen() {
     if (hasAccess()) return pickScreen();
     const el = frame(`<p class="lead"><b>Première connexion</b></p>
-      <p>Ouvre le <b>lien d'invitation</b> envoyé par le responsable du club (WhatsApp, SMS, e-mail) : tu pourras choisir ton nom et créer ton mot de passe.</p>
+      <p>Ouvre le <b>lien d'invitation</b> envoyé par le responsable de ton club (WhatsApp, SMS, e-mail) : tu pourras choisir ton nom et créer ton mot de passe.</p>
       <label class="fld"><span>Ou colle le lien d'invitation ici</span><input id="inv" placeholder="https://…#rejoindre=…" autocapitalize="off" autocorrect="off"></label>
       <button class="btn primary wide" id="useInv">Continuer</button>
-      <div class="lock-links"><button class="btn wide link" id="back">Retour</button></div>`);
+      <div class="lock-links">${AppCfg.fixed ? '' : `<button class="btn wide" id="create">${I.whistle}<span>Je suis responsable : créer mon club</span></button>`}
+      <button class="btn wide link" id="back">Retour</button></div>`);
     $('#useInv', el).onclick = () => {
       const v = $('#inv', el).value.trim(), m = v.match(/rejoindre=([A-Za-z0-9]+)/) || v.match(/^([A-Za-z0-9]{8,})$/);
       if (!m) return toast('Colle le lien reçu du responsable', 'err');
       setInvite(m[1]); pickScreen();
     };
+    const cr = $('#create', el); if (cr) cr.onclick = () => createClubScreen();
     $('#back', el).onclick = () => loginScreen();
   }
   async function pickScreen() {
@@ -1811,7 +2056,7 @@ var Auth = (() => {
     const el = frame(`<p class="lead"><b>Première connexion</b> : choisis ton nom, puis crée ton mot de passe.</p>
       ${staff.length ? `<label class="fld"><span>Qui es-tu ?</span><select id="who"><option value="">Choisis ton nom…</option>
       ${staff.map(s => `<option value="${s.id}" ${reg.has(s.id) ? 'disabled' : ''}>${esc(Store.fullName(s))}${reg.has(s.id) ? ' · déjà inscrit' : [s.role, (s.teamIds || []).map(id => (Store.get('teams', id) || {}).name).filter(Boolean).join(', ')].filter(Boolean).map(esc).map(x => ' · ' + x).join('')}</option>`).join('')}</select></label>
-      <div id="step"></div>` : '<p class="tip">La liste des dirigeants n\'est pas encore sur le serveur du club : le responsable doit d\'abord se connecter avec la nouvelle version de l\'appli.</p>'}
+      <div id="step"></div>` : '<p class="tip">La liste des dirigeants du club est vide : le responsable doit d\'abord les ajouter (Équipes → Dirigeants).</p>'}
       <button class="btn wide" id="notListed" type="button">＋ Je ne suis pas dans la liste</button>
       <p class="muted small">Déjà inscrit ? Reviens à la connexion.</p>
       <button class="btn wide link" id="back">Retour à la connexion</button>`);
@@ -1832,6 +2077,42 @@ var Auth = (() => {
       };
     };
     preselect(el);
+  }
+  // A new club: the activation code given by Clubbo, the name of the club, its code, and its first responsable
+  const slugOf = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30);
+  function createClubScreen() {
+    const n = lastNames();
+    const el = frame(`<p class="lead"><b>Créer mon club</b> sur Clubbo</p>
+      <label class="fld"><span>Code d'activation (remis par Clubbo)</span><input id="act" placeholder="EA-XXXX-XXXX" autocapitalize="characters" autocorrect="off" autocomplete="off"></label>
+      <label class="fld"><span>Nom du club</span><input id="cname" placeholder="ex : FC Exemple" autocomplete="organization"></label>
+      <label class="fld"><span>Code du club (pour se connecter, sans espace)</span><input id="cslug" placeholder="fc-exemple" autocapitalize="off" autocorrect="off"></label>
+      <p class="muted small">Toi, le premier responsable du club :</p>
+      ${nameFields(n.ln, n.fn)}${pwFields('Ton mot de passe')}${keepBox}
+      <button class="btn primary wide" id="go">Créer le club</button>
+      <div class="lock-links"><button class="btn wide link" id="back">Retour</button></div>
+      <p class="muted small">Pas de code d'activation ? <a href="decouvrir.html#code">Demande-le ici</a>.</p>`);
+    let slugTouched = false;
+    $('#cname', el).oninput = () => { if (!slugTouched) $('#cslug', el).value = slugOf($('#cname', el).value); };
+    $('#cslug', el).oninput = () => { slugTouched = true; };
+    $('#back', el).onclick = () => loginScreen();
+    $('#go', el).onclick = async () => {
+      const code = $('#act', el).value.trim(), name = $('#cname', el).value.trim(), slug = slugOf($('#cslug', el).value || name);
+      const ln = $('#ln', el).value.trim(), fn = $('#fn', el).value.trim();
+      if (!code) return toast('Écris le code d\'activation', 'err');
+      if (name.length < 2) return toast('Écris le nom du club', 'err');
+      if (slug.length < 3) return toast('Le code du club doit faire au moins 3 lettres', 'err');
+      if (!ln || !fn) return toast('Écris ton nom et ton prénom', 'err');
+      const pw = readNewPw(el); if (!pw) return; const keep = $('#keep', el).checked;
+      const s = { id: Store.uid(), lastName: ln.toUpperCase(), firstName: fn, role: 'Responsable du club', phone: '', email: '', notes: '', teamIds: [] };
+      try {
+        const r = await withBusy('Création du club…', async () => Cloud.createClub(code, name, slug, regPayload(s, await proof(lastKeyOf(s), pw), true)));
+        // a brand-new app on this device: the club starts empty
+        Store.reset(); Store.state.club.name = name;
+        Store.upsert('staff', s); Store.save();
+        await withBusy('Ouverture du club…', () => afterServerLogin(r, pw, keep, s.lastName, s.firstName));
+        setTimeout(() => { if (typeof Onboard !== 'undefined') Onboard.start(); }, 400);
+      } catch (e) { toast(e.message, 'err'); }
+    };
   }
   function preselect(el) {
     let id = ''; try { id = sessionStorage.getItem('join-who') || ''; } catch (e) {}
@@ -1867,72 +2148,10 @@ var Auth = (() => {
   }
   function forgotServer() {
     const el = frame(`<p class="lead"><b>Mot de passe oublié</b></p>
-      <p><b>Éducateur</b> : demande au responsable de réinitialiser ton mot de passe (Réglages → Comptes des dirigeants → Réinitialiser). Ensuite, touche « Première connexion » et crée un nouveau mot de passe.</p>
-      <p><b>Responsable</b> : un autre responsable du club peut le réinitialiser. Sinon, contacte Clubbo.</p>
+      <p><b>Éducateur</b> : demande au responsable de ton club de réinitialiser ton mot de passe (Réglages → Comptes des dirigeants → Réinitialiser). Ensuite, ouvre le lien d'invitation et crée un nouveau mot de passe.</p>
+      <p><b>Responsable</b> : un autre responsable de ton club peut le réinitialiser. Sinon, contacte Clubbo.</p>
       <div class="lock-links"><button class="btn wide link" id="back">Retour</button></div>`);
     $('#back', el).onclick = () => loginScreen();
-  }
-
-  /* ---------- accounts on this device only (no club server) ---------- */
-  function setupScreen() {
-    const el = frame(`<p class="lead">Première utilisation : crée le compte du responsable. Tu pourras ajouter les autres dirigeants ensuite.</p>
-      ${nameFields()}${pwFields()}${keepBox}
-      <button class="btn primary wide" id="go">Créer mon compte</button>`);
-    $('#go', el).onclick = async () => {
-      const ln = $('#ln', el).value.trim().toUpperCase(), fn = $('#fn', el).value.trim();
-      if (!ln && !fn) return toast('Écris ton nom et ton prénom', 'err');
-      const pw = readNewPw(el); if (!pw) return;
-      let s = Store.state.staff.find(x => (x.lastName || '').toUpperCase() === ln && (x.firstName || '').toLowerCase() === fn.toLowerCase());
-      if (!s) s = Store.upsert('staff', { id: Store.uid(), lastName: ln, firstName: fn, role: 'Responsable de catégorie', phone: '', email: '', notes: '', teamIds: [] });
-      await setPassword(s.id, pw, { admin: true });
-      const code = await newRecovery(), keep = $('#keep', el).checked;
-      const el2 = frame(`<p class="lead">Voici ton <b>code de secours</b>. Note-le sur papier et range-le bien : il permet de retrouver l'accès si un mot de passe est oublié.</p>
-        <p class="code">${code}</p><button class="btn primary wide" id="ok">J'ai noté le code</button>`);
-      $('#ok', el2).onclick = () => done(s.id, keep);
-    };
-  }
-  function localLoginScreen(preset) {
-    const staff = Store.state.staff.slice().sort(Store.byName);
-    const el = frame(`<label class="fld"><span>Qui es-tu ?</span><select id="who"><option value="">Choisis ton nom…</option>
-      ${staff.map(s => `<option value="${s.id}" ${s.id === preset ? 'selected' : ''}>${esc(Store.fullName(s))}${s.role ? ' · ' + esc(s.role) : ''}</option>`).join('')}</select></label>
-      <div id="step"></div>
-      <p class="muted small">Tu n'es pas dans la liste ? Demande à un responsable de t'ajouter dans Équipes → Dirigeants.</p>`);
-    const step = $('#step', el);
-    const render = () => {
-      const id = $('#who', el).value;
-      if (!id) { step.innerHTML = ''; return; }
-      if (U(id) && U(id).hash) {
-        step.innerHTML = `<label class="fld"><span>Mot de passe</span><input id="pw" type="password" autocomplete="current-password"></label>${keepBox}
-          <button class="btn primary wide" id="go">Se connecter</button><button class="btn wide link" id="forgot">Mot de passe oublié ?</button>`;
-        const go = async () => {
-          if (Date.now() < lockedUntil) return toast(`Trop d'essais : attends ${Math.ceil((lockedUntil - Date.now()) / 1000)} secondes`, 'err');
-          if (await check(id, $('#pw', el).value)) return done(id, $('#keep', el).checked);
-          fails++; if (fails >= 5) { lockedUntil = Date.now() + 30000; fails = 0; }
-          toast('Mot de passe incorrect', 'err'); $('#pw', el).select();
-        };
-        $('#go', el).onclick = go; $('#pw', el).onkeydown = e => { if (e.key === 'Enter') go(); };
-        $('#forgot', el).onclick = () => forgotLocal(id);
-        setTimeout(() => $('#pw', el).focus(), 50);
-      } else {
-        step.innerHTML = `<p class="tip">Première connexion : choisis ton mot de passe. Garde-le pour toi.</p>${pwFields('Nouveau mot de passe')}${keepBox}
-          <button class="btn primary wide" id="go">Créer mon mot de passe</button>`;
-        $('#go', el).onclick = async () => { const pw = readNewPw(el); if (!pw) return; await setPassword(id, pw); done(id, $('#keep', el).checked); };
-      }
-    };
-    $('#who', el).onchange = render; render();
-  }
-  function forgotLocal(id) {
-    const s = Store.get('staff', id);
-    const el = frame(`<p class="lead">${esc(Store.fullName(s))} : demande à un responsable de réinitialiser ton mot de passe (Réglages → Comptes des dirigeants). Il pourra aussi utiliser le code de secours ici.</p>
-      <label class="fld"><span>Code de secours</span><input id="code" autocapitalize="characters" placeholder="XXXXX-XXXXX"></label>
-      ${pwFields('Nouveau mot de passe')}
-      <button class="btn primary wide" id="go">Changer le mot de passe</button><button class="btn wide link" id="back">Retour</button>`);
-    $('#back', el).onclick = () => localLoginScreen(id);
-    $('#go', el).onclick = async () => {
-      if (!(await checkRecovery($('#code', el).value))) return toast('Code de secours incorrect', 'err');
-      const pw = readNewPw(el); if (!pw) return;
-      await setPassword(id, pw); toast('Mot de passe changé'); done(id, false);
-    };
   }
 
   function gate(opts = {}) {
@@ -1945,22 +2164,21 @@ var Auth = (() => {
         if (restore()) { res(); return; }
       }
       resolveGate = res;
+      const want = AppCfg.fixed ? '' : (location.hash.match(/^#(demo|creer)$/) || [])[1];
+      if (want) history.replaceState(null, '', location.pathname + location.search);
       if (s && s.token && Store.get('staff', s.staff_id) && needsTeams(s.staff_id)) teamsScreen(s.staff_id, !s.temp);
-      else if (Cloud.canLogin()) { if (opts.joined) pickScreen(); else loginScreen(); }
-      else if (!hasAccounts()) setupScreen(); else localLoginScreen();
-      if (!Help.tourSeen() && !opts.joined) Help.tour();
+      else if (opts.joined) pickScreen(); else if (want === 'creer') createClubScreen(); else loginScreen();
+      if (want === 'demo' && !Store.state.staff.length) setTimeout(() => Demo.start(), 200);
+      else if (!Help.tourSeen() && !opts.joined && !want) Help.tour();
     });
   }
 
-  // Logged in with an account kept only on this device while the club has a server: log in again on the server
-  const localOnly = () => !!(user && !sess() && Cloud.canLogin());
+  const localOnly = () => false;
   function connectServer() {
-    const wasAdmin = isAdmin();
     if (user) saveNames(user.lastName, user.firstName);
     ss.del(KEY); ss.del(TMP); try { localStorage.removeItem(KEY); } catch (e) {}
     user = null; App.refreshChrome();
     gate().then(() => App.route());
-    if (wasAdmin) loginScreen(); else firstScreen();
   }
 
   /* ---------- settings section ---------- */
@@ -2101,7 +2319,7 @@ var Auth = (() => {
    Photos are resized to keep the iPad storage light; videos are kept as they are. */
 var Media = (() => {
   const { esc, toast, modal, confirmBox } = UI;
-  const DB = 'raincy-media', OS = 'media', MAX_VIDEO = 300 * 1024 * 1024;
+  const DB = AppCfg.key('media'), OS = 'media', MAX_VIDEO = 300 * 1024 * 1024;
   let dbp = null;
   function db() {
     return dbp || (dbp = new Promise((res, rej) => {
@@ -2188,7 +2406,7 @@ var Media = (() => {
       actions: [
         ...(m.kind === 'video' ? [{ label: 'Analyser', icon: I.video, onClick: () => { location.hash = '#/analyse/' + m.id; } }] : []),
         ...(canDelete(m) ? [{ label: 'Supprimer', kind: 'danger', icon: I.trash, onClick: () => { setTimeout(async () => { if (await confirmBox('Supprimer ce fichier ?')) { await del(m.id); toast('Supprimé'); after && after(); } }, 60); } }] : []),
-        { label: 'Enregistrer / partager', icon: I.share, onClick: () => { Exporter.deliver(m.blob, `raincy-${m.id}.${m.kind === 'video' ? (m.mime.includes('quicktime') ? 'mov' : 'mp4') : 'jpg'}`); return false; } },
+        { label: 'Enregistrer / partager', icon: I.share, onClick: () => { Exporter.deliver(m.blob, `club-${m.id}.${m.kind === 'video' ? (m.mime.includes('quicktime') ? 'mov' : 'mp4') : 'jpg'}`); return false; } },
         { label: 'Fermer', kind: 'primary' },
       ],
     });
@@ -2464,7 +2682,7 @@ var Library = (() => {
   /* ---------- « Mettre au propre »: a hand-drawn exercise (photo, PDF page) redrawn on a clean pitch ---------- */
   function cleanCopy(blob, w, h, name) {
     modal({ title: 'Mettre au propre', body: `<p class="tip">Ton dessin s'affiche en transparence sur un vrai terrain. Redessine-le avec les joueurs, les flèches et les zones, puis retire le calque : il reste un schéma propre, animable et imprimable.</p>
-      <div class="lbl">Sur quel terrain ?</div><div class="chips" id="ccFmt">${[['11', 'Foot à 11'], ['8', 'Foot à 8'], ['5', 'Foot à 5'], ['zone', 'Zone libre']].map(([v, l], i) => `<button class="chip ${i ? '' : 'on'}" data-v="${v}">${l}</button>`).join('')}</div>
+      <div class="lbl">Sur quel terrain ?</div><div class="chips" id="ccFmt">${[...Sport.cur().formats.map(x => [x[0], x[1]]), ['zone', 'Zone libre']].map(([v, l], i) => `<button class="chip ${i ? '' : 'on'}" data-v="${v}">${l}</button>`).join('')}</div>
       <label class="fld" style="margin-top:12px"><span>Nom du schéma</span><input id="ccName" value="${esc(cleanName(name))} · au propre"></label>`,
       onOpen: r => $$('#ccFmt .chip', r).forEach(b => b.onclick = () => { $$('#ccFmt .chip', r).forEach(x => x.classList.remove('on')); b.classList.add('on'); }),
       actions: [{ label: 'Annuler' }, { label: 'Commencer', kind: 'primary', icon: I.board, onClick: (c, r) => {
@@ -2597,7 +2815,7 @@ var Library = (() => {
       txt('org') || intro.filter(l => cleanTitle(l) !== title && (l.match(/[a-zà-ÿ]/gi) || []).length >= Math.max(3, l.replace(/\s/g, '').length * .45)).join('\n'), (sec.evo || []).length ? 'Évolutions :\n' + bullets('evo').map(e => '+ ' + e).join('\n') : ''].filter(Boolean).join('\n\n');
     return { title, duration, org: org.slice(0, 1800), consignes: bullets('consignes').join('\n').slice(0, 900), materiel: txt('materiel').replace(/\n/g, ', ').slice(0, 200), size: sm ? sm[1] + 'x' + sm[2] : '' };
   }
-  const fmtOfTeam = id => ((Store.get('teams', id) || {}).format) || '11';
+  const fmtOfTeam = id => ((Store.get('teams', id) || {}).format) || Sport.defFormat();
 
   /* ---------- reading the drawing of an exercise ---------- */
   // free, on the phone: the coloured marks of the drawing are counted (players' bibs, orange cones) on a small copy of the picture
@@ -2636,7 +2854,7 @@ var Library = (() => {
     if (!c || !t) throw new Error('Connecte-toi au serveur du club pour utiliser l\'IA.');
     const img = await Media.loadImage(URL.createObjectURL(p.blob)), image = Media.drawScaled(img, img.naturalWidth, img.naturalHeight, 1400).toDataURL('image/jpeg', .85);
     const headers = { apikey: c.key, 'Content-Type': 'application/json' }; if (!String(c.key).startsWith('sb_')) headers.Authorization = 'Bearer ' + c.key;
-    let r; try { r = await fetch(c.url.replace(/\/+$/, '') + '/functions/v1/exercice-ia', { method: 'POST', headers, body: JSON.stringify({ k: t, image, text: p.text || '', fmt }) }); }
+    let r; try { r = await fetch(c.url.replace(/\/+$/, '') + '/functions/v1/exercice-ia', { method: 'POST', headers, body: JSON.stringify({ k: t, image, text: p.text || '', fmt: Sport.formatLabel(fmt) || fmt, sport: Sport.cur().ai, themes: Exos.THEMES.map(x => x[0]) }) }); }
     catch (e) { throw new Error('Pas de connexion internet.'); }
     const o = await r.json().catch(() => ({}));
     if (!r.ok || !o.ex) throw new Error(AI_ERR[o.error] || (r.status === 404 ? 'L\'IA n\'est pas encore installée sur le serveur du club.' : 'Analyse impossible pour le moment.'));
@@ -2741,7 +2959,7 @@ var Library = (() => {
         if (!pick.length) { toast('Coche au moins une page', 'err'); return false; }
         const teamId = $('#xTeam', r).value || null, title = $('#xName', r).value.trim() || name, when = { date: $('#xDate', r).value || UI.today(), time: $('#xTime', r).value };
         let trId = $('#xTr', r).value;
-        const formats = teamId ? [fmtOfTeam(teamId)] : ['5', '8', '11'];
+        const formats = teamId ? [fmtOfTeam(teamId)] : Sport.cur().formats.map(x => x[0]);
         (async () => {
           const b = busy('Création des exercices…');
           try {
@@ -2982,7 +3200,10 @@ var Library = (() => {
 var Importer = (() => {
   const { esc, $, $$, toast, modal } = UI;
   const S = () => Store.state;
-  const CLUB_RE = /RAINCY/i;
+  // the main word of the club's name: « FA Le Raincy » → RAINCY, « Olympique de Paris FC » → PARIS (or the FFF name typed in Réglages → Le club)
+  const STOP = /^(FC|F|C|AS|A|S|US|U|ES|E|FA|SC|RC|JS|AC|CS|CO|OL|OLYMPIQUE|UNION|ENTENTE|ETOILE|STADE|SPORTING|SPORTIVE|SPORTIF|SPORT|SPORTS|FOOTBALL|FOOT|CLUB|ASSOCIATION|ATHLETIC|RACING|LE|LA|LES|L|DE|DU|DES|D|ET|EN|SUR|SOUS)$/;
+  const clubWord = () => { const c = S().club || {}; if (c.fffName) return norm(c.fffName).trim(); const w = norm(c.name || '').split(/[^A-Z0-9]+/).filter(x => x.length > 1 && !STOP.test(x)).sort((a, b) => b.length - a.length); return w[0] || '§'; };
+  const CLUB_RE = { test: s => { const w = clubWord(); return !!w && norm(s).includes(w); } };
   const MONTHS = { JAN: 1, FEV: 2, FÉV: 2, MAR: 3, AVR: 4, MAI: 5, JUN: 6, JUIN: 6, JUI: 7, JUIL: 7, JUL: 7, AOU: 8, AOÛ: 8, AOUT: 8, AOÛT: 8, SEP: 9, SEPT: 9, OCT: 10, NOV: 11, DEC: 12, DÉC: 12 };
   const pad = n => String(n).padStart(2, '0');
   const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
@@ -3040,7 +3261,7 @@ var Importer = (() => {
      Team 1 is « U14 A », team 2 « U14 B »… unless the responsable set another number on the team (Équipes → the team). */
   // « RAINCY F.A. » → 1, « RAINCY F.A. 2 » → 2, « F. ASSOCIATION LE RAINCY 1 » → 1, « FA LE RAINCY B » → 2
   const teamNo = ourName => {
-    const s = norm(ourName).replace(/^.*RAINCY/, '').replace(/^\s*F\.?\s*A\.?(?=\s|$)/, '').trim(), m = s.match(/^(\d)\b/) || s.match(/^([A-E])$/);
+    const s = norm(ourName).split(clubWord()).slice(1).join(clubWord()).replace(/^\s*F\.?\s*A\.?(?=\s|$)/, '').trim(), m = s.match(/^(\d)\b/) || s.match(/^([A-E])$/);
     return !m ? 1 : /\d/.test(m[1]) ? +m[1] : m[1].charCodeAt(0) - 64;
   };
   const letterNo = t => { const m = String(t.name || '').trim().match(/\s([A-E])$/i); return m ? m[1].toUpperCase().charCodeAt(0) - 64 : 0; };
@@ -3119,15 +3340,23 @@ var Importer = (() => {
   }
 
   /* ---------- import screen for matches ---------- */
+  // (1.30) the official calendar of the club's federation (basket, hand, rugby, volley): opened on its site, then imported as a file
+  function fedSteps() {
+    const [short, name, url, host] = Sport.fed();
+    return `<ol class="wizard small"><li>Ouvre le calendrier de ton équipe sur le site de la <b>${esc(name)}</b> : <a href="${esc(S().club.fffUrl || url)}" target="_blank" rel="noopener">${esc(S().club.fffUrl ? 'page du club' : host)}</a> (championnat, poule, puis ton équipe).</li>
+      <li>S'il propose « Ajouter à mon agenda » ou « Exporter (.ics) », télécharge le fichier puis touche l'onglet <b>Fichier calendrier (.ics)</b>.</li>
+      <li>Sinon, recopie les matchs dans un tableur (Date, Heure, Adversaire, Domicile) et touche l'onglet <b>Tableur (.csv)</b>.</li></ol>
+      <p class="muted small">Astuce : enregistre l'adresse de la page de ton club (Réglages → Le club → « Page du club sur le site de la ${esc(short)} ») pour l'ouvrir directement d'ici.</p>`;
+  }
   function matchesDialog(done) {
     let found = [];
     const teams = S().teams;
     modal({ title: 'Importer des matchs', body: `
-      <div class="chips" id="srcTabs"><button class="chip on" data-v="fff">Site FFF / District</button><button class="chip" data-v="ics">Fichier calendrier (.ics)</button><button class="chip" data-v="csv">Tableur (.csv)</button></div>
+      <div class="chips" id="srcTabs"><button class="chip on" data-v="fff">${Sport.isFoot() ? 'Site FFF / District' : 'Site ' + esc(Sport.fed()[0])}</button><button class="chip" data-v="ics">Fichier calendrier (.ics)</button><button class="chip" data-v="csv">Tableur (.csv)</button></div>
       <div id="srcFff" class="src">
-        <ol class="wizard small"><li>Ouvre la page de l'équipe sur <a href="https://epreuves.fff.fr/competition/club/552176-f-association-le-raincy/equipes.html" target="_blank" rel="noopener">epreuves.fff.fr</a> (ou le site du District 93), onglet <b>Résultats / Calendrier</b>.</li>
-        <li>Sélectionne tout le texte des matchs du mois (ou de la page du club), copie-le, puis colle-le ici. Recommence mois par mois, les doublons sont ignorés.</li></ol>
-        <textarea id="fffText" rows="6" placeholder="DIM 04 OCT 2026 - 15H30&#10;Seniors D3 - Senior Journée 1&#10;BFC 2&#10;15:30&#10;RAINCY F.A."></textarea>
+        ${Sport.isFoot() ? `<ol class="wizard small"><li>Ouvre la page de l'équipe sur <a href="${esc(S().club.fffUrl || Sport.fed()[2])}" target="_blank" rel="noopener">epreuves.fff.fr</a> (ou le site de ton district), onglet <b>Résultats / Calendrier</b>.</li>
+        <li>Sélectionne tout le texte des matchs du mois (ou de la page du club), copie-le, puis colle-le ici. Recommence mois par mois, les doublons sont ignorés.</li></ol>` : fedSteps()}
+        <textarea id="fffText" ${Sport.isFoot() ? '' : 'hidden'} rows="6" placeholder="DIM 04 OCT 2026 - 15H30&#10;Seniors D3 - Senior Journée 1&#10;BFC 2&#10;15:30&#10;FC EXEMPLE"></textarea>
       </div>
       <div id="srcFile" class="src" hidden><p class="muted" id="fileHint"></p><button class="btn" id="pickFile">${I.upload}<span>Choisir le fichier</span></button></div>
       <label class="fld" style="margin-top:10px"><span>Catégorie</span><select id="impTeam"><option value="auto">Automatique (d'après la compétition)</option>${teams.map(t => `<option value="${t.id}">${esc(Store.teamLabel(t))}</option>`).join('')}</select></label>
@@ -3144,7 +3373,7 @@ var Importer = (() => {
         $$('#srcTabs .chip', r).forEach(b => b.onclick = () => {
           $$('#srcTabs .chip', r).forEach(x => x.classList.remove('on')); b.classList.add('on'); src = b.dataset.v; found = [];
           $('#srcFff', r).hidden = src !== 'fff'; $('#srcFile', r).hidden = src === 'fff';
-          $('#fileHint', r).textContent = src === 'ics' ? 'Exporte ton agenda (Google Agenda, Calendrier iPhone, appli du club…) en fichier .ics, puis choisis-le. Chaque événement devient un match : « Raincy - Bondy » donne l\'adversaire et le domicile.' : 'Un tableau avec au moins les colonnes Date, Heure, Adversaire, et si possible Domicile (oui/non) et Compétition.';
+          $('#fileHint', r).textContent = src === 'ics' ? 'Exporte ton agenda (Google Agenda, Calendrier iPhone, appli du club…) en fichier .ics, puis choisis-le. Chaque événement devient un match : « Mon club - Bondy » donne l\'adversaire et le domicile.' : 'Un tableau avec au moins les colonnes Date, Heure, Adversaire, et si possible Domicile (oui/non) et Compétition.';
           preview();
         });
         $('#fffText', r).oninput = e => { found = parseFFF(e.target.value); preview(); };
@@ -3235,8 +3464,8 @@ var Importer = (() => {
    Errors are caught and kept so a coach can attach them to a report. */
 var Help = (() => {
   const { esc, $, $$, toast, modal } = UI;
-  const VERSION = '3.76';
-  const TOUR_KEY = 'raincy-tour-seen', ERR_KEY = 'raincy-errors';
+  const VERSION = '4.0';
+  const TOUR_KEY = AppCfg.key('tour-seen'), ERR_KEY = AppCfg.key('errors');
 
   /* ---------- error log ---------- */
   function errors() { try { return JSON.parse(localStorage.getItem(ERR_KEY)) || []; } catch (e) { return []; } }
@@ -3261,7 +3490,7 @@ var Help = (() => {
 
   /* ---------- first-use tour ---------- */
   const SLIDES = [
-    ['crest', 'Bienvenue !', "Raincy Coach, c'est l'appli des éducateurs du club : tableau tactique animé, effectifs, séances, matchs et statistiques. Elle marche aussi sans internet."],
+    ['crest', 'Bienvenue !', `${AppCfg.name}, c'est l'appli des éducateurs du club : tableau tactique animé, effectifs, séances, matchs et statistiques. Elle marche aussi sans internet.`],
     ['whistle', 'Ton compte', "Première fois : ouvre le lien d'invitation du responsable, choisis ton nom et crée ton mot de passe. Ensuite, connecte-toi sur n'importe quel téléphone, tablette ou ordinateur avec ton nom, ton prénom et ton mot de passe : tes données te suivent."],
     ['team', 'Équipes et joueurs', "Dans Équipes, retrouve chaque catégorie avec ses joueurs et dirigeants. Pour charger les licenciés : Réglages → Recevoir un fichier. Touche un joueur pour ajouter son numéro et le téléphone des parents."],
     ['board', 'Le tableau tactique', "Dans Schémas : choisis un outil (joueur, ballon, flèche, zone) puis touche le terrain. Touche « + Étape », déplace les joueurs : la flèche se dessine toute seule. « Jouer » lance l'animation."],
@@ -3278,7 +3507,7 @@ var Help = (() => {
     const render = () => {
       const [ic, title, text] = SLIDES[i], last = i === SLIDES.length - 1;
       el.innerHTML = `<div class="tour-card">
-        <div class="tour-ic">${ic === 'crest' ? '<img src="icons/crest.png" alt="">' : I[ic]}</div>
+        <div class="tour-ic">${ic === 'crest' ? `<img src="${esc(Supporters.crest())}" alt="">` : I[ic]}</div>
         <p class="eyebrow">Guide · ${i + 1} sur ${SLIDES.length}</p><h2>${esc(title)}</h2><p class="tour-text">${esc(text)}</p>
         <div class="tour-dots">${SLIDES.map((_, k) => `<span class="${k === i ? 'on' : ''}"></span>`).join('')}</div>
         <div class="tour-nav"><button class="btn" data-t="skip">${last ? 'Fermer' : 'Passer'}</button>
@@ -3305,7 +3534,7 @@ var Help = (() => {
     '': ['Accueil', ['Le bouton rond « + » en bas à droite, sur toutes les pages : créer une séance, un match, un exercice, écrire un message, ou chercher (un joueur, une séance, « samedi »…).', 'En haut, choisis ton équipe : tu ne vois plus que ses séances et ses matchs.', 'Le prochain match et la prochaine séance sont juste en dessous : touche-les pour les ouvrir.', 'Le menu (à gauche, ou en bas sur téléphone) mène à toutes les pages. Sur chaque page, ce cadre « Comment ça marche ? » explique quoi faire.']],
     equipes: ['Équipes', ['Chaque carte est une catégorie (U11, Seniors…). Touche-la pour voir ses joueurs et ses dirigeants.', '« Tous les joueurs » montre tout le club, avec une recherche et un filtre par catégorie.', '« Nouvelle catégorie » : choisis le format foot à 11, à 8 ou à 5.']],
     equipe: ['Une catégorie', ['Composition : les convoqués sont placés selon leur poste (DC dans l\'axe, LD à droite, AG à gauche…), les autres sont notés comme remplaçants.', 'Touche un joueur pour ouvrir sa fiche. « Modifier » : numéro, poste principal et autres postes, téléphone des parents, infos santé.', '« Trier : Nom, N°, Poste » range la liste ; par poste, elle est coupée en gardiens, défenseurs, milieux et attaquants.', 'Le menu « Ajouter un joueur d\'une autre catégorie » permet de mettre un joueur dans plusieurs catégories.', 'La croix retire le joueur de la catégorie seulement : il reste dans le club.']],
-    joueurs: ['Tous les joueurs', ['Cherche un nom ou filtre par catégorie.', '« Coller une liste » : colle des lignes copiées depuis Footclubs, les joueurs sont rangés tout seuls dans leur catégorie.', 'Pour charger le fichier des licenciés : Réglages → Recevoir un fichier.']],
+    joueurs: ['Tous les joueurs', ['Cherche un nom ou filtre par catégorie.', '« Coller une liste » : colle des lignes copiées depuis le logiciel de ta fédération (Footclubs, FBI, Oval-e…), les joueurs sont rangés tout seuls dans leur catégorie.', 'Pour charger le fichier des licenciés : Réglages → Recevoir un fichier.']],
     dirigeants: ['Dirigeants', ['Ajoute chaque dirigeant avec son rôle, son téléphone et ses catégories.', 'À sa première connexion (lien d\'invitation : Réglages → Inviter les éducateurs), le dirigeant choisit son nom et crée son mot de passe.']],
     schemas: ['Schémas', ['Un schéma est un exercice ou une tactique animée. « Nouveau schéma » : foot à 11, à 8, à 5 ou zone libre.', '« Modèles » : rondo, 3 contre 2, conservation, sortie de balle, centre-tir, déjà animés. Ils deviennent ton schéma, à adapter.', '« Tableau blanc » : un terrain vierge en plein écran, rien n\'est enregistré (sauf si tu touches « Garder »).', 'Le bouton copie (sur la carte ou dans le schéma) duplique un schéma pour en faire une variante.', 'La Bibliothèque permet de dessiner sur une vidéo, un PDF ou une image.', '« Recevoir » ouvre un schéma envoyé par un autre éducateur.']],
     schema: ['Le tableau tactique', ['1. Choisis un outil à gauche (ou en haut sur téléphone), puis touche le terrain.', '2. « Bouger » : fais glisser un joueur. Touche-le pour changer son numéro, sa couleur ou son nom.', '3. Flèche : glisse depuis un joueur (ou le ballon) jusqu\'à l\'arrivée : il fera ce mouvement. Choisis le type (course, conduite, passe, tir…) au-dessus du terrain. Une flèche tracée ailleurs reste un simple dessin.', '4. « Jouer » lance l\'animation. Pour un mouvement après le premier, touche l\'étape suivante en bas et recommence. Zone : dessine un rectangle et donne-lui un nom.', '5. Les notes de l\'étape (en bas) et les notes du schéma (options) s\'enregistrent toutes seules. « Exporter » : image, vidéo, PDF à imprimer.', 'Sur téléphone, le bouton en forme de pile ouvre les options (couloirs, zones de jeu, formations…).']],
@@ -3324,7 +3553,7 @@ var Help = (() => {
     exercices: ['Exercices du club', ['Tous les exercices écrits par les coachs du club dans leurs séances (avec leur schéma), plus une base d\'exercices classiques. Filtre par thème et par catégorie, ou cherche un mot.', '« Ajouter à une séance » copie l\'exercice dans une de tes séances à venir.', '« Générer une séance » : un thème, une catégorie, une durée → échauffement, exercices du thème, jeu à thème, retour au calme. Les exercices du club passent en premier ; tout se modifie ensuite.', 'Une séance réussie ? En bas de la séance : « Enregistrer comme séance type » pour la partager avec toutes les catégories.']],
     progression: ['Progression', ['Deux ou trois évaluations par saison (début, milieu, fin) : 4 domaines, 3 critères chacun, de 1 à 5 étoiles. La dernière évaluation est reprise : on ne change que ce qui a bougé.', '« Évaluer les restants » enchaîne les joueurs de l\'équipe pas encore évalués cette saison.', 'Sur la fiche du joueur : le radar (en pointillés la fois d\'avant), la courbe de progression, 1 à 3 objectifs personnels.', '« Bulletin » crée un PDF à remettre au joueur ou aux parents.']],
     infirmerie: ['Infirmerie', ['Tous les joueurs indisponibles aujourd\'hui (blessés, malades, absents, suspendus), avec leur date de retour. « De retour » les remet disponibles.', 'Sur la fiche d\'un joueur : « Indisponible » pour déclarer une blessure (où, combien de temps), une absence ou une suspension.', 'À la convocation et à l\'appel, un joueur indisponible ce jour-là a un signe 🚑 ✈️ 🤒 ou 🟥 devant son nom.', 'Charge : après une séance, note l\'effort de chaque joueur de 1 à 10. ⚠️ signale ceux dont les 7 derniers jours sont bien plus lourds que d\'habitude.']],
-    direct: ['Match en direct', ['Avant le match : touche les titulaires. Puis « Coup d\'envoi », « Mi-temps », « Reprise », « Fin du match ».', 'Un bouton par événement (but, but encaissé, changement, cartons, occasion, blessure, note) : la minute se note toute seule, tu choisis les joueurs tout de suite ou plus tard.', 'À la fin : le score, les buteurs, les passeurs et le temps de jeu de chaque joueur sont mis sur la page du match.', 'Le chrono continue même si tu fermes l\'appli, et tous les coachs voient le même direct.', 'Vidéo du match : dans l\'analyse, touche « C\'est le coup d\'envoi » au bon moment de la vidéo, puis « Créer les séquences ».']],
+    direct: ['Match en direct', ['Avant le match : touche les titulaires. Puis « Début », les pauses entre les périodes (mi-temps, quart-temps ou sets), « Fin du match ».', 'Un bouton par événement (but, but encaissé, changement, cartons, occasion, blessure, note) : la minute se note toute seule, tu choisis les joueurs tout de suite ou plus tard.', 'À la fin : le score, les buteurs, les passeurs et le temps de jeu de chaque joueur sont mis sur la page du match.', 'Le chrono continue même si tu fermes l\'appli, et tous les coachs voient le même direct.', 'Vidéo du match : dans l\'analyse, touche « C\'est le coup d\'envoi » au bon moment de la vidéo, puis « Créer les séquences ».']],
     prepa: ['Préparation du match', ['7 étapes, dans l\'ordre de la semaine : Semaine (les séances avant le match, J-1 créée en un geste), Adversaire, Plan de jeu, Causerie, Jour J, Mi-temps, Après-match. Tout est enregistré avec le match : les autres coachs de la catégorie voient le même plan.', 'Les propositions (« + … ») remplissent les cases en un geste ; tu peux toujours écrire toi-même.', '« Lancer la causerie » affiche tout en plein écran, une page après l\'autre, avec le chrono de la causerie (glisse ou touche les flèches).', '« Résumé aux joueurs » prépare un message (horaires, objectif, 3 clés) à coller dans WhatsApp.', 'Jour J : le déroulé est calculé depuis l\'heure du coup d\'envoi ; coche l\'échauffement et le matériel au fur et à mesure.']],
     analyse: ['Analyse vidéo', ['Lance la vidéo et touche une action (But, Occasion, Perte de balle…) au moment où elle arrive : une séquence est créée, de quelques secondes avant à quelques secondes après (réglable).', 'Sous chaque séquence : ajuste le début et la fin sur l\'image affichée, écris un commentaire, choisis les joueurs concernés (choisis d\'abord le match analysé).', '« Dessins sur la vidéo » : mets la vidéo au bon moment, choisis un outil (Marquer les joueurs, Projecteur, Vision du joueur, Déplacer un joueur, Formation, Espace de formation, Espace, Forme libre, Étiquette, Minuteur, Zoom) et touche l\'image. Chaque dessin reste quelques secondes, avec un arrêt sur image si tu veux, et se retrouve dans la présentation et la vidéo du briefing.', '« Titre de phase » (Récupération, Possession…) s\'affiche dans le coin de l\'image. « Tableau tactique sur l\'image » ouvre l\'image dans le tableau tactique.', '« Ajouter à un briefing » rassemble des séquences de plusieurs vidéos. Les vidéos et les briefings restent sur cet appareil.']],
     briefing: ['Briefing vidéo', ['« Présenter » passe les séquences en plein écran, avec le titre et le commentaire de chacune (flèches du clavier pour avancer).', '« Télécharger » → « Vidéo à regarder partout » crée un seul fichier vidéo à envoyer sur WhatsApp : garde l\'appli ouverte pendant la création, qui dure le temps de la vidéo.', '« Télécharger » → « Briefing à rouvrir dans l\'appli » enregistre le briefing avec ses vidéos dans un fichier (Fichiers, Drive, clé USB, ordinateur). Sur l\'autre appareil : Bibliothèque → Mes briefings → « Importer un briefing ».', 'Change l\'ordre avec les flèches, retire une séquence avec la croix.']],
@@ -3332,7 +3561,7 @@ var Help = (() => {
     encadrement: ['Qui encadre ?', ['Tous les matchs et séances de la semaine, avec leurs encadrants. ⚠️ Personne : il manque un encadrant.', '« J\'y serai » t\'ajoute comme encadrant, « Je n\'y serai pas » te retire.', '« Déclarer une absence » : tes vacances ou indisponibilités, visibles par les autres dirigeants. Un responsable peut en déclarer pour n\'importe qui.']],
     entrainements: ['Séances', ['Le plus simple : « Générer une séance » (un thème, une catégorie, une durée) ou « Séances par système de jeu » : la séance est prête, avec ses schémas animés.', 'Pour l\'écrire toi-même : « Nouvel entraînement » (un thème, une date, une équipe), puis ajoute les exercices.', 'Une fiche papier ou un PDF : « Importer une fiche PDF » ou « Depuis un fichier » : les exercices sont lus et repris.', '« Séances types du club » : les séances partagées par les coachs. « Utiliser » la copie pour ta catégorie et ta date.']],
     entrainement: ['Une séance', ['1. Ajoute les exercices : « Ajouter un exercice », « Exercices du club » ou « Depuis un fichier ». Chaque exercice a un schéma animé (« Voir en grand »).', '2. Le jour J : coche les présents d\'un toucher (ou « Tous présents »), puis note-les avec les étoiles.', '3. « PDF » fait la fiche à imprimer ou à envoyer, avec le schéma de chaque exercice étape par étape. « Envoyer » la transmet à un autre coach.', 'Tu peux joindre des documents et des photos en bas de la séance.']],
-    matchs: ['Matchs', ['« Importer » : colle le calendrier copié sur le site de la FFF ou du District 93 (mois par mois), ou choisis un fichier d\'agenda (.ics) ou un tableur (.csv). La catégorie est trouvée toute seule et le terrain peut être réservé pour les matchs à domicile.', '« Nouveau match » : adversaire, date, domicile ou extérieur.', 'Les résultats s\'affichent avec leur smiley.']],
+    matchs: ['Matchs', ['« Importer » : colle le calendrier copié sur le site de ta fédération ou de ton district (mois par mois), ou choisis un fichier d\'agenda (.ics) ou un tableur (.csv). La catégorie est trouvée toute seule et le terrain peut être réservé pour les matchs à domicile.', '« Nouveau match » : adversaire, date, domicile ou extérieur.', 'Les résultats s\'affichent avec leur smiley.']],
     jourj: ['Jour de match', ['Tout le match en 5 étapes, dans l\'ordre : les convoqués, la composition, la causerie, le match en direct, le résumé aux parents.', 'Touche un prénom pour le convoquer, puis « Envoyer la convocation » (WhatsApp ou la messagerie du club).', 'Pendant le match : « Suivre le match en direct ». Le chrono, les buts et le temps de jeu se notent tout seuls, même sans réseau.', 'À la fin : « Envoyer le résumé aux parents ». Le score et les buteurs sont déjà écrits, ajoute ton mot.']],
     match: ['Un match', ['Coche les convoqués et choisis les encadrants.', 'Envoie la convocation avec le lien des parents : ils répondent présent ou absent, les réponses s\'affichent sous les convoqués.', 'Match à l\'extérieur : le covoiturage range les enfants dans les voitures des parents, et s\'envoie sur WhatsApp.', 'Match joué : « Temps de jeu » note les minutes de chaque joueur (total sur sa fiche et dans Stats). ⏱️ signale ceux qui ont peu joué cette saison.', '« Relancer les sans réponse » prépare le message WhatsApp pour les parents qui n\'ont pas répondu.', '« Photos pour les parents » : choisis les photos du match à montrer sur leur page (droit à l\'image respecté).', '« Faire la composition » place les joueurs sur le terrain.', 'Coche « Le match est joué », règle le score, les buteurs et les passeurs, puis note les joueurs.', '« Feuille de match » fait le PDF à imprimer.']],
     stats: ['Statistiques', ['Bilan de l\'équipe : victoires, nuls, défaites, buts et points.', 'Tableau des joueurs : touche un titre de colonne pour trier (buts, passes, présences, notes).']],
@@ -3406,7 +3635,7 @@ var Help = (() => {
   const pageTitle = (key = pageKey()) => (PAGES[key] || PAGES[''])[0];
   function textOf(rep) {
     const d = rep.diag || {};
-    return [`${TYPES[rep.type][0]} ${TYPES[rep.type][1]} – Raincy Coach${rep.page ? ' · page « ' + rep.page + ' »' : ''}`, `De : ${rep.byName || '?'}${d.role ? ' (' + d.role + ')' : ''}`, `Date : ${new Date(rep.at).toLocaleString('fr-FR')}`, '',
+    return [`${TYPES[rep.type][0]} ${TYPES[rep.type][1]} – ${AppCfg.name}${rep.page ? ' · page « ' + rep.page + ' »' : ''}`, `De : ${rep.byName || '?'}${d.role ? ' (' + d.role + ')' : ''}`, `Date : ${new Date(rep.at).toLocaleString('fr-FR')}`, '',
       rep.text, rep.context ? `\nCe que je faisais : ${rep.context}` : '',
       rep.withDiag ? `\n--- Infos techniques ---\nVersion ${d.version} · page ${d.page}\nÉcran ${d.screen} · appli installée : ${d.standalone ? 'oui' : 'non'}\n${d.device}${(d.errors || []).length ? '\nErreurs récentes :\n' + d.errors.map(e => `- ${e.at.slice(0, 16)} ${e.msg} (${e.src} ${e.page})`).join('\n') : ''}` : ''].join('\n');
   }
@@ -3455,7 +3684,7 @@ var Help = (() => {
       at: Date.now(), by: u ? u.id : null, byName: u ? Store.fullName(u) : '', status: 'new', page: page || pageTitle() };
     if (shot) rep.shot = shot;
     Store.upsert('reports', rep);
-    const body = textOf(rep), subject = `[Raincy Coach] ${TYPES[rep.type][1]} de ${rep.byName || 'un éducateur'}`;
+    const body = textOf(rep), subject = `[${AppCfg.name}] ${TYPES[rep.type][1]} de ${rep.byName || 'un éducateur'}`;
     if (how === 'mail') location.href = `mailto:${encodeURIComponent(Store.state.club.reportEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body.slice(0, 1800))}`;
     else if (how === 'share') {
       if (navigator.share) navigator.share({ title: subject, text: body }).catch(() => {});
@@ -3492,15 +3721,13 @@ Help.watch();
 
 ;
 /* ===== cloud.js ===== */
-/* Cloud: the club's shared server (Supabase) for the accounts, the data, the messaging and the pitch planning.
-   Since 3.70, FA Le Raincy is a club of the Clubbo server (js/config.js : « club »). Tables are closed (row level security,
-   no policy): everything goes through SQL functions (supabase/ea-schema.sql in the Clubbo app) that check the dirigeant's login.
-   The tools of the old Raincy server (setup script, « Mettre à jour le serveur », responsable code) were removed in 3.76. */
+/* Cloud: the Clubbo server, shared by every club (Supabase). Each club only reaches its own data:
+   every SQL function finds the club from the dirigeant's login (or the club's invitation code) — see supabase/ea-schema.sql.
+   The clubs never set up anything: the server is run by the owner of the platform, who gives each new club an activation code. */
 var Cloud = (() => {
   const builtIn = () => (typeof CLUB_SERVER !== 'undefined' && CLUB_SERVER.url && CLUB_SERVER.key ? CLUB_SERVER : null);
   const session = () => (Store.state.auth && Store.state.auth.session) || null;
-  const token = () => { const s = session(); return (s && s.token) || ''; };
-  const platform = () => !!(builtIn() || {}).club;
+  const token = () => { const s = session(); return (s && !s.demo && s.token) || ''; }; // the demo club stays on the device
   // Server address (built into the app); the invitation code of the club while a dirigeant joins it
   function cfg() {
     const c = Store.state.club.cloud || {}, b = builtIn() || {};
@@ -3512,7 +3739,12 @@ var Cloud = (() => {
   // A responsable's login is his « responsable code »
   const adminKey = () => (session() && session().admin ? token() : '');
   const ERRORS = {
-    COMPTE_INCONNU: 'Aucun compte à ce nom sur le serveur du club.',
+    COMPTE_INCONNU: 'Aucun compte à ce nom dans ce club.',
+    CLUB_INCONNU: 'Aucun club avec ce code. Vérifie le code du club (demande-le à ton responsable).',
+    CLUB_SUSPENDU: 'L\'accès de ce club est suspendu : contacte Clubbo.',
+    ACTIVATION: 'Ce code d\'activation n\'est pas valable (ou a déjà servi).',
+    SLUG_PRIS: 'Ce code de club est déjà pris : choisis-en un autre.',
+    PROPRIETAIRE: 'Clé du propriétaire incorrecte.',
     MOT_DE_PASSE: 'Mot de passe incorrect.',
     BLOQUE: 'Trop d\'essais : attends 5 minutes avant de réessayer.',
     DEJA_INSCRIT: 'Ce dirigeant a déjà un mot de passe : connecte-toi, ou demande au responsable de le réinitialiser.',
@@ -3521,10 +3753,9 @@ var Cloud = (() => {
     DONNEES: 'Informations incomplètes.',
     CRENEAU_PRIS: 'Ce créneau est déjà pris sur cette partie du terrain. Choisis un autre horaire ou l\'autre moitié.',
     HORS_CRENEAU: 'Cet horaire est en dehors des créneaux disponibles du terrain.',
-    CLE_CLUB: 'Ce lien d\'invitation n\'est plus valable : demande le nouveau lien au responsable du club.',
+    CLE_CLUB: 'Accès au club refusé : reconnecte-toi (ou demande un nouveau lien d\'invitation au responsable).',
     ADMIN: 'Réservé à un responsable du club.',
     HORAIRE: 'L\'heure de fin doit être après l\'heure de début.',
-    LIEN_PARENTS: 'Ce lien n\'est plus valable : demande le nouveau lien au coach.',
     MATCH_PASSE: 'Ce match est passé : les réponses sont fermées.',
     PHOTOS_MAX: '12 photos au plus par match pour les parents.',
     DONNEES_PUSH: 'Abonnement aux notifications refusé par le serveur.',
@@ -3550,15 +3781,18 @@ var Cloud = (() => {
     }
     return txt ? JSON.parse(txt) : null;
   }
-  // Functions that identify the dirigeant by his login instead of the club code
-  const NO_K = { club_login: 1, club_me: 1, club_teams_done: 1, club_change_pw: 1, club_logout: 1 };
+  // Functions that identify the person otherwise than by the club access (login, club creation, owner of the platform)
+  const NO_K = { club_login: 1, club_me: 1, club_teams_done: 1, club_change_pw: 1, club_logout: 1, ea_create_club: 1,
+    ea_owner_init: 1, ea_owner_codes: 1, ea_owner_clubs: 1, ea_owner_club_set: 1, ea_owner_push: 1,
+    // (1.34) the owner's space: no club login sent (the server refused these four calls)
+    ea_owner_sub: 1, ea_owner_votes: 1, ea_owner_club_plan: 1, ea_owner_requests: 1 };
   function genKey(n = 24) {
     const a = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789', r = crypto.getRandomValues(new Uint8Array(n));
     return Array.from(r, x => a[x % a.length]).join('');
   }
+
   // Dates always as YYYY-MM-DD, whatever the server sends
   const normDate = b => (b && b.date ? Object.assign(b, { date: String(b.date).slice(0, 10) }) : b);
-
 
   /* ---------- API ---------- */
   const api = {
@@ -3574,7 +3808,8 @@ var Cloud = (() => {
     unbook: id => rpc('club_unbook', { p_id: id, p_author: Auth.current().id, admin_k: adminKey() || null }),
     unbookSeries: series => rpc('club_unbook_series', { p_series: series, p_author: Auth.current().id, admin_k: adminKey() || null }),
     // accounts
-    login: (last, first, h) => rpc('club_login', { p_club: (builtIn() || {}).club || null, p_last: last, p_first: first, p_h: h }),
+    login: (club, last, first, h) => rpc('club_login', { p_club: club, p_last: last, p_first: first, p_h: h }),
+    createClub: (code, name, slug, p) => rpc('ea_create_club', { p_code: code, p_name: name, p_slug: slug, p }),
     register: (p, admK) => rpc('club_register', { admin_k: admK || adminKey() || null, p }),
     accounts: () => rpc('club_accounts'),
     accountSet: p => rpc('club_account_set', { admin_k: adminKey(), p }),
@@ -3583,14 +3818,16 @@ var Cloud = (() => {
     changePw: (oldH, newH) => rpc('club_change_pw', { t: token(), p_old: oldH, p_new: newH }),
     logout: t => rpc('club_logout', { t }),
     invite: renew => rpc('club_invite', { admin_k: adminKey(), p_new: !!renew }),
+    info: () => rpc('club_info'),
     // shared club data
     pull: since => rpc('club_pull', { p_since: since || 0 }),
     push: list => rpc('club_push', { p: list }),
-    // parents (3.8)
+    // personal codes of the licensees, answers to convocations
     memberCodes: (ids, renew) => rpc('club_member_codes', { admin_k: adminKey() || null, p_players: ids, p_renew: renew || [] }),
     memberGiven: (id, given) => rpc('club_member_given', { admin_k: adminKey() || null, p_player: id, p_given: !!given }),
     answers: matchIds => rpc('club_answers', { p_matches: matchIds }),
-    // notifications and read receipts (3.15)
+    setAnswer: (matchId, playerId, status) => rpc('club_set_answer', { p_match: matchId, p_player: playerId, p_status: status || '' }),
+    // notifications and read receipts
     pushKey: () => rpc('club_push_key'),
     pushSub: (endpoint, prefs) => rpc('club_push_sub', { k: token(), p_endpoint: endpoint, p_prefs: prefs }),
     pushUnsub: endpoint => rpc('club_push_unsub', { k: token(), p_endpoint: endpoint }),
@@ -3601,14 +3838,26 @@ var Cloud = (() => {
     photos: matchId => rpc('club_photos', { p_match: matchId }),
     photoGet: id => rpc('club_photo_get', { p_id: id }),
     photoDel: id => rpc('club_photo_del', { p_id: id }),
-    setAnswer: (matchId, playerId, status) => rpc('club_set_answer', { p_match: matchId, p_player: playerId, p_status: status || '' }),
-    // backups (3.8)
+    // backups
     backups: () => rpc('club_backups', { admin_k: adminKey() }),
     backupNow: () => rpc('club_backup_now', { admin_k: adminKey() }),
     backupGet: id => rpc('club_backup_get', { admin_k: adminKey(), p_id: id }),
     backupAuto: () => rpc('club_backup_auto'),
+    // the owner of the platform
+    ownerInit: key => rpc('ea_owner_init', { p_key: key }),
+    ownerCodes: (key, n, note) => rpc('ea_owner_codes', { p_key: key, p_new: n || 0, p_note: note || null }),
+    ownerClubs: key => rpc('ea_owner_clubs', { p_key: key }),
+    ownerSub: (key, endpoint, on) => rpc('ea_owner_sub', { p_key: key, p_endpoint: endpoint || null, p_on: on == null ? null : !!on }),
+    ownerVotes: key => rpc('ea_owner_votes', { p_key: key }),
+    ownerClubPlan: (key, club, plan) => rpc('ea_owner_club_plan', { p_key: key, p_club: club, p_plan: plan }),
+    ownerRequests: (key, id, status, code) => rpc('ea_owner_requests', { p_key: key, p_id: id || null, p_status: status || null, p_code: code || null }),
+    ownerClubSet: (key, club, status) => rpc('ea_owner_club_set', { p_key: key, p_club: club, p_status: status }),
+    ownerPush: (key, url) => rpc('ea_owner_push', { p_key: key, p_url: url }),
   };
-  const inviteLink = code => `${location.origin}${location.pathname.replace(/index\.html$/, '')}#rejoindre=${encodeURIComponent(code)}`;
+  // the club of this device (its code, shown to the dirigeants to log in)
+  const clubSlug = () => AppCfg.club || (session() && session().club && session().club.slug) || (Store.state.club.cloud || {}).slug || '';
+  const appUrl = () => `${location.origin}${location.pathname.replace(/index\.html$/, '')}`;
+  const inviteLink = code => `${appUrl()}#rejoindre=${encodeURIComponent(code)}`;
   // (3.69) the link of one person: his name is already chosen when he opens it
   async function invitePerson(p) {
     let code;
@@ -3625,42 +3874,36 @@ var Cloud = (() => {
   async function shareInvite(renew) {
     let code;
     try { code = await api.invite(renew); } catch (e) { return toast(e.message, 'err'); }
-    const link = inviteLink(code), text = `Raincy Coach : ouvre ce lien pour créer ton mot de passe (première connexion), puis ajoute l'appli à ton écran d'accueil.\n${link}`;
+    const link = inviteLink(code), club = Store.state.club.name || 'le club';
+    const text = `${club} · ${AppCfg.name} : ouvre ce lien pour créer ton mot de passe (première connexion), puis ajoute l'appli à ton écran d'accueil.\nCode du club : ${clubSlug()}\n${link}`;
     Store.state.ui.invited = true; Store.save();
-    modal({ title: 'Inviter les éducateurs', body: `<p>Envoie ce lien aux dirigeants (WhatsApp, SMS, e-mail). En l'ouvrant, chacun choisit son nom et crée son mot de passe. Ensuite, ils se connectent partout avec <b>nom, prénom et mot de passe</b>.</p>
+    modal({ title: 'Inviter les éducateurs', body: `<p>Envoie ce lien aux dirigeants (WhatsApp, SMS, e-mail). En l'ouvrant, chacun choisit son nom et crée son mot de passe. Ensuite, ils se connectent partout avec le <b>code du club</b> (<b>${esc(clubSlug())}</b>), leur <b>nom, prénom et mot de passe</b>.</p>
       <label class="fld"><span>Lien d'invitation</span><input id="invLink" value="${esc(link)}" readonly></label>
       <p class="muted small">Garde ce lien dans le groupe des éducateurs : il donne accès aux données du club. « Nouveau lien » annule l'ancien.</p>`,
       onOpen: r => { const i = $('#invLink', r); i.onclick = () => i.select(); },
       actions: [{ label: 'Nouveau lien', onClick: () => { setTimeout(() => shareInvite(true), 60); } },
-        { label: 'Copier', icon: I.copy, onClick: () => { navigator.clipboard.writeText(link).then(() => toast('Lien copié')).catch(() => toast('Sélectionne le lien et copie-le')); return false; } },
-        ...(navigator.share ? [{ label: 'Envoyer', kind: 'primary', icon: I.share, onClick: () => { navigator.share({ title: 'Raincy Coach', text }).catch(() => {}); return false; } }] : [])] });
+        { label: 'Copier', icon: I.copy, onClick: () => { navigator.clipboard.writeText(text).then(() => toast('Invitation copiée')).catch(() => toast('Sélectionne le lien et copie-le')); return false; } },
+        ...(navigator.share ? [{ label: 'Envoyer', kind: 'primary', icon: I.share, onClick: () => { navigator.share({ title: AppCfg.name, text }).catch(() => {}); return false; } }] : [])] });
   }
 
-  /* ---------- Réglages → Serveur du club (responsable) ---------- */
+  /* ---------- Réglages ---------- */
   const { esc, $, toast, modal } = UI;
   function settingsSection() {
-    const c = cfg(), admin = Auth.isAdmin(), sync = typeof Sync !== 'undefined' ? Sync.status() : '';
-    return `<section class="card"><h2>${I.share}Serveur du club (comptes, données, messagerie, planning)</h2>
-      <p>${ready() ? `<span class="res res-V">Connecté</span> ${esc(c.url.replace(/^https?:\/\//, ''))}` : '<span class="res res-D">Non connecté</span> Les comptes, le partage des données, la messagerie et le planning ont besoin du serveur du club.'}</p>
+    const admin = Auth.isAdmin(), sync = typeof Sync !== 'undefined' ? Sync.status() : '';
+    return `<section class="card"><h2>${I.share}${AppCfg.fixed ? 'Serveur du club' : 'Le club sur Clubbo'}</h2>
+      <p>${ready() ? `<span class="res res-V">Connecté</span> Code du club : <b>${esc(clubSlug() || '—')}</b>` : '<span class="res res-D">Non connecté</span>'}</p>
       ${sync ? `<p class="muted small">${esc(sync)}</p>` : ''}
-      ${admin ? `<div class="chips">${ready() ? `<button class="btn primary" data-cloud="invite">${I.share}<span>Inviter les éducateurs</span></button>` : ''}
-        ${!ready() && builtIn() ? `<button class="btn primary" data-cloud="connect">${I.check}<span>Me connecter au serveur du club</span></button>` : ''}
-        ${ready() ? `<button class="btn" data-cloud="test">${I.check}<span>Tester</span></button>` : ''}</div>
-        ${ready() ? Notify.adminCard() : ''}
-        <p class="muted small">Les éducateurs rejoignent le club avec le lien d'invitation, puis se connectent sur n'importe quel appareil avec leur nom et leur mot de passe.</p>`
-      : !ready() && builtIn() ? `<div class="chips"><button class="btn primary" data-cloud="connect">${I.check}<span>Me connecter au serveur du club</span></button></div>`
-      : `<p class="muted small">${ready() ? 'Tes données sont enregistrées sur le serveur du club : tu les retrouves en te connectant sur un autre appareil.' : 'Demande au responsable le lien d\'invitation du club.'}</p>`}
+      ${admin && ready() ? `<div class="chips"><button class="btn primary" data-cloud="invite">${I.share}<span>Inviter les éducateurs</span></button><button class="btn" data-cloud="test">${I.check}<span>Tester la connexion</span></button></div>
+        <p class="muted small">Les éducateurs rejoignent le club avec le lien d'invitation, puis se connectent sur n'importe quel appareil avec le code du club, leur nom et leur mot de passe.</p>`
+      : `<p class="muted small">Tes données sont enregistrées sur le serveur : tu les retrouves en te connectant sur un autre appareil.</p>`}
     </section>`;
   }
-  async function onSettingsClick(b, rerender) {
-    if (b.dataset.cloud === 'connect') return Auth.connectServer();
+  async function onSettingsClick(b) {
     if (b.dataset.cloud === 'invite') return shareInvite(false);
-    if (b.dataset.cloud === 'test') {
-      try { await api.ping(); toast('Connexion au serveur du club : OK'); } catch (e) { toast(e.message, 'err'); }
-    }
+    if (b.dataset.cloud === 'test') { try { await api.ping(); toast('Connexion OK'); } catch (e) { toast(e.message, 'err'); } }
   }
 
-  return Object.assign(api, { platform, ready, invitePerson, canLogin, cfg, adminKey, token, genKey, settingsSection, onSettingsClick, shareInvite });
+  return Object.assign(api, { ready, invitePerson, canLogin, cfg, adminKey, token, genKey, settingsSection, onSettingsClick, shareInvite, clubSlug, appUrl });
 })();
 
 ;
@@ -3704,7 +3947,7 @@ var Sync = (() => {
         if (r.del || !r.data) continue;
         const loc = clubData();
         if (H[k] && fp(loc) !== H[k]) continue; // changed here too: ours will be sent
-        if (fp(loc) !== fp(r.data)) { Object.assign(S().club, r.data); changed = true; }
+        if (fp(loc) !== fp(r.data)) { Object.assign(S().club, r.data); changed = true; if (typeof Sport !== 'undefined') Sport.apply(); }
         H[k] = fp(clubData()); continue;
       }
       if (!COLS.includes(r.col)) continue;
@@ -3785,7 +4028,6 @@ var Sync = (() => {
     running = (async () => {
       let changed = false;
       try {
-        const srv = (Cloud.cfg() || {}).url || ''; if (meta().server !== srv) { meta().rev = 0; meta().server = srv; } // (3.70) moved to another server
         const fresh = !meta().rev && !Object.keys(meta().h).length;
         changed = await pull();
         if (fresh && meta().rev > 0) adoptStale();
@@ -3908,7 +4150,7 @@ var Planning = (() => {
   function notReady(root) {
     root.innerHTML = `<header class="page-head"><div><h1>Planning du terrain</h1><p class="sub">Entraînements et matchs de toutes les catégories</p></div></header>
       <div class="empty"><p>Le planning est partagé par tous les éducateurs grâce au serveur du club, qui n'est pas encore connecté sur cet appareil.</p>
-      ${Auth.isAdmin() ? `<a class="btn primary" href="#/reglages">${I.settings}<span>Configurer le serveur</span></a>` : '<p class="muted">Déconnecte-toi puis reconnecte-toi avec ton nom et ton mot de passe. Si ça ne marche pas, préviens le responsable.</p>'}</div>`;
+      ${Auth.isAdmin() ? `<a class="btn primary" href="#/reglages">${I.settings}<span>Se reconnecter</span></a>` : '<p class="muted">Déconnecte-toi puis reconnecte-toi avec ton nom et ton mot de passe. Si ça ne marche pas, préviens le responsable.</p>'}</div>`;
   }
 
   async function load(from, to) {
@@ -4164,7 +4406,7 @@ var Planning = (() => {
         <select data-f="start_min">${timeOptions(s.start_min)}</select><span>→</span><select data-f="end_min">${timeOptions(s.end_min)}</select>
         <button class="icon-btn danger" data-del="${i}" aria-label="Supprimer">${I.trash}</button></div>`).join('') || '<p class="muted">Aucun créneau : le terrain est réservable à toute heure.</p>';
     };
-    if (!Cloud.adminKey()) return toast('Code responsable absent sur cet appareil (Réglages → Serveur du club → Code responsable)', 'err');
+    if (!Cloud.adminKey()) return toast('Réservé à un responsable du club', 'err');
     modal({ title: 'Créneaux disponibles', body: `
       <label class="fld"><span>Nom du terrain</span><input id="fName" value="${esc(fieldName())}" maxlength="40"></label>
       <p class="muted small">Les éducateurs ne peuvent réserver qu'à l'intérieur de ces créneaux, chaque semaine.</p>
@@ -4226,7 +4468,7 @@ var Results = (() => {
   const result = m => !m.played ? null : +m.gf > +m.ga ? 'V' : +m.gf < +m.ga ? 'D' : 'N';
   const RES = { V: ['Gagné', '✅'], N: ['Nul', '🟰'], D: ['Perdu', '❌'] };
   const teamName = m => (Store.get('teams', m.teamId) || {}).name || 'Équipe';
-  const club = () => S().club.name || 'FA Le Raincy';
+  const club = () => S().club.name || 'Nous';
   // Score written home team first
   const score = m => m.home ? `${m.gf} – ${m.ga}` : `${m.ga} – ${m.gf}`;
   // In the rows, the club's short name (« FA Le Raincy » → « Raincy ») so both teams fit on a phone
@@ -4271,7 +4513,7 @@ var Results = (() => {
           <div class="tile t-V"><b>${count('V')}</b><span>victoires</span></div>
           <div class="tile t-N"><b>${count('N')}</b><span>nuls</span></div>
           <div class="tile t-D"><b>${count('D')}</b><span>défaites</span></div>
-          <div class="tile"><b>${bp} – ${bc}</b><span>buts pour – contre</span></div>
+          <div class="tile"><b>${bp} – ${bc}</b><span>${Sport.W().units} pour – contre</span></div>
         </div>
       </section>
       <div class="side-legend"><span class="side-home">🏠 Domicile</span><span class="side-away">🚌 Extérieur</span></div>
@@ -4291,7 +4533,7 @@ var Results = (() => {
   // Text for WhatsApp: one line per category
   function share(mon, list) {
     const lines = list.slice().sort((a, b) => rank(a) - rank(b)).map(m => { const [h, a] = sides(m, true), r = result(m); return `${RES[r][1]} ${teamName(m)} : ${h} ${score(m)} ${a}`; });
-    const text = `⚽ ${club()} · ${weekendName(mon)}\n\n${lines.join('\n')}\n\n${list.filter(m => result(m) === 'V').length} victoire(s), ${list.filter(m => result(m) === 'N').length} nul(s), ${list.filter(m => result(m) === 'D').length} défaite(s)`;
+    const text = `${Sport.W().icon} ${club()} · ${weekendName(mon)}\n\n${lines.join('\n')}\n\n${list.filter(m => result(m) === 'V').length} victoire(s), ${list.filter(m => result(m) === 'N').length} nul(s), ${list.filter(m => result(m) === 'D').length} défaite(s)`;
     if (navigator.share) return navigator.share({ title: 'Résultats du week-end', text }).catch(() => {});
     navigator.clipboard.writeText(text).then(() => toast('Récapitulatif copié : colle-le dans WhatsApp')).catch(() => UI.modal({ title: 'Récapitulatif', body: `<textarea rows="10" readonly>${esc(text)}</textarea>`, actions: [{ label: 'OK', kind: 'primary' }] }));
   }
@@ -4316,13 +4558,13 @@ var Results = (() => {
 var Messages = (() => {
   const { esc, $, $$, toast, confirmBox } = UI;
   const S = () => Store.state;
-  const CACHE = 'raincy-msgs', READ = 'raincy-msg-read';
+  const CACHE = AppCfg.key('msgs'), READ = AppCfg.key('msg-read');
   let msgs = [], last = '1970-01-01T00:00:00Z', timer = null, fast = false, busy = false;
 
-  try { msgs = JSON.parse(localStorage.getItem(CACHE)) || []; if (msgs.length) last = msgs[msgs.length - 1].created_at; } catch (e) {}
+  try { msgs = JSON.parse(localStorage.getItem(CACHE)) || []; if (!Array.isArray(msgs)) msgs = []; if (msgs.length) last = msgs[msgs.length - 1].created_at; } catch (e) { msgs = []; } // a damaged copy: read again from the server
   const reads = () => { try { return JSON.parse(localStorage.getItem(READ)) || {}; } catch (e) { return {}; } };
   // categories whose teams A / B are shown in the list of conversations (this device)
-  const FAMS = 'raincy-msg-fams';
+  const FAMS = AppCfg.key('msg-fams');
   const openFams = () => { try { return JSON.parse(localStorage.getItem(FAMS)) || []; } catch (e) { return []; } };
   const saveFams = l => { try { localStorage.setItem(FAMS, JSON.stringify(l)); } catch (e) {} };
   const markRead = ch => { const r = reads(); r[ch] = new Date().toISOString(); try { localStorage.setItem(READ, JSON.stringify(r)); } catch (e) {} };
@@ -4426,7 +4668,7 @@ var Messages = (() => {
       for (const m of due) {
         const ch = 'team:' + m.teamId;
         if (msgs.some(x => x.channel === ch && (x.body || '').includes(TAG(m.id)))) { m.reminded = m.date; Store.upsert('matches', m); continue; }
-        const t = Store.get('teams', m.teamId) || {}, club = S().club.name || 'FA Le Raincy', d = new Date(m.date + 'T12:00');
+        const t = Store.get('teams', m.teamId) || {}, club = S().club.name || 'Le club', d = new Date(m.date + 'T12:00');
         const when = m.date === today ? 'aujourd\'hui' : 'demain ' + d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
         const body = [`📣 Rappel : match ${when}`, `⚽ ${t.name || ''} · ${m.home ? club + ' – ' + (m.opponent || '?') : (m.opponent || '?') + ' – ' + club}`,
           m.rdv || m.time ? `🕘 ${m.rdv ? 'Rendez-vous ' + m.rdv : ''}${m.rdv && m.time ? ' · ' : ''}${m.time ? 'coup d\'envoi ' + m.time : ''}` : '🕘 Heure à confirmer',
@@ -4449,7 +4691,7 @@ var Messages = (() => {
     if (!Cloud.ready()) {
       root.innerHTML = `<header class="page-head"><div><h1>Messages</h1><p class="sub">La messagerie des éducateurs du club</p></div></header>
         <div class="empty"><p>La messagerie passe par le serveur du club, qui n'est pas encore connecté sur cet appareil.</p>
-        ${Auth.isAdmin() ? `<a class="btn primary" href="#/reglages">${I.settings}<span>Configurer le serveur</span></a>` : '<p class="muted">Déconnecte-toi puis reconnecte-toi avec ton nom et ton mot de passe. Si ça ne marche pas, préviens le responsable.</p>'}</div>`;
+        ${Auth.isAdmin() ? `<a class="btn primary" href="#/reglages">${I.settings}<span>Se reconnecter</span></a>` : '<p class="muted">Déconnecte-toi puis reconnecte-toi avec ton nom et ton mot de passe. Si ça ne marche pas, préviens le responsable.</p>'}</div>`;
       return;
     }
     const ch = chParam && visible(decodeURIComponent(chParam)) ? decodeURIComponent(chParam) : '';
@@ -4596,13 +4838,13 @@ var People = (() => {
   /* Positions: a main position and possibly others. p.posts = [main, ...others]; p.pos keeps the line (GB, DEF, MIL, ATT)
      that the lineups use. Old players only have p.pos (a line): it is shown as « Défenseur », « Milieu »… */
   // [code, name, abbreviation, type]. The first one of each type is the type itself (« Défenseur », without more detail)
-  const POSTS = [['GB', 'Gardien', 'G', 'GB'],
+  const POSTS = Sport.POSTS, OLD_POSTS = [['GB', 'Gardien', 'G', 'GB'],
     ['DEF', 'Défenseur', 'DEF', 'DEF'], ['DC', 'Défenseur central', 'DC', 'DEF'], ['LD', 'Latéral droit', 'LD', 'DEF'], ['LG', 'Latéral gauche', 'LG', 'DEF'],
     ['MIL', 'Milieu', 'MIL', 'MIL'], ['MDC', 'Milieu défensif', 'MDC', 'MIL'], ['MC', 'Milieu relayeur', 'MC', 'MIL'], ['MOC', 'Milieu offensif', 'MOC', 'MIL'], ['MD', 'Milieu droit', 'MD', 'MIL'], ['MG', 'Milieu gauche', 'MG', 'MIL'],
     ['ATT', 'Attaquant', 'ATT', 'ATT'], ['AD', 'Ailier droit', 'AD', 'ATT'], ['AG', 'Ailier gauche', 'AG', 'ATT'], ['SA', 'Second attaquant', 'SA', 'ATT'], ['BU', 'Avant-centre', 'BU', 'ATT']];
-  const TYPES = [['GB', 'Gardien'], ['DEF', 'Défenseur'], ['MIL', 'Milieu'], ['ATT', 'Attaquant']];
+  const TYPES = Sport.TYPES;
   const subsOf = type => POSTS.filter(x => x[3] === type && x[0] !== type); // the precise positions of a type
-  const LINES = [['GB', 'Gardiens'], ['DEF', 'Défenseurs'], ['MIL', 'Milieux'], ['ATT', 'Attaquants'], ['', 'Poste non renseigné']];
+  const LINES = Sport.LINES;
   const postOf = c => POSTS.find(x => x[0] === c);
   const postsOf = p => (Array.isArray(p.posts) && p.posts.length ? p.posts : p.pos ? [p.pos] : []).filter(postOf);
   const lineOf = p => { const m = postsOf(p)[0]; return m ? postOf(m)[3] : ''; };
@@ -4898,7 +5140,6 @@ var People = (() => {
     const draw = l => (isP ? rowsOf(l, sort, p => playerRow(p)) : l.map(p => staffRow(p)).join('')) || '<p class="muted">Personne ici.</p>';
     root.innerHTML = `<header class="page-head"><div><h1>${isP ? 'Joueurs' : 'Dirigeants'}</h1><p class="sub">${list.length} sur ${all.length} · ${Auth.isAdmin() ? 'tout le club' : 'mes catégories'}</p></div>
       <div class="head-actions"><a class="btn" href="#/equipes">${I.back}<span>Équipes</span></a>
-      ${Auth.isAdmin() ? `<button class="btn" data-act="importAny">📥<span>Importer (photo, PDF, Excel…)</span></button>` : ''}
       <button class="btn" data-act="paste">${I.paste}<span>Coller une liste</span></button>
       <button class="btn primary" data-act="new">${I.plus}<span>${isP ? 'Nouveau joueur' : 'Nouveau dirigeant'}</span></button></div></header>
       <div class="filters">
@@ -4923,7 +5164,6 @@ var People = (() => {
       if (b.dataset.psort) { ui.peopleSort = b.dataset.psort; Store.persistNow(); return again(); }
       if (b.dataset.act === 'new') return (isP ? editPlayer : editStaff)(null, { teamId: filt && filt !== '-' ? filt : null, onSave: again });
       if (b.dataset.act === 'paste') return isP ? pasteList(again) : pasteStaff(again);
-      if (b.dataset.act === 'importAny') return Imports.open(isP ? 'players' : 'staff', again);
       if (b.dataset.person && isP) { location.hash = '#/joueur/' + b.dataset.person; return; }
       if (b.dataset.person) editStaff(Store.get('staff', b.dataset.person), { onSave: again });
     };
@@ -4946,8 +5186,8 @@ var People = (() => {
     return out;
   }
   /* ---------- categories by year of birth (FFF: a season starts on 1 July, U13 in 2026-2027 = born in 2014) ---------- */
-  const AGE_CATS = ['U6', 'U7', 'U8', 'U9', 'U10', 'U11', 'U12', 'U13', 'U14', 'U15', 'U16', 'U17', 'Seniors', 'Vétérans'];
-  const REMOVED_CATS = ['U18', 'U19', 'U20']; // the club has no U18 / U19 / U20: from 18 years old, players are in Seniors
+  const FOOT_CATS = ['U6', 'U7', 'U8', 'U9', 'U10', 'U11', 'U12', 'U13', 'U14', 'U15', 'U16', 'U17', 'U18', 'U19', 'U20', 'Seniors', 'Vétérans'];
+  const REMOVED_CATS = []; // (Clubbo: each club chooses its categories, U18 / U19 / U20 included)
   const seasonStart = (d = new Date()) => d.getMonth() >= 6 ? d.getFullYear() : d.getFullYear() - 1;
   const seasonLabel = () => `${seasonStart()}-${seasonStart() + 1}`;
   // From U9 to Seniors, each category also has two teams A and B: the coach picks their players among the category's licenci\u00e9s
@@ -4955,18 +5195,20 @@ var People = (() => {
   const EXTRA_CATS = ['\u00c9cole de foot']; // filled by hand
   const catKey = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/\s+/g, '');
   const isSubTeam = t => /\s[A-Z]$/.test(String(t.name || '').trim()); // \u00ab U13 A \u00bb, \u00ab Seniors B \u00bb
-  const isAgeTeam = t => AGE_CATS.some(c => catKey(c) === catKey(t.name) || (!isSubTeam(t) && catKey(c) === catKey(t.category)));
+  const ageCats = () => Sport.isFoot() ? FOOT_CATS : Sport.cur().cats;
+  const isAgeTeam = t => ageCats().some(c => catKey(c) === catKey(t.name) || (!isSubTeam(t) && catKey(c) === catKey(t.category)));
   // The category itself (\u00ab U13 \u00bb), never one of its teams (\u00ab U13 A \u00bb)
   const findCat = cat => S().teams.find(x => catKey(x.name) === catKey(cat)) || S().teams.find(x => !isSubTeam(x) && catKey(x.category) === catKey(cat));
   // Category of a player: U + age reached during the season; 18 and over: Seniors (no U18 / U19 / U20 at the club), or Vétérans with a vétéran licence
   function catOf(p) {
     const y = +(String(p.birth || '').slice(0, 4)); if (!y) return null;
     const age = seasonStart() + 1 - y;
+    if (!Sport.isFoot()) return Sport.cur().catOf(age);
     if (/v[ée]t/i.test(p.subcat || '') || age >= 36) return 'Vétérans';
-    if (age >= 18) return 'Seniors';
+    if (age >= 18) return age <= 20 && findCat('U' + age) ? 'U' + age : 'Seniors';
     return 'U' + Math.max(6, age);
   }
-  const formatOf = cat => { if (/^[ÉE]cole/i.test(cat)) return '5'; const n = +cat.slice(1); return cat[0] !== 'U' ? '11' : n <= 9 ? '5' : n <= 13 ? '8' : '11'; };
+  const formatOf = cat => { if (!Sport.isFoot()) return Sport.cur().formatOfCat(cat); if (/^[ÉE]cole/i.test(cat)) return '5'; const n = +cat.slice(1); return cat[0] !== 'U' ? '11' : n <= 9 ? '5' : n <= 13 ? '8' : '11'; };
   function ageTeam(cat) {
     let t = findCat(cat);
     // Same id on every device, so two devices creating « U8 » at the same time give one category after the sync
@@ -4975,6 +5217,7 @@ var People = (() => {
   }
   // École de foot, and teams A and B from U9 to Seniors (made once: a team the club deletes is not made again)
   function extraTeams() {
+    if (!Sport.isFoot()) return;
     EXTRA_CATS.forEach(ageTeam);
     AB_FROM.forEach(base => ['A', 'B'].forEach(l => {
       const name = base + ' ' + l;
@@ -4997,7 +5240,6 @@ var People = (() => {
   }
   // Creates every category and puts each player with a date of birth in his one (other teams, e.g. « U13 A », are kept)
   function sortByBirth() {
-    AGE_CATS.forEach(ageTeam);
     const ageIds = new Set(S().teams.filter(isAgeTeam).map(t => t.id));
     let moved = 0, noBirth = 0;
     S().players.forEach(p => {
@@ -5015,17 +5257,12 @@ var People = (() => {
     if (!Auth.isAdmin() || !S().players.length) return false;
     const season = seasonLabel(), c = S().club;
     let changed = false;
-    if (!c.noU18U19U20) { removeOldCats(); c.noU18U19U20 = 1; changed = true; }
-    // Vétérans loisirs, next to Vétérans (made once; players are put in it by hand)
-    if (!c.vetLoisirs) { ageTeam('Vétérans loisirs'); c.vetLoisirs = 1; changed = true; }
-    if (!c.teamsAB) { AGE_CATS.forEach(ageTeam); extraTeams(); c.teamsAB = 1; changed = true; }
-    if (c.catSeason === season && AGE_CATS.every(k => findCat(k))) { if (changed) { sortTeams(); Store.save(); } return changed; }
-    if (c.catSeason === season) { AGE_CATS.forEach(ageTeam); sortTeams(); Store.save(); return true; }
+    if (c.catSeason === season) return changed;
     sortByBirth(); c.catSeason = season; Store.save(); return true;
   }
   function sortByBirthDialog(done) {
     const y = seasonStart() + 1;
-    UI.confirmBox(`Créer les catégories U6 à U17, Seniors et Vétérans, et ranger chaque joueur selon son année de naissance (saison ${seasonLabel()} : U13 = né en ${y - 13}, U17 = né en ${y - 17}, Seniors = né en ${y - 18} ou avant) ? Les autres équipes (ex : « U13 A ») et les dirigeants ne changent pas.`, 'Ranger').then(ok => {
+    UI.confirmBox(`Ranger chaque joueur dans sa catégorie (créée si besoin) selon son année de naissance (saison ${seasonLabel()}${Sport.isFoot() ? ` : U13 = né en ${y - 13}, U17 = né en ${y - 17}, Seniors = né en ${y - 18} ou avant` : ` : catégories de la fédération de ${Sport.cur().label.toLowerCase()}`}) ? Les autres équipes (ex : « U13 A ») et les dirigeants ne changent pas.`, 'Ranger').then(ok => {
       if (!ok) return;
       const r = sortByBirth(); S().club.catSeason = seasonLabel(); Store.save();
       toast(`${r.moved} joueur${r.moved > 1 ? 's' : ''} rangé${r.moved > 1 ? 's' : ''}${r.noBirth ? ` · ${r.noBirth} sans date de naissance` : ''}`);
@@ -5035,12 +5272,12 @@ var People = (() => {
   function teamForSub(sub) {
     const tn = TEAM_OF_SUB[sub]; if (!tn) return null;
     let t = findCat(tn);
-    if (!t) t = Store.upsert('teams', { id: Store.uid(), name: tn, category: tn, format: FORMAT_OF_TEAM[tn] || '11' });
+    if (!t) t = Store.upsert('teams', { id: Store.uid(), name: tn, category: tn, format: Sport.isFoot() ? FORMAT_OF_TEAM[tn] || '11' : formatOf(tn) });
     return t.id;
   }
   function pasteList(done) {
     modal({ title: 'Coller une liste de joueurs',
-      body: `<p class="tip">Dans Footclubs, sélectionne les lignes de la liste des licenciés, copie-les puis colle-les ici. Il faut au minimum le nom, le prénom et la date de naissance sur chaque ligne. Les joueurs sont rangés dans leur catégorie selon leur année de naissance (U6 à U17, Seniors à partir de 18 ans, Vétérans).</p>
+      body: `<p class="tip">${Sport.isFoot() ? 'Dans Footclubs' : 'Dans le logiciel de ta fédération'}, sélectionne les lignes de la liste des licenciés, copie-les puis colle-les ici. Il faut au minimum le nom, le prénom et la date de naissance sur chaque ligne. Les joueurs sont rangés dans leur catégorie selon leur année de naissance (${Sport.cur().cats.slice(0, 1)[0]} à Seniors).</p>
         <textarea id="pasteTxt" rows="9" placeholder="DUPONT Lucas   12/03/2014   Libre / U13 (- 13 ans)"></textarea><p class="muted small" id="pasteInfo"></p>`,
       onOpen: r => { $('#pasteTxt', r).oninput = e => { const n = parseLines(e.target.value).length; $('#pasteInfo', r).textContent = n ? `${n} joueur${n > 1 ? 's' : ''} reconnu${n > 1 ? 's' : ''}` : ''; }; },
       actions: [{ label: 'Annuler' }, { label: 'Ajouter', kind: 'primary', onClick: (c, r) => {
@@ -5154,8 +5391,9 @@ var People = (() => {
 
   /* ---------- lineup: each spot of a formation gets the player whose positions fit it best ---------- */
   // A spot of Formations: [label, x (0 = our goal, .5 = halfway), y (0 = our left), gk]
-  function slotOf([, x, y, gk]) {
+  function slotOf([, x, y, gk, fits]) {
     if (gk) return { line: 'GB', ideal: ['GB'] };
+    if (fits) { const pt = POSTS.find(p => p[0] === fits[0]); return { line: pt ? pt[3] : '', side: '', ideal: fits }; }
     const line = x < .22 ? 'DEF' : x < .4 ? 'MIL' : 'ATT', side = y < .3 ? 'G' : y > .7 ? 'D' : 'C';
     const ideal = line === 'DEF' ? (side === 'G' ? ['LG'] : side === 'D' ? ['LD'] : ['DC'])
       : line === 'MIL' ? (side === 'G' ? ['MG', 'LG', 'AG'] : side === 'D' ? ['MD', 'LD', 'AD'] : x <= .3 ? ['MDC', 'MC'] : x >= .37 ? ['MOC', 'MC', 'SA'] : ['MC', 'MDC', 'MOC'])
@@ -5213,7 +5451,7 @@ var People = (() => {
       <div class="tiles">
         ${tile(s.att.pct == null ? '–' : s.att.pct + ' %', `Présence à l'entraînement${s.att.total ? ` (${s.att.n}/${s.att.total})` : ''}`, s.att.pct == null ? '' : s.att.pct >= 75 ? 'v' : s.att.pct >= 50 ? 'n' : 'd')}
         ${tile(s.played.length, 'Matchs joués')}${tile(s.minutes, 'Minutes jouées')}${tile(s.avg == null ? '–' : s.avg + "'", 'Moyenne par match')}
-        ${tile(s.g, 'Buts')}${tile(s.a, 'Passes déc.')}${tile(am ? Ratings.fr(am) : '–', 'Note matchs /5')}${tile(at ? Ratings.fr(at) : '–', 'Note entr. /5')}
+        ${tile(s.g, Sport.W().Units)}${tile(s.a, Sport.W().Assists)}${tile(am ? Ratings.fr(am) : '–', 'Note matchs /5')}${tile(at ? Ratings.fr(at) : '–', 'Note entr. /5')}
       </div>
       <p class="muted small">Saison ${esc(seasonLabel())} · les présences comptent les séances où le coach a fait l'appel.</p>
       <div class="cards2">
@@ -5231,7 +5469,7 @@ var People = (() => {
         <section class="card"><h2>${I.match}Matchs de la saison (${s.ms.length})</h2>
           ${s.ms.length ? `<ul class="res-list">${s.ms.slice(0, 15).map(m => { const st = (m.stats || {})[p.id] || {}, mn = (m.minutes || {})[p.id];
             return `<li><a href="#/match/${m.id}"><span class="d">${esc(UI.fmtDate(m.date))}</span><span class="o">${m.home ? 'contre' : 'chez'} ${esc(m.opponent || '?')}</span>
-            <span class="s">${m.played ? `${mn != null && mn !== '' ? esc(mn) + "'" : ''}${st.g ? ' ⚽' + (st.g > 1 ? '×' + st.g : '') : ''}${st.a ? ' 🅿️' + (st.a > 1 ? '×' + st.a : '') : ''}` : hh(m.time) || 'à venir'}</span>${res(m) ? `<span class="res res-${res(m)}">${res(m)}</span>` : ''}</a></li>`; }).join('')}</ul>` : '<p class="muted">Pas encore convoqué cette saison.</p>'}
+            <span class="s">${m.played ? `${mn != null && mn !== '' ? esc(mn) + "'" : ''}${st.g ? ' ' + Sport.W().icon + (st.g > 1 ? '×' + st.g : '') : ''}${st.a ? ' 🅿️' + (st.a > 1 ? '×' + st.a : '') : ''}` : hh(m.time) || 'à venir'}</span>${res(m) ? `<span class="res res-${res(m)}">${res(m)}</span>` : ''}</a></li>`; }).join('')}</ul>` : '<p class="muted">Pas encore convoqué cette saison.</p>'}
         </section>
         <section class="card"><h2>${I.training}Entraînements (${s.att.n}/${s.att.total})</h2>
           ${recentTr.length ? `<div class="att-strip">${recentTr.map(t => `<a class="att ${t.presents.includes(p.id) ? 'in' : 'out'}" href="#/entrainement/${t.id}" title="${esc(t.title || 'Entraînement')}"><b>${t.presents.includes(p.id) ? '✓' : '✗'}</b><span>${esc(UI.fmtDate(t.date, { day: 'numeric', month: 'short' }))}</span></a>`).join('')}</div>` : '<p class="muted">Aucun appel fait pour l\'instant.</p>'}
@@ -5248,7 +5486,7 @@ var People = (() => {
     };
   }
 
-  return { addPlayers, ageTeam, findCat, isClubList, importClubList, autoCategories, sortByBirth, sortByBirthDialog, catOf, seasonLabel, seasonFrom, editPlayer, editStaff, teamSections, bindTeamSections, staffPicker, listPage, playerPage, age, fmtBirth, tel, name,
+  return { addPlayers, addStaff, ageTeam, findCat, get AGE_CATS() { return ageCats(); }, isClubList, importClubList, autoCategories, sortByBirth, sortByBirthDialog, catOf, seasonLabel, seasonFrom, editPlayer, editStaff, teamSections, bindTeamSections, staffPicker, listPage, playerPage, age, fmtBirth, tel, name,
     attendance, pctBadge, matchLength, playerSeason, assignSlots, lowPlaytime, POSTS, TYPES, postsOf, postsLabel, lineOf, sortPlayers, byLine, sortBar, PHONE_SHOW, staffPhone };
 })();
 
@@ -5361,7 +5599,8 @@ var Templates = (() => {
     return Store.upsert('schemas', sc);
   }
   // The whiteboard: a blank board that is never saved (unless the coach asks)
-  function blank(format = '11') {
+  function blank(format) {
+    if (!format || (format !== 'zone' && !Board.PITCH[format])) format = Sport.defFormat();
     const field = format === 'zone' ? { format, view: 'full', w: 40, h: 25 } : { format, view: 'full' };
     return { id: 'tableau-' + Store.uid(), name: 'Tableau blanc', teamId: null, field, overlays: {}, objects: [], zones: [], steps: [{ pos: {}, arrows: [], moves: {}, note: '', dur: 2 }], scratch: true };
   }
@@ -5718,7 +5957,7 @@ var Editor = (() => {
     move: 'Fais glisser un joueur pour le placer. Touche une flèche ou une zone pour la modifier.',
     home: 'Touche le terrain pour ajouter un joueur de ton équipe.',
     away: 'Touche le terrain pour ajouter un adversaire.',
-    gk: 'Touche le terrain pour ajouter un gardien.',
+    gk: `Touche le ${Sport.cur().place === 'salle' ? 'terrain' : 'terrain'} pour ajouter un ${(Sport.cur().gk || 'gardien').toLowerCase()}.`,
     ball: 'Touche le terrain pour poser un ballon.',
     cone: 'Touche le terrain pour poser un plot.',
     goal: 'Touche le terrain pour poser un but.',
@@ -5837,7 +6076,7 @@ var Editor = (() => {
     if (tool === 'gk') return { type: 'player', color: 'jaune', gk: true, label: 'G' };
     if (tool === 'ball') return { type: 'ball' };
     if (tool === 'cone') return { type: 'cone', color: E.coneColor };
-    if (tool === 'goal') return { type: 'goal', size: f.format === 'zone' ? 'mini' : 'big', w: f.format === '11' ? 7.32 : 6, rot: w[0] > Board.dims(f).L / 2 ? 0 : 180 };
+    if (tool === 'goal') return { type: 'goal', size: f.format === 'zone' ? 'mini' : 'big', w: (Board.PITCH[f.format] || {}).goal || (f.format === '11' ? 7.32 : 6), rot: w[0] > Board.dims(f).L / 2 ? 0 : 180 };
   }
   function addObject(o, p) {
     o.id = Store.uid(); E.sc.objects.push(o);
@@ -6024,7 +6263,7 @@ var Editor = (() => {
   /* ---------- toolbar, steps, side panel ---------- */
   function renderTools() {
     const c = club();
-    E.root.querySelector('#edTools').innerHTML = TOOLS.map(([id, lab, ic]) => {
+    E.root.querySelector('#edTools').innerHTML = TOOLS.filter(([id]) => id !== 'gk' || Sport.cur().gk).map(([id, lab, ic]) => { if (id === 'goal' && !Sport.isFoot()) lab = Sport.id() === 'basket' ? 'Panier' : Sport.id() === 'volley' ? 'Cible' : Sport.id() === 'rugby' ? 'Poteaux' : 'But';
       const col = id === 'home' ? Board.BIBS[c.homeBib] : id === 'away' ? Board.BIBS[c.awayBib] : id === 'gk' ? Board.BIBS.jaune : null;
       const style = col ? ` style="color:${col[0]};--tool-ink:${col[1]}"` : '';
       return `<button class="tool ${E.tool === id ? 'on' : ''}" data-tool="${id}" aria-pressed="${E.tool === id}"><span class="ti"${style}>${I[ic]}</span><span>${lab}</span></button>`;
@@ -6077,7 +6316,7 @@ var Editor = (() => {
           <label class="fld"><span>Nom affiché</span><input id="pName" maxlength="24" value="${esc(o.name || '')}" placeholder="Prénom"></label>
           <div class="lbl">Couleur du maillot</div>
           ${chipRow(Object.entries(Board.BIBS).map(([k, v]) => [k, '', swatch(v[0])]), 'bib', o.color)}
-          <label class="switch"><input type="checkbox" id="pGk" ${o.gk ? 'checked' : ''}><span>C'est un gardien</span></label>`;
+          <label class="switch"><input type="checkbox" id="pGk" ${o.gk ? 'checked' : ''}><span>${Sport.cur().gk ? 'C\'est un gardien' : 'Joueur à part (couleur différente)'}</span></label>`;
       }
       if (o.type === 'cone') h += `<div class="lbl">Couleur</div>${chipRow([['orange', 'Orange'], ['jaune', 'Jaune'], ['bleu', 'Bleu'], ['rouge', 'Rouge']], 'cone', o.color)}`;
       if (o.type === 'goal') h += `<div class="lbl">Taille</div>${chipRow([['big', 'Grand but'], ['mini', 'Mini-but']], 'gsize', o.size === 'mini' ? 'mini' : 'big')}
@@ -6120,9 +6359,9 @@ var Editor = (() => {
         <label class="fld"><span>Transparence du calque</span><input type="range" id="traceOp" min="10" max="90" step="5" value="${Math.round((sc.trace.opacity == null ? .7 : sc.trace.opacity) * 100)}"></label>
         <button class="btn primary wide" data-act="dropTrace">${I.check}<span>Retirer le calque (version propre)</span></button>`;
       h += `<h3>Afficher</h3>
-        ${tg('lanes', 'Couloirs et demi-espaces')}${tg('phases', 'Zones de jeu : conservation, progression, déséquilibre, finition')}${tg('bloc', 'Bloc adverse')}${tg('names', 'Prénoms des joueurs')}
+        ${Sport.isFoot() ? tg('lanes', 'Couloirs et demi-espaces') + tg('phases', 'Zones de jeu : conservation, progression, déséquilibre, finition') : ''}${tg('bloc', 'Bloc adverse')}${tg('names', 'Prénoms des joueurs')}
         <h3>Terrain</h3>
-        ${f.format === 'bg' ? '<p class="tip">Le fond est une image importée (photo, page de PDF ou image de vidéo). Dessine dessus avec les outils : joueurs, flèches, zones et étapes.</p>' : chipRow([['11', 'Foot à 11'], ['8', 'Foot à 8'], ['5', 'Foot à 5'], ['zone', 'Zone libre']], 'fmt', f.format)}
+        ${f.format === 'bg' ? '<p class="tip">Le fond est une image importée (photo, page de PDF ou image de vidéo). Dessine dessus avec les outils : joueurs, flèches, zones et étapes.</p>' : chipRow([...Sport.cur().formats.map(x => [x[0], x[1]]), ['zone', 'Zone libre']], 'fmt', f.format)}
         ${f.format === 'bg' ? '' : f.format === 'zone' ? `<div class="row2"><label class="fld"><span>Longueur (m)</span><input type="number" id="fW" min="5" max="110" value="${f.w || 30}"></label><label class="fld"><span>Largeur (m)</span><input type="number" id="fH" min="5" max="75" value="${f.h || 20}"></label></div>`
           : chipRow([['full', 'Terrain entier'], ['half', 'Demi-terrain']], 'view', f.view || 'full')}
         <h3>Équipe</h3>
@@ -6586,12 +6825,12 @@ var ClubLife = (() => {
 
 ;
 /* ===== weather.js ===== */
-/* Weather: the week in Le Raincy and the weather of the next away match (city and date of the trip).
+/* Weather: the week in the club's town (Réglages → Le club) and the weather of the next away match (city and date of the trip).
    Forecasts come from Open-Meteo (free, no account); asked by the device itself and kept 2 hours. */
 var Weather = (() => {
   const { esc } = UI;
-  const HOME = { name: 'Le Raincy', lat: 48.8993, lon: 2.5183 };
-  const TTL = 2 * 3600e3, KEY = 'raincy-weather', GEO = 'raincy-geo';
+  const HOMEOF = () => { const c = Store.state.club; return c.lat != null && c.lon != null ? { name: c.city || 'le club', lat: +c.lat, lon: +c.lon } : null; };
+  const TTL = 2 * 3600e3, KEY = AppCfg.key('weather'), GEO = AppCfg.key('geo');
   const load = k => { try { return JSON.parse(localStorage.getItem(k)) || {}; } catch (e) { return {}; } };
   const store = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
 
@@ -6652,7 +6891,8 @@ var Weather = (() => {
     const o = String(m.opponent || '').replace(/\b(F\.?C\.?|A\.?S\.?|U\.?S\.?|C\.?S\.?|E\.?S\.?|S\.?C\.?|R\.?C\.?|J\.?S\.?|A\.?C\.?|C\.?O\.?|F\.?A\.?|U\.?S\.?M\.?|A\.?F\.?C\.?|Football|Club|Olympique|Stade|Entente|Sporting|Racing|Association|Sportive|Union|Jeunesse|Espoir|Red Star|U\d+|\d+)\b/gi, ' ')
       .replace(/[^A-Za-zÀ-ÿ' -]/g, ' ').replace(/\s+/g, ' ').trim();
     if (o.length >= 3) out.push(o);
-    return [...new Set(out)].filter(s => !/raincy/i.test(s));
+    const own = String((HOMEOF() || {}).name || '').toLowerCase();
+    return [...new Set(out)].filter(s => !own || s.toLowerCase() !== own);
   }
   const dist = (a, b) => Math.hypot((a.lat - b.lat) * 111, (a.lon - b.lon) * 73);
   async function geocode(name) {
@@ -6660,8 +6900,8 @@ var Weather = (() => {
     if (k in cache) return cache[k];
     const r = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=10&language=fr&countryCode=FR`);
     if (!r.ok) throw new Error('lieu introuvable');
-    const res = ((await r.json()).results || []).map(x => ({ name: x.name, lat: x.latitude, lon: x.longitude })).filter(x => dist(x, HOME) < 250);
-    res.sort((a, b) => dist(a, HOME) - dist(b, HOME)); // the closest one: a district 93 club plays around Paris
+    const res = ((await r.json()).results || []).map(x => ({ name: x.name, lat: x.latitude, lon: x.longitude })).filter(x => !HOMEOF() || dist(x, HOMEOF()) < 250);
+    if (HOMEOF()) res.sort((a, b) => dist(a, HOMEOF()) - dist(b, HOMEOF())); // the closest one: a club plays near home
     cache[k] = res[0] || null; store(GEO, cache);
     return cache[k];
   }
@@ -6671,13 +6911,13 @@ var Weather = (() => {
   const DAYS = ['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.'];
   const wd = date => DAYS[new Date(date + 'T12:00').getDay()];
   const longDay = date => new Date(date + 'T12:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
-  const placeholder = () => `<section class="card wx-card" id="wxCard"><h2>🌤️ Météo au Raincy · 7 jours</h2><p class="muted small">Chargement de la météo…</p></section>`;
+  const placeholder = () => !HOMEOF() ? '' : `<section class="card wx-card" id="wxCard"><h2>🌤️ Météo · ${esc((HOMEOF() || {}).name || '')} · 7 jours</h2><p class="muted small">Chargement de la météo…</p></section>`;
   // events: [{ date, time, kind: 'match'|'training', label, match? }], trip: next away match of the coach
   async function mount(root, events, trip) {
-    const box = root.querySelector('#wxCard'); if (!box) return;
-    if (!navigator.onLine) { box.innerHTML = '<h2>🌤️ Météo au Raincy</h2><p class="muted small">Pas de connexion internet : la météo s\'affichera au retour du réseau.</p>'; return; }
+    const box = root.querySelector('#wxCard'); if (!box || !HOMEOF()) return; const HOME = HOMEOF();
+    if (!navigator.onLine) { box.innerHTML = '<h2>🌤️ Météo</h2><p class="muted small">Pas de connexion internet : la météo s\'affichera au retour du réseau.</p>'; return; }
     let f;
-    try { f = await forecast(HOME.lat, HOME.lon); } catch (e) { box.innerHTML = '<h2>🌤️ Météo au Raincy</h2><p class="muted small">La météo n\'a pas pu être chargée. Réessaie plus tard.</p>'; return; }
+    try { f = await forecast(HOME.lat, HOME.lon); } catch (e) { box.innerHTML = '<h2>🌤️ Météo</h2><p class="muted small">La météo n\'a pas pu être chargée. Réessaie plus tard.</p>'; return; }
     const days = f.daily.time.slice(0, 7).map(d => day(f, d));
     const evOf = date => events.filter(e => e.date === date);
     const alerts = [];
@@ -6685,7 +6925,7 @@ var Weather = (() => {
       const w = warnings(day(f, e.date), hour(f, e.date, e.time));
       if (w.length) alerts.push(`<li><b>${esc(longDay(e.date))}</b> · ${esc(e.label)}${e.time ? ' à ' + esc(e.time) : ''} : ${esc(w.join(', '))}</li>`);
     });
-    box.innerHTML = `<h2>🌤️ Météo au Raincy · 7 jours</h2>
+    box.innerHTML = `<h2>🌤️ Météo · ${esc((HOMEOF() || {}).name || '')} · 7 jours</h2>
       <div class="wx-week">${days.map(d => { const ev = evOf(d.date), [ic, lab] = look(d.code);
         return `<div class="wx-day ${ev.length ? 'has-ev' : ''}" title="${esc(lab)}"><span class="wx-d">${wd(d.date)}</span><span class="wx-ic">${ic}</span>
           <span class="wx-t"><b>${d.max}°</b><i>${d.min}°</i></span>${d.rain >= 0.5 ? `<span class="wx-r">${Math.round(d.rain)} mm</span>` : '<span class="wx-r"></span>'}
@@ -6711,6 +6951,7 @@ var Weather = (() => {
   }
   // Short weather of today's event for the top of the home page (« ☀️ 21° »)
   async function todayShort(time) {
+    const HOME = HOMEOF(); if (!HOME) return '';
     try { const f = await forecast(HOME.lat, HOME.lon), date = UI.today(), d = day(f, date), h = hour(f, date, time); if (!d) return '';
       const [ic] = look(h ? h.code : d.code), w = warnings(d, h);
       return `${ic} ${h ? h.temp : d.max}°${w.length ? ' · ' + w[0] : ''}`; } catch (e) { return ''; }
@@ -6741,7 +6982,7 @@ var Notify = (() => {
     if (Notification.permission !== 'granted') {
       if (!ask) return null;
       const p = await Notification.requestPermission();
-      if (p !== 'granted') throw new Error('Notifications refusées. Pour les autoriser : réglages du téléphone → Notifications → Raincy Coach.');
+      if (p !== 'granted') throw new Error('Notifications refusées. Pour les autoriser : réglages du téléphone → Notifications → ' + AppCfg.name + '.');
     }
     const key = await Cloud.pushKey();
     if (!key) throw new Error('Les notifications du club ne sont pas encore activées : le responsable doit le faire une fois (Réglages → Serveur du club → Notifications).');
@@ -6780,7 +7021,7 @@ var Notify = (() => {
     const swOk = supported() && !!(await ready());
     if (supported() && !swOk) text = 'L\'appli n\'est pas encore prête pour les notifications : ferme-la, rouvre-la depuis son icône, puis reviens ici.';
     else if (!supported()) text = ios() && !standalone() ? '📱 Sur iPhone : ajoute d\'abord l\'appli à l\'écran d\'accueil (Partager → « Sur l\'écran d\'accueil »), ouvre-la depuis son icône, puis reviens ici.' : 'Ce navigateur ne reçoit pas de notifications.';
-    else if (perm === 'denied') text = '🚫 Notifications bloquées sur ce téléphone : autorise-les dans les réglages du téléphone (Notifications → Raincy Coach), puis reviens ici.';
+    else if (perm === 'denied') text = '🚫 Notifications bloquées sur ce téléphone : autorise-les dans les réglages du téléphone (Notifications → ' + AppCfg.name + '), puis reviens ici.';
     else if (sub && S().ui.notifOn) { text = '✅ Activées : tu es prévenu tout de suite, même appli fermée.'; b = `<button class="btn soft" data-notif="test">${I.check}<span>M'envoyer un test</span></button><button class="btn soft" data-notif="off">${I.x}<span>Désactiver</span></button>`; }
     else { text = 'Pas encore activées sur ce téléphone.'; b = `<button class="btn primary" data-notif="on">🔔<span>Activer les notifications</span></button>`; }
     if (!box.isConnected) return;
@@ -6800,6 +7041,7 @@ var Notify = (() => {
   }
 
   /* ---------- responsable: once for the club ---------- */
+  // (1.28) on Clubbo the notifications are set up once for every club (the platform): nothing to do for a club
   function adminCard() {
     return `<div class="notif-admin"><b>🔔 Notifications des coachs</b> <span class="muted small" id="notifSrv"></span>
       <span class="muted small">Chaque coach les active sur son téléphone : Réglages → Mon compte.</span></div>`;
@@ -6814,50 +7056,52 @@ var Notify = (() => {
 
 ;
 /* ===== supporters.js ===== */
-/* Supporters: the club's slogan, the crest turning like a coin (the slogan on its back), and the flag with the crest and the slogan,
-   waving above supporters of all ages (a child, a teenager, a mum, a dad and a grandfather). Drawn in SVG, animated in app.css. */
+/* Supporters: the club's crest turning like a coin (its name and slogan on the back), and the flag with the crest and the slogan,
+   waving above supporters of all ages. Everything comes from the club's settings (crest, colours, slogan), the app's crest by default.
+   A slogan « A : B » is written A around the coin, B in its middle. */
 var Supporters = (() => {
-  const SLOGAN = 'Plus d\'un siècle de passion, d\'effort et de victoires : Notre Club, Notre Histoire, Notre Fierté.';
+  const club = () => (typeof Store !== 'undefined' && Store.state && Store.state.club) || {};
+  const crest = () => club().crest || AppCfg.crest;
+  const slogan = () => club().slogan || '';
+  const col = () => ({ a: club().color1 || '#8c1024', b: club().color2 || '#0e1d45' });
+  const X = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  // a text in lines of at most n characters (whole words)
+  const wrap = (t, n, max) => { const out = []; String(t || '').split(/\s+/).filter(Boolean).forEach(w => { const l = out[out.length - 1]; if (l && (l + ' ' + w).length <= n) out[out.length - 1] = l + ' ' + w; else out.push(w); }); return out.slice(0, max); };
   let n = 0;
 
-  // The back of the coin: the first part of the slogan around the ring, « Notre Club, Notre Histoire, Notre Fierté » in the middle
+  // The back of the coin: the club's name around the ring, its slogan (or its short name) in the middle;
+  // a slogan « A : B »: A around the ring (cut in two at its comma when long: over the top, then under the bottom), B in the middle
   function back() {
-    const id = 'coinArc' + (++n);
-    // centred on the ring: the first half over the top, the second half under the bottom (read upright), ⚜ on each side
-    const top = 37.9, bot = 42.4;
+    const id = 'coinArc' + (++n), c = col(), sl = slogan(), cut = sl.indexOf(' : ');
+    const ring = cut > 0 ? sl.slice(0, cut).trim().toUpperCase() : String(club().name || AppCfg.name).toUpperCase().slice(0, 30);
+    const midText = cut > 0 ? sl.slice(cut + 3) : sl;
+    const mid = (midText ? wrap(midText.toUpperCase(), cut > 0 ? 15 : 14, 4) : wrap(String(club().short || club().name || 'EA').toUpperCase(), 12, 3)).map(l => cut > 0 ? l.replace(/[,.;]+$/, '') : l);
+    const half = ring.length > 30 ? (ring.indexOf(', ') > 0 ? ring.indexOf(', ') + 1 : ring.lastIndexOf(' ', Math.ceil(ring.length / 2))) : -1;
+    const [name, under] = half > 0 ? [ring.slice(0, half).trim(), ring.slice(half).trim()] : [ring, ''];
+    const top = 37.9, bot = 42.4, y0 = 50 - (mid.length - 1) * 5.2;
     return `<svg class="coin-svg" viewBox="0 0 100 100" aria-hidden="true">
       <defs><path id="${id}t" d="M${50 - top},50 A${top},${top} 0 0 1 ${50 + top},50"/><path id="${id}b" d="M${50 - bot},50 A${bot},${bot} 0 0 0 ${50 + bot},50"/></defs>
-      <circle cx="50" cy="50" r="49" fill="#7a0a16"/><circle cx="50" cy="50" r="46.6" fill="none" stroke="#faf8f8" stroke-width="1.4"/>
-      <circle cx="50" cy="50" r="33.5" fill="#0e1d45" stroke="#c9a45c" stroke-width="1.2"/>
-      <g font-family="system-ui,sans-serif" font-weight="800" font-size="5.8" letter-spacing=".25" fill="#f3e2b5">
-        <text><textPath href="#${id}t" startOffset="50%" text-anchor="middle">PLUS D'UN SIÈCLE DE PASSION,</textPath></text>
-        <text><textPath href="#${id}b" startOffset="50%" text-anchor="middle">D'EFFORT ET DE VICTOIRES</textPath></text></g>
-      <g font-size="5" fill="#c9a45c" text-anchor="middle"><text x="9.6" y="51.8">⚜</text><text x="90.4" y="51.8">⚜</text></g>
-      <text x="50" y="27" text-anchor="middle" font-size="8" fill="#c9a45c">⚜</text>
-      <g font-family="system-ui,sans-serif" font-weight="800" text-anchor="middle" fill="#fff">
-        <text x="50" y="41" font-size="7.4">NOTRE CLUB</text><text x="50" y="51.5" font-size="7.4">NOTRE HISTOIRE</text><text x="50" y="62" font-size="7.4" fill="#e2c27d">NOTRE FIERTÉ</text></g>
-      <text x="50" y="74" text-anchor="middle" font-family="system-ui,sans-serif" font-weight="700" font-size="6" fill="#c9a45c" letter-spacing="1">1914</text>
+      ${under ? `<text font-family="system-ui,sans-serif" font-weight="800" font-size="${under.length > 26 ? 5 : 6}" letter-spacing=".25" fill="#f3e2b5"><textPath href="#${id}b" startOffset="50%" text-anchor="middle">${X(under)}</textPath></text>` : ''}
+      <circle cx="50" cy="50" r="49" fill="${c.a}"/><circle cx="50" cy="50" r="46.6" fill="none" stroke="#faf8f8" stroke-width="1.4"/>
+      <circle cx="50" cy="50" r="33.5" fill="${c.b}" stroke="#c9a45c" stroke-width="1.2"/>
+      <text font-family="system-ui,sans-serif" font-weight="800" font-size="${name.length > 22 ? 5 : 6}" letter-spacing=".25" fill="#f3e2b5"><textPath href="#${id}t" startOffset="50%" text-anchor="middle">${X(name)}</textPath></text>
+      <g font-family="system-ui,sans-serif" font-weight="800" text-anchor="middle" fill="#fff">${mid.map((l, k) => `<text x="50" y="${(y0 + k * 10.4).toFixed(1)}" font-size="${mid.length > 3 ? 6 : 7.4}"${k === mid.length - 1 && mid.length > 1 ? ' fill="#e2c27d"' : ''}>${X(l)}</text>`).join('')}</g>
     </svg>`;
   }
   // The crest as a coin: the crest in front, the slogan behind; cls = the class of the picture (hero-crest, lock-crest…)
-  const coin = (cls = '') => `<span class="crest-live coin ${cls}-coin" role="img" aria-label="Blason du club · ${UI.esc(SLOGAN)}" title="${UI.esc(SLOGAN)}">
-      <span class="coin-in"><span class="coin-face coin-front"><img src="icons/crest.png" alt="" class="${cls}"></span><span class="coin-face coin-back">${back()}</span></span></span>`;
+  const coin = (cls = '') => `<span class="crest-live coin ${cls}-coin" role="img" aria-label="Blason du club${slogan() ? ' · ' + X(slogan()) : ''}" title="${X(slogan() || club().name || '')}">
+      <span class="coin-in"><span class="coin-face coin-front"><img src="${X(crest())}" alt="" class="${cls}"></span><span class="coin-face coin-back">${back()}</span></span></span>`;
 
   /* ---------- the flag held by the supporters ---------- */
   const W = 240, FX = 41, FY = 8, FW = 158, FH = 54, SLICES = 16;
   function flag() {
-    const id = 'flagC' + (++n), sw = FW / SLICES;
+    const id = 'flagC' + (++n), sw = FW / SLICES, c = col(), words = wrap(slogan() || club().name || 'Allez le club !', 17, 5);
     const content = `<g id="${id}">
-        <defs><linearGradient id="${id}g" x1="0" x2="1"><stop offset="0" stop-color="#8c1024"/><stop offset=".55" stop-color="#6d0d1f"/><stop offset="1" stop-color="#0e1d45"/></linearGradient></defs>
+        <defs><linearGradient id="${id}g" x1="0" x2="1"><stop offset="0" stop-color="${c.a}"/><stop offset=".55" stop-color="${c.a}"/><stop offset="1" stop-color="${c.b}"/></linearGradient></defs>
         <rect x="${FX}" y="${FY}" width="${FW}" height="${FH}" fill="url(#${id}g)"/>
         <rect x="${FX + 2}" y="${FY + 2}" width="${FW - 4}" height="${FH - 4}" fill="none" stroke="#c9a45c" stroke-width=".9"/>
-        <image href="icons/crest.png" x="${FX + 5}" y="${FY + 5}" width="44" height="44"/>
-        <g font-family="system-ui,sans-serif" font-weight="800">
-          <text x="${FX + 54}" y="${FY + 12}" font-size="5.2" fill="#f3e2b5">PLUS D'UN SIÈCLE DE PASSION,</text>
-          <text x="${FX + 54}" y="${FY + 18.5}" font-size="5.2" fill="#f3e2b5">D'EFFORT ET DE VICTOIRES :</text>
-          <text x="${FX + 54}" y="${FY + 29}" font-size="8" fill="#fff">Notre Club,</text>
-          <text x="${FX + 54}" y="${FY + 39}" font-size="8" fill="#fff">Notre Histoire,</text>
-          <text x="${FX + 54}" y="${FY + 49}" font-size="8" fill="#e2c27d">Notre Fierté.</text></g></g>`;
+        <image href="${X(crest())}" x="${FX + 5}" y="${FY + 5}" width="44" height="44"/>
+        <g font-family="system-ui,sans-serif" font-weight="800">${words.map((l, k) => `<text x="${FX + 54}" y="${(FY + 30 - (words.length - 1) * 4.6 + k * 9.2).toFixed(1)}" font-size="${words.length > 3 ? 6.4 : 7.6}" fill="${k === words.length - 1 ? '#e2c27d' : '#fff'}">${X(l)}</text>`).join('')}</g></g>`;
     // the flag cut in vertical strips that rise and fall one after the other: the wave runs from one pole to the other
     const strips = Array.from({ length: SLICES }, (_, i) => {
       const x = FX + i * sw, a = (3.2 * Math.sin(Math.PI * (i + .5) / SLICES)).toFixed(2);
@@ -6880,38 +7124,44 @@ var Supporters = (() => {
     const arm = (x1, y1, x2, y2, c, wdt = 3) => `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${c}" stroke-width="${wdt}" stroke-linecap="round"/>`;
     const people = [
       // the dad holds the left pole with both hands
-      person({ x: 32, top: 64, h: 62, shirt: '#8c1024', legs: '#1e2a4f', skin: skin[0], cls: 'sp-dad',
+      person({ x: 32, top: 64, h: 62, shirt: c.a, legs: '#1e2a4f', skin: skin[0], cls: 'sp-dad',
         hair: `<path d="M26,70 q6,-8 12,0 q-1,-4 -6,-5 q-5,1 -6,5z" fill="#3b2a1f"/>`,
         arms: arm(38, 82, 40.5, 70, skin[0], 3.2) + arm(27, 82, 40, 84, skin[0], 3.2),
         extra: `<path d="M26,79 l12,0 l-2,5 l-8,0z" fill="#e2c27d"/>` }),
       // the mum, a ponytail, one arm up
-      person({ x: 70, top: 72, h: 54, shirt: '#0e1d45', legs: '#8c1024', skin: skin[1], cls: 'sp-mum',
+      person({ x: 70, top: 72, h: 54, shirt: c.b, legs: c.a, skin: skin[1], cls: 'sp-mum',
         hair: `<path d="M64.6,78 q5.4,-8 10.8,0 q-1,-5 -5.4,-5.6 q-4.4,.6 -5.4,5.6z" fill="#2a1a12"/><path d="M75,76 q5,2 3,9" stroke="#2a1a12" stroke-width="2.4" fill="none" stroke-linecap="round"/>`,
         arms: arm(75, 88, 80, 74, skin[1]) + arm(65, 88, 60, 98, skin[1]) }),
       // the child jumps, both arms up
-      person({ x: 102, top: 92, h: 34, shirt: '#8c1024', legs: '#0e1d45', skin: skin[4], cls: 'sp-kid',
+      person({ x: 102, top: 92, h: 34, shirt: c.a, legs: c.b, skin: skin[4], cls: 'sp-kid',
         hair: `<path d="M98.6,95 q3.4,-5 6.8,0 q-1,-3 -3.4,-3.4 q-2.4,.4 -3.4,3.4z" fill="#c68a2b"/>`,
         arms: arm(105, 102, 109, 93, skin[4], 2.4) + arm(99, 102, 95, 93, skin[4], 2.4) }),
       // the teenager holds a scarf above the head
-      person({ x: 146, top: 70, h: 56, shirt: '#0e1d45', legs: '#1e2a4f', skin: skin[2], cls: 'sp-teen',
+      person({ x: 146, top: 70, h: 56, shirt: c.b, legs: '#1e2a4f', skin: skin[2], cls: 'sp-teen',
         hair: `<path d="M140.4,76 q5.6,-9 11.2,0 q-1,-5 -5.6,-6 q-4.6,1 -5.6,6z" fill="#111"/>`,
         arms: arm(151, 86, 158, 70, skin[2]) + arm(141, 86, 134, 70, skin[2]),
-        extra: `<g class="sp-scarf"><rect x="131" y="64" width="30" height="6" rx="1" fill="#8c1024"/><rect x="137" y="64" width="4" height="6" fill="#e2c27d"/><rect x="146" y="64" width="4" height="6" fill="#e2c27d"/><rect x="155" y="64" width="4" height="6" fill="#e2c27d"/></g>` }),
+        extra: `<g class="sp-scarf"><rect x="131" y="64" width="30" height="6" rx="1" fill="${c.a}"/><rect x="137" y="64" width="4" height="6" fill="#e2c27d"/><rect x="146" y="64" width="4" height="6" fill="#e2c27d"/><rect x="155" y="64" width="4" height="6" fill="#e2c27d"/></g>` }),
       // the grandfather holds the right pole, a cap and grey hair
       person({ x: 208, top: 68, h: 58, shirt: '#3b4a6b', legs: '#2b2f3a', skin: skin[3], cls: 'sp-granddad',
-        hair: `<path d="M201.6,74 q6.4,-9 12.8,0 z" fill="#cfd2d6"/><path d="M201,73.4 q7,-8 14,0 l3,.8 l-17,0z" fill="#8c1024"/>`,
+        hair: `<path d="M201.6,74 q6.4,-9 12.8,0 z" fill="#cfd2d6"/><path d="M201,73.4 q7,-8 14,0 l3,.8 l-17,0z" fill="${c.a}"/>`,
         arms: arm(203, 86, 200.5, 74, skin[3], 3.2) + arm(213, 86, 201, 88, skin[3], 3.2) }),
     ].join('');
-    return `<svg class="flag-scene" viewBox="0 0 ${W} 130" role="img" aria-label="Des supporters du club de tous âges tiennent un drapeau : ${UI.esc(SLOGAN)}">
+    return `<svg class="flag-scene" viewBox="0 0 ${W} 130" role="img" aria-label="Des supporters du club de tous âges tiennent un drapeau : ${X(slogan() || club().name || '')}">
       <defs>${content}</defs>
       ${pole(FX - 1)}${pole(FX + FW + 1)}
       <g class="fl">${strips}</g>
       ${people}
     </svg>`;
   }
-  // the crest of the menu (written in index.html) gets its back too
-  const bb = document.getElementById('brandBack'); if (bb) bb.innerHTML = back();
-  return { SLOGAN, coin, flag };
+  // the crest of the menu (index.html), the icon of the tab and the colours of the app follow the club
+  function refresh() {
+    const bb = document.getElementById('brandBack'); if (bb) bb.innerHTML = back();
+    document.querySelectorAll('.brand .crest').forEach(im => { if (im.getAttribute('src') !== crest()) im.src = crest(); });
+    const cb = document.querySelector('.brand .crest-coin'); if (cb) cb.title = slogan() || club().name || '';
+    const c = col(), r = document.documentElement.style; if (club().color1) r.setProperty('--bordeaux', c.a); else r.removeProperty('--bordeaux'); if (club().color2) r.setProperty('--navy', c.b); else r.removeProperty('--navy');
+    const ic = document.querySelector('link[rel=icon]'); if (ic && club().crest && ic.href !== club().crest) ic.href = club().crest;
+  }
+  return { slogan, crest, coin, flag, refresh, get SLOGAN() { return slogan(); } };
 })();
 
 ;
@@ -7191,6 +7441,7 @@ var Prepa = (() => {
     ['transOff', '⚡ À la récupération', ['Première passe vers l\'avant', 'Attaquer vite, 3 joueurs qui partent', 'Si c\'est fermé : on conserve', 'Profiter de leur défense haute']],
     ['transDef', '🔥 À la perte du ballon', ['Contre-pressing 5 secondes', 'Faute tactique si nécessaire', 'Repli immédiat derrière le ballon', 'Fermer l\'axe d\'abord']]];
   const OPP_CHIPS = ['Jeu long', 'Rapides sur les côtés', 'Faibles dans les airs', 'Défense haute : attaquer la profondeur', 'Pressing haut', 'Bloc bas', 'Dangereux sur CPA', 'Fragiles sur CPA', 'Gardien fébrile', 'Physiques', 'Techniques', 'Fin de match difficile pour eux'];
+  // (1.28) the words of football; the other sports get neutral ones (see below: OPP, KEYS, WARM, KITS, MODELS, systemsOf)
   const KEY_CHIPS = ['Gagner les duels et les deuxièmes ballons', 'Rester compacts', 'Presser ensemble', 'Jouer simple et vite', 'Attaquer la profondeur', 'Concentration sur les coups de pied arrêtés', 'Communiquer', 'Ne jamais lâcher', 'Les 10 premières minutes à fond', 'Respect de l\'arbitre et de l\'adversaire'];
   const SYSTEMS = { 11: ['4-4-2', '4-3-3', '4-2-3-1', '4-1-4-1', '3-5-2', '3-4-3', '5-3-2', '4-4-2 losange'], 8: ['3-3-1', '2-3-2', '3-2-2', '2-4-1', '3-1-3'], 5: ['2-2', '1-2-1', '2-1-1'] };
   const WARMUP = [['Activation : footing, mobilité articulaire', 5], ['Gammes athlétiques (montées de genoux, talons-fesses, pas chassés)', 5], ['Conservation / rondos à deux touches', 5], ['Jeu à thème ou finition', 5], ['Accélérations et sprints courts', 3], ['Retour au vestiaire, derniers mots', 2]];
@@ -7205,6 +7456,25 @@ var Prepa = (() => {
     2: [['Échauffement avec ballon', 15], ['Conservation et transitions', 15], ['Mise en place du plan de jeu contre l\'adversaire', 20], ['Finition : centres et frappes', 15], ['Match à thème', 15]],
     3: [['Échauffement athlétique', 15], ['Jeu réduit 4c4 intense, 4 × 4 min', 20], ['Exercice tactique (thème de la semaine)', 20], ['Match avec consignes', 20]],
     4: [['Échauffement technique', 15], ['Conservation, circulation du ballon', 20], ['Technique par poste', 20], ['Petit match libre', 15]] };
+  const foot = () => typeof Sport === 'undefined' || Sport.isFoot();
+  const MOMENTS_OTHER = [['withBall', '🎯 Avec le ballon', ['Monter le ballon calmement', 'Jouer vite vers l\'avant', 'Écarter le jeu, changer de côté', 'Chercher le meilleur tir', 'Utiliser notre point fort', 'Patience, faire circuler le ballon']],
+    ['withoutBall', '🛡️ Sans le ballon', ['Défense serrée, se parler', 'Presser haut dès la remise en jeu', 'Défendre en reculant, fermer l\'axe', 'Pousser l\'adversaire vers les côtés', 'Rester entre son joueur et le but', 'Se couvrir les uns les autres']],
+    ['transOff', '⚡ À la récupération', ['Première passe vers l\'avant', 'Contre-attaque à plusieurs', 'Si c\'est fermé : on reconstruit', 'Profiter de leur repli lent']],
+    ['transDef', '🔥 À la perte du ballon', ['Gêner tout de suite le porteur', 'Repli immédiat', 'Revenir protéger le but d\'abord', 'Pas de faute inutile']]];
+  const MOM = () => foot() ? MOMENTS : MOMENTS_OTHER;
+  const OPP_OTHER = ['Jeu rapide', 'Défense agressive', 'Défense de zone', 'Très physiques', 'Très techniques', 'Dangereux sur phases arrêtées', 'Fragiles sur phases arrêtées', 'Un joueur clé', 'Peu de remplaçants', 'Fin de match difficile pour eux'];
+  const KEY_OTHER = ['Gagner les duels', 'Défendre ensemble', 'Jouer simple et vite', 'Courir en contre-attaque', 'Concentration sur les phases arrêtées', 'Communiquer', 'Ne jamais lâcher', 'Les premières minutes à fond', 'Respect de l\'arbitre et de l\'adversaire'];
+  const WARM_OTHER = [['Activation : trottinement, mobilité articulaire', 5], ['Gammes athlétiques (montées de genoux, pas chassés)', 5], ['Passes et manipulation du ballon', 5], ['Situations de jeu ou tirs', 5], ['Accélérations courtes', 3], ['Retour au vestiaire, derniers mots', 2]];
+  const KIT_OTHER = ['Maillots, shorts, chaussettes', 'Brassard ou capitaine désigné', 'Ballons', 'Chasubles et plots', 'Trousse de secours, glace', 'Gourdes / eau', 'Licences et feuille de match', 'Sifflet, chrono'];
+  const MODEL_OTHER = {
+    1: [['Activation et vivacité (appuis, réactions)', 10], ['Jeu de passes à effectif réduit', 10], ['Phases arrêtées : nos combinaisons', 10], ['Phases arrêtées : défendre', 10], ['Petit match court et intense, 3 × 3 min', 10], ['Mise en place du plan de jeu sans opposition', 5]],
+    2: [['Échauffement avec ballon', 15], ['Attaque et défense placées', 15], ['Mise en place du plan de jeu contre l\'adversaire', 20], ['Tirs et finitions', 15], ['Match à thème', 15]],
+    3: [['Échauffement athlétique', 15], ['Petit match intense, 4 × 4 min', 20], ['Exercice tactique (thème de la semaine)', 20], ['Match avec consignes', 20]],
+    4: [['Échauffement technique', 15], ['Passes et circulation du ballon', 20], ['Technique par poste', 20], ['Petit match libre', 15]] };
+  const OPP = () => foot() ? OPP_CHIPS : OPP_OTHER, KEYS = () => foot() ? KEY_CHIPS : KEY_OTHER, WARM = () => foot() ? WARMUP : WARM_OTHER;
+  const KITS = () => foot() ? KIT : KIT_OTHER, MODELS = () => foot() ? MODEL : MODEL_OTHER;
+  // the systems of the team's sport and format (the session library's ones for the other sports)
+  const systemsOf = teamId => { if (foot()) return SYSTEMS[fmt(teamId)] || SYSTEMS[11]; const f = fmt(teamId), l = (typeof SesLib !== 'undefined' ? SesLib.systems() : []).filter(x => x.fmt === f).map(x => x.sys); return l.length ? l : (typeof SesLib !== 'undefined' ? [...new Set(SesLib.systems().map(x => x.sys))] : []); };
 
   const P = m => (m.prep = m.prep || {});
   const get = (o, path) => path.split('.').reduce((a, k) => (a == null ? a : a[k]), o);
@@ -7215,7 +7485,7 @@ var Prepa = (() => {
   const addDays = (d, n) => { const x = new Date(d + 'T12:00'); x.setDate(x.getDate() + n); return x.toISOString().slice(0, 10); };
   const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   const teamOf = m => Store.get('teams', m.teamId);
-  const fmt = t => (teamOf({ teamId: t }) || {}).format || '11';
+  const fmt = t => (teamOf({ teamId: t }) || {}).format || Sport.defFormat();
   const title = m => `${esc((teamOf(m) || {}).name || S().club.name)} ${m.home ? 'contre' : 'chez'} ${esc(m.opponent || '?')}`;
 
   /* ---------- progress: what is ready ---------- */
@@ -7318,7 +7588,7 @@ var Prepa = (() => {
         ${chipsAdd('week.theme', ['Pressing et récupération haute', 'Défendre les centres', 'Transitions rapides', 'Coups de pied arrêtés', 'Conservation sous pression', 'Finition'])}</section>`;
   }
   async function newSession(m, date, j) {
-    const ex = (MODEL[j] || MODEL[2]).map(([title, duration]) => ({ id: Store.uid(), title, duration, org: '', consignes: '', materiel: '', schemaId: null }));
+    const ex = (MODELS()[j] || MODELS()[2]).map(([title, duration]) => ({ id: Store.uid(), title, duration, org: '', consignes: '', materiel: '', schemaId: null }));
     const theme = (P(m).week || {}).theme;
     const tr = Store.upsert('trainings', { id: Store.uid(), title: `${DAYS[j] ? DAYS[j][2] : 'Avant match'}${m.opponent ? ' (' + m.opponent + ')' : ''}`, date, time: '', teamId: m.teamId,
       goal: [DAYS[j] && DAYS[j][1], theme && 'Thème : ' + lines(theme).join(', ')].filter(Boolean).join('\n'), exercises: ex, presents: [] });
@@ -7332,10 +7602,10 @@ var Prepa = (() => {
     const past = S().matches.filter(x => x.id !== m.id && x.played && k && norm(x.opponent) === k).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
     return `<section class="card"><h2>🔎 ${esc(m.opponent || 'L\'adversaire')}</h2>
       ${past.length ? `<div class="prep-past">${past.map(x => { const r = x.gf > x.ga ? 'V' : x.gf < x.ga ? 'D' : 'N'; return `<span class="res-${r}"><b>${r}</b> ${x.gf}-${x.ga} · ${esc(UI.fmtDate(x.date, { day: 'numeric', month: 'short', year: '2-digit' }))}${(teamOf(x) || {}).name ? ' · ' + esc(teamOf(x).name) : ''}</span>`; }).join('')}</div>` : '<p class="muted small">Pas encore de match contre eux dans l\'appli.</p>'}
-      <label class="fld"><span>Leur système</span><select data-p="opp.system"><option value="">Je ne sais pas</option>${(SYSTEMS[fmt(m.teamId)] || SYSTEMS[11]).map(s => `<option ${o.system === s ? 'selected' : ''}>${s}</option>`).join('')}</select></label>
+      <label class="fld"><span>Leur système</span><select data-p="opp.system"><option value="">Je ne sais pas</option>${systemsOf(m.teamId).map(s => `<option ${o.system === s ? 'selected' : ''}>${s}</option>`).join('')}</select></label>
       <div class="row2"><label class="fld"><span>💪 Leurs forces</span>${area('opp.strengths', o.strengths, 'Une par ligne')}</label><label class="fld"><span>🎯 Leurs faiblesses</span>${area('opp.weaknesses', o.weaknesses, 'Une par ligne')}</label></div>
       <p class="lbl">Propositions : touche pour ajouter</p>
-      <div class="prep-two"><div><span class="muted small">Forces</span>${chipsAdd('opp.strengths', OPP_CHIPS)}</div><div><span class="muted small">Faiblesses</span>${chipsAdd('opp.weaknesses', OPP_CHIPS)}</div></div>
+      <div class="prep-two"><div><span class="muted small">Forces</span>${chipsAdd('opp.strengths', OPP())}</div><div><span class="muted small">Faiblesses</span>${chipsAdd('opp.weaknesses', OPP())}</div></div>
       <label class="fld"><span>⭐ Joueurs à surveiller</span>${area('opp.players', o.players, 'ex : n°9, grand et fort de la tête\nn°7, très rapide, pied gauche')}</label>
       <label class="fld"><span>🚩 Leurs coups de pied arrêtés</span>${area('opp.cpa', o.cpa, 'ex : corners rentrants, un joueur sur le gardien', 2)}</label>
       <label class="fld"><span>Notes, vidéo, ce qu'on sait d'eux</span>${area('opp.notes', o.notes, 'Classement, derniers résultats, terrain…', 2)}</label></section>`;
@@ -7345,12 +7615,12 @@ var Prepa = (() => {
   function stPlan(m) {
     const pl = P(m).plan || {}, lineup = m.lineupId && Store.get('schemas', m.lineupId), conv = (m.convoked || []).map(id => Store.get('players', id)).filter(Boolean).sort(Store.byName);
     return `<section class="card"><h2>🧠 Système et composition</h2>
-      <div class="row2"><label class="fld"><span>Notre système</span><select data-p="plan.system"><option value="">—</option>${(SYSTEMS[fmt(m.teamId)] || SYSTEMS[11]).map(s => `<option ${pl.system === s ? 'selected' : ''}>${s}</option>`).join('')}</select></label>
+      <div class="row2"><label class="fld"><span>Notre système</span><select data-p="plan.system"><option value="">—</option>${systemsOf(m.teamId).map(s => `<option ${pl.system === s ? 'selected' : ''}>${s}</option>`).join('')}</select></label>
         <label class="fld"><span>Capitaine</span><select data-p="plan.captain"><option value="">—</option>${conv.map(x => `<option value="${x.id}" ${pl.captain === x.id ? 'selected' : ''}>${esc(Store.fullName(x))}</option>`).join('')}</select></label></div>
       ${lineup ? `<a class="prep-lineup" href="#/schema/${lineup.id}"><img alt="Composition" src="${UI.thumb(lineup)}"></a>` : `<p class="muted small">La composition se fait sur la page du match (convoqués puis « Faire la composition »).</p><button class="btn soft" data-pa="lineup">${I.formation}<span>Faire la composition</span></button>`}</section>
       ${pl.imported ? `<section class="card"><h2>📋 Plan de jeu (AssistCoachAI)</h2><p class="pre">${esc(pl.imported)}</p></section>` : ''}
       <section class="card"><h2>Les 4 moments du match</h2><p class="muted small">1 à 3 consignes par moment, des phrases courtes avec un verbe d'action.</p>
-      ${MOMENTS.map(([k, l, sug]) => `<div class="prep-moment"><label class="fld"><span>${l}</span>${area('plan.' + k, pl[k], 'Une consigne par ligne', 2)}</label>${chipsAdd('plan.' + k, sug)}</div>`).join('')}</section>
+      ${MOM().map(([k, l, sug]) => `<div class="prep-moment"><label class="fld"><span>${l}</span>${area('plan.' + k, pl[k], 'Une consigne par ligne', 2)}</label>${chipsAdd('plan.' + k, sug)}</div>`).join('')}</section>
       <section class="card"><h2>🚩 Coups de pied arrêtés</h2>
         <div class="row2"><label class="fld"><span>Corners pour nous (tireur, placement)</span>${area('plan.cpaFor', pl.cpaFor, 'ex : tireur Adam, rentrant, 2 au premier poteau', 2)}</label>
           <label class="fld"><span>Corners contre nous</span>${area('plan.cpaAgainst', pl.cpaAgainst, 'ex : zone à 6, Karim sur leur n°9', 2)}</label>
@@ -7362,14 +7632,14 @@ var Prepa = (() => {
 
   // 4 · the team talk
   function stTalk(m) {
-    const t = P(m).talk || {}, keys = t.keys || ['', '', ''], bs = (() => { try { return JSON.parse(localStorage.getItem('raincy-briefings')) || []; } catch (e) { return []; } })();
+    const t = P(m).talk || {}, keys = t.keys || ['', '', ''], bs = (() => { try { return JSON.parse(localStorage.getItem(AppCfg.key('briefings'))) || []; } catch (e) { return []; } })();
     return `<section class="card"><h2>🗣️ La causerie</h2>
       <p class="muted small">5 à 10 minutes, en 3 temps : une accroche pour capter l'attention, le rappel tactique, puis le message de confiance. 3 clés maximum, des phrases courtes.</p>
       <label class="fld"><span>1 · L'accroche (les 30 premières secondes)</span>${area('talk.hook', t.hook, 'ex : Le match aller, on a perdu 2-1 à la dernière minute. Aujourd\'hui on écrit la suite.', 2)}</label>
       <label class="fld"><span>🎯 L'objectif du match</span><input data-p="talk.objective" value="${esc(t.objective || '')}" placeholder="ex : Gagner et garder la 3e place, ne pas encaisser sur CPA"></label>
       <div class="lbl">2 · Les 3 clés</div>
       ${[0, 1, 2].map(i => `<label class="fld inline prep-key"><b>${i + 1}</b><input data-p="talk.keys.${i}" value="${esc(keys[i] || '')}" placeholder="Clé n°${i + 1}"></label>`).join('')}
-      ${chipsAdd('talk.keys', KEY_CHIPS)}
+      ${chipsAdd('talk.keys', KEYS())}
       <label class="fld"><span>3 · Le mot de la fin</span>${area('talk.final', t.final, Supporters.SLOGAN, 2)}</label>
       <label class="fld"><span>🔗 Lien vidéo pour les joueurs (YouTube, Drive…)</span><input data-p="talk.videoUrl" value="${esc(t.videoUrl || '')}" placeholder="https://youtu.be/…  (visible sur la page des joueurs)" inputmode="url"></label>
       <label class="fld"><span>🎬 Briefing vidéo à montrer (sur cet appareil)</span><select data-p="talk.briefing"><option value="">Aucun</option>${bs.map(b => `<option value="${b.id}" ${t.briefing === b.id ? 'selected' : ''}>${esc(b.name)} (${b.items.length})</option>`).join('')}</select></label>
@@ -7383,7 +7653,7 @@ var Prepa = (() => {
     const ko = toMin(m.time); if (ko == null) return [];
     const warm = +((P(m).day || {}).warmMin || 25), rdv = toMin(m.rdv) != null ? toMin(m.rdv) : ko - (m.home ? 75 : 90);
     return [[rdv, m.home ? '📍 Rendez-vous au stade' : '🚌 Rendez-vous et départ'], [ko - warm - 20, '👕 Vestiaire, tenue, strapping'], [ko - warm - 12, '🗣️ Causerie'],
-      [ko - warm, `🏃 Échauffement (${warm} min)`], [ko - 10, '🔙 Retour au vestiaire, derniers mots'], [ko - 3, '🤝 Sortie des joueurs'], [ko, '⚽ Coup d\'envoi']]
+      [ko - warm, `🏃 Échauffement (${warm} min)`], [ko - 10, '🔙 Retour au vestiaire, derniers mots'], [ko - 3, '🤝 Sortie des joueurs'], [ko, Sport.isFoot() ? '⚽ Coup d\'envoi' : Sport.W().icon + ' Début du match']]
       .filter(([t]) => t >= rdv).sort((a, b) => a[0] - b[0]);
   }
   function stDay(m) {
@@ -7393,10 +7663,10 @@ var Prepa = (() => {
       <label class="fld inline"><span>Échauffement</span><select data-p="day.warmMin" data-redraw="1">${[15, 20, 25, 30].map(n => `<option value="${n}" ${+(dy.warmMin || 25) === n ? 'selected' : ''}>${n} min</option>`).join('')}</select></label>
       <p class="muted small">20 à 25 minutes suffisent chez les adultes (moins pour les jeunes) : plus long, les joueurs arrivent fatigués au coup d'envoi.</p></section>
       <section class="card"><div class="row-head"><h2>🏃 L'échauffement</h2><button class="linkish" data-pa="resetwarm">Tout décocher</button></div>
-      <div class="prep-checks">${WARMUP.map(([l, n], i) => `<label class="prep-check"><input type="checkbox" data-p="day.warm.${i}" ${warm[i] ? 'checked' : ''}><span><b>${Math.max(1, Math.round(n * +(dy.warmMin || 25) / 25))} min</b> · ${esc(l)}</span></label>`).join('')}</div>
+      <div class="prep-checks">${WARM().map(([l, n], i) => `<label class="prep-check"><input type="checkbox" data-p="day.warm.${i}" ${warm[i] ? 'checked' : ''}><span><b>${Math.max(1, Math.round(n * +(dy.warmMin || 25) / 25))} min</b> · ${esc(l)}</span></label>`).join('')}</div>
       <label class="fld"><span>Notes d'échauffement</span>${area('day.warmNotes', dy.warmNotes, 'ex : gardien avec l\'entraîneur des gardiens à part', 2)}</label></section>
       <section class="card"><h2>🎒 Le matériel</h2>
-      <div class="prep-checks">${KIT.map((l, i) => `<label class="prep-check"><input type="checkbox" data-p="day.kit.${i}" ${kit[i] ? 'checked' : ''}><span>${esc(l)}</span></label>`).join('')}</div>
+      <div class="prep-checks">${KITS().map((l, i) => `<label class="prep-check"><input type="checkbox" data-p="day.kit.${i}" ${kit[i] ? 'checked' : ''}><span>${esc(l)}</span></label>`).join('')}</div>
       <label class="fld"><span>Autre chose à ne pas oublier</span>${area('day.other', dy.other, 'ex : clés du vestiaire, feuille de covoiturage', 2)}</label></section>`;
   }
 
@@ -7437,7 +7707,7 @@ var Prepa = (() => {
   /* ---------- the summary for the players (WhatsApp) ---------- */
   function summary(m) {
     const p = P(m), t = p.talk || {}, keys = (t.keys || []).filter(Boolean), tl = timeline(m), hh = s => String(s || '').replace(':', 'h');
-    return [`⚽ ${(teamOf(m) || {}).name || S().club.name} ${m.home ? 'contre' : 'chez'} ${m.opponent || '?'} · ${UI.fmtDate(m.date, { weekday: 'long', day: 'numeric', month: 'long' })}`,
+    return [`${Sport.W().icon} ${(teamOf(m) || {}).name || S().club.name} ${m.home ? 'contre' : 'chez'} ${m.opponent || '?'} · ${UI.fmtDate(m.date, { weekday: 'long', day: 'numeric', month: 'long' })}`,
       `🕘 ${m.rdv ? 'Rendez-vous ' + hh(m.rdv) : tl.length ? 'Rendez-vous ' + hm(tl[0][0]) : ''}${m.time ? ' · coup d\'envoi ' + hh(m.time) : ''}${m.place ? ' · 📍 ' + m.place : ''}`,
       t.objective ? `🎯 Objectif : ${t.objective}` : '',
       keys.length ? `🔑 Nos clés :\n${keys.map((k, i) => `${i + 1}. ${k}`).join('\n')}` : '',
@@ -7464,12 +7734,12 @@ var Prepa = (() => {
       o.system || o.strengths || o.weaknesses || o.players ? `<h2>🔎 ${esc(m.opponent || 'L\'adversaire')}${o.system ? ' · ' + esc(o.system) : ''}</h2><div class="pp-cols">
         ${lines(o.strengths).length ? `<div><h3>💪 Leurs forces</h3>${bl(lines(o.strengths), 'bad')}</div>` : ''}${lines(o.weaknesses).length ? `<div><h3>🎯 Leurs faiblesses</h3>${bl(lines(o.weaknesses), 'good')}</div>` : ''}
         ${lines(o.players).length ? `<div><h3>⭐ À surveiller</h3>${bl(lines(o.players))}</div>` : ''}${lines(o.cpa).length ? `<div><h3>🚩 Leurs CPA</h3>${bl(lines(o.cpa))}</div>` : ''}</div>` : '',
-      MOMENTS.some(([k]) => lines(pl[k]).length) ? `<h2>Le plan de jeu</h2><div class="pp-grid">${MOMENTS.map(([k, l]) => `<div><h3>${l}</h3>${bl(lines(pl[k]))}</div>`).join('')}</div>` : '',
+      MOMENTS.some(([k]) => lines(pl[k]).length) ? `<h2>Le plan de jeu</h2><div class="pp-grid">${MOM().map(([k, l]) => `<div><h3>${l}</h3>${bl(lines(pl[k]))}</div>`).join('')}</div>` : '',
       pl.cpaFor || pl.cpaAgainst || pl.freeKicks || pl.penalty ? `<h2>🚩 Coups de pied arrêtés</h2><div class="pp-grid">${[['Corners pour nous', pl.cpaFor], ['Corners contre nous', pl.cpaAgainst], ['Coups francs', pl.freeKicks], ['Penalty', pl.penalty]].filter(([, v]) => v).map(([l, v]) => `<div><h3>${l}</h3>${bl(lines(v))}</div>`).join('')}</div>` : '',
       roles.length ? `<h2>👤 Les rôles</h2><div class="pp-roles">${roles.map(([x, v]) => `<p><b>${esc(Store.shortName(x))}</b><span>${esc(v)}</span></p>`).join('')}</div>` : '',
       keys.length ? `<h2>🔑 Nos 3 clés</h2><div class="pp-keys">${keys.map((k, i) => `<p><b>${i + 1}</b><span>${esc(k)}</span></p>`).join('')}</div>` : '',
       t.briefing ? `<h2>🎬 La vidéo</h2><p class="pp-hook">Le briefing vidéo du match</p><button class="btn primary pp-big" data-pp="video">${I.play}<span>Lancer le briefing vidéo</span></button>` : '',
-      `<div class="pp-final"><div class="pp-flag">${Supporters.flag()}</div><p class="pp-word">${esc(lines(t.final).join(' ') || Supporters.SLOGAN)}</p><p class="pp-go">Allez Raincy !</p></div>`,
+      `<div class="pp-final"><div class="pp-flag">${Supporters.flag()}</div><p class="pp-word">${esc(lines(t.final).join(' ') || Supporters.SLOGAN)}</p><p class="pp-go">Allez ${esc(S().club.short || 'le club')} !</p></div>`,
     ].filter(Boolean);
     const ov = document.createElement('div'); ov.className = 'pp-show'; document.body.appendChild(ov);
     const t0 = Date.now(), target = +(t.minutes || 8) * 60; let i = 0, iv = null;
@@ -7486,7 +7756,7 @@ var Prepa = (() => {
     ov.addEventListener('touchend', e => { if (sx == null) return; const dx = e.changedTouches[0].clientX - sx; sx = null; if (Math.abs(dx) > 50) go(i + (dx < 0 ? 1 : -1)); });
     ov.onclick = e => { const b = e.target.closest('[data-pp]'); if (!b) return; const x = b.dataset.pp;
       if (x === 'close') return end(); if (x === 'next') return go(i + 1); if (x === 'prev') return go(i - 1);
-      if (x === 'video') { let bs = []; try { bs = JSON.parse(localStorage.getItem('raincy-briefings')) || []; } catch (e) {} if (!bs.some(b2 => b2.id === t.briefing)) return toast('Ce briefing n\'est pas sur cet appareil', 'err'); end(); location.hash = '#/briefing/' + t.briefing; } };
+      if (x === 'video') { let bs = []; try { bs = JSON.parse(localStorage.getItem(AppCfg.key('briefings'))) || []; } catch (e) {} if (!bs.some(b2 => b2.id === t.briefing)) return toast('Ce briefing n\'est pas sur cet appareil', 'err'); end(); location.hash = '#/briefing/' + t.briefing; } };
     try { const d = document.documentElement, pr = (d.requestFullscreen || d.webkitRequestFullscreen || (() => {})).call(d); if (pr && pr.catch) pr.catch(() => {}); } catch (e) {}
     go(0); iv = setInterval(clock, 1000);
     if (!keys.length && !t.objective) toast('Astuce : remplis l\'étape « Causerie » (objectif et 3 clés) pour une causerie complète');
@@ -7539,7 +7809,7 @@ var Prepa = (() => {
       }
       doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bolditalic'); doc.setFontSize(15);
       const fl = doc.splitTextToSize(L(final), W - 40); doc.text(fl, W / 2, Math.max(y + 8, H - 52 - fl.length * 7), { align: 'center' });
-      doc.setFont('helvetica', 'bold'); doc.setTextColor(226, 194, 125); doc.setFontSize(26); doc.text(L('ALLEZ RAINCY !'), W / 2, H - 24, { align: 'center' });
+      doc.setFont('helvetica', 'bold'); doc.setTextColor(226, 194, 125); doc.setFontSize(26); doc.text(L(`ALLEZ ${String(S().club.short || 'LE CLUB').toUpperCase()} !`), W / 2, H - 24, { align: 'center' });
       doc.setTextColor(20, 30, 25);
     }
     if (parts.includes('talk')) {
@@ -7553,7 +7823,7 @@ var Prepa = (() => {
       const lineup = m.lineupId && Store.get('schemas', m.lineupId), cap = pl.captain && Store.get('players', pl.captain);
       if (lineup) { await Board.ensureBg(lineup); P.label('Composition' + (cap ? ' · capitaine : ' + Store.fullName(cap) : '')); P.image(Exporter.frameCanvas(lineup, 0, 0, { w: 1500, h: 980, names: true, homeBib: club.homeBib }), P.CW * .85); }
       else if (cap) { P.label('Capitaine'); P.para(Store.fullName(cap)); }
-      if (MOMENTS.some(([k]) => lines(pl[k]).length)) { P.h2('Les 4 moments du match'); MOMENTS.forEach(([k, l]) => text(l.replace(/^\S+\s/, ''), pl[k])); }
+      if (MOMENTS.some(([k]) => lines(pl[k]).length)) { P.h2('Les 4 moments du match'); MOM().forEach(([k, l]) => text(l.replace(/^\S+\s/, ''), pl[k])); }
       const cpa = [['Corners pour nous', pl.cpaFor], ['Corners contre nous', pl.cpaAgainst], ['Coups francs', pl.freeKicks], ['Penalty', pl.penalty]].filter(([, v]) => v);
       if (cpa.length) { P.h2('Coups de pied arrêtés'); cpa.forEach(([l, v]) => text(l, v)); }
       const roles = Object.entries(pl.roles || {}).filter(([, v]) => v).map(([id, v]) => [Store.get('players', id), v]).filter(([x]) => x);
@@ -7582,8 +7852,8 @@ var Prepa = (() => {
       const tl = timeline(m);
       if (tl.length) { P.label('Le déroulé'); P.table(['Heure', 'Moment'], tl.map(([mn, l]) => [hm(mn), l.replace(/^\S+\s/, '')]), [.2, .8]); }
       const k = +(dy.warmMin || 25) / 25;
-      P.h2(`Échauffement (${dy.warmMin || 25} min)`); ticks(WARMUP.map(([l, n]) => `${Math.max(1, Math.round(n * k))} min · ${l}`)); if (dy.warmNotes) P.para(dy.warmNotes);
-      P.h2('Matériel'); ticks([...KIT, ...lines(dy.other)]);
+      P.h2(`Échauffement (${dy.warmMin || 25} min)`); ticks(WARM().map(([l, n]) => `${Math.max(1, Math.round(n * k))} min · ${l}`)); if (dy.warmNotes) P.para(dy.warmNotes);
+      P.h2('Matériel'); ticks([...KITS(), ...lines(dy.other)]);
       const conv = (m.convoked || []).map(id => Store.get('players', id)).filter(Boolean).sort((a, b) => (a.number || 99) - (b.number || 99));
       if (conv.length) { P.h2(`Joueurs convoqués (${conv.length}) · présents`); ticks(conv.map(x => `${x.number ? x.number + '. ' : ''}${Store.fullName(x)}`)); }
     }
@@ -7624,40 +7894,71 @@ var Prepa = (() => {
 
 ;
 /* ===== live.js ===== */
-/* Live: the match followed live on the phone. Kick-off, half-time, second half, final whistle; one tap per event
-   (goal, goal against, substitution, cards, chance, injury, note), the minute is taken by itself.
-   The clock is kept as the time of day of each kick-off (it survives closing the app and is the same on every coach's phone).
-   At the end: score, scorers and assists, and each player's playing time are filled in on the match by themselves.
+/* Live: the match followed live on the phone, for every sport. Start, the periods (halves, quarters, sets), the end;
+   one tap per event (points for us or against, substitution, the actions of the sport, injury, note), the minute is taken by itself.
+   The clock is kept as the time of day of each start (it survives closing the app and is the same on every coach's phone).
+   At the end: score (sets in volley), scorers and assists, and each player's playing time are filled in on the match by themselves.
    Each event keeps its time of day: the match video can then make its sequences by itself (Analyse). */
 var Live = (() => {
   const { esc, $, $$, toast, modal, confirmBox } = UI;
   const S = () => Store.state;
-  const EV = {
-    goal: ['⚽', 'But pour nous', '#15803d'], against: ['🥅', 'But encaissé', '#be123c'], sub: ['🔁', 'Changement', '#2563eb'],
-    yellow: ['🟨', 'Carton jaune', '#ca8a04'], red: ['🟥', 'Carton rouge', '#dc2626'], chance: ['🎯', 'Occasion', '#0891b2'],
-    injury: ['🚑', 'Blessure', '#9333ea'], note: ['📝', 'Note', '#475569'] };
-  const halfDefault = m => { const f = ((Store.get('teams', m.teamId) || {}).format) || '11'; return m.duration ? Math.round(m.duration / 2) : f === '5' ? 20 : f === '8' ? 30 : 45; };
+  const SP = () => Sport.cur();
+  // the buttons of the live match: the scoring actions of the sport, then the other ones
+  function EVS() {
+    const o = {};
+    SP().score.forEach(e => { o[e.k] = [e.ic, e.l, e.us ? '#15803d' : '#be123c']; });
+    o.sub = ['🔁', 'Changement', '#2563eb'];
+    SP().extra.forEach(([k, ic, l, c]) => { o[k] = [ic, l, c]; });
+    if (!SP().sets) o.chance = ['🎯', 'Occasion', '#0891b2'];
+    o.injury = ['🚑', 'Blessure', '#9333ea']; o.note = ['📝', 'Note', '#475569'];
+    return o;
+  }
+  const EV = new Proxy({}, { get: (t, k) => EVS()[k] || (Sport.scoreOf(k) ? [Sport.scoreOf(k).ic, Sport.scoreOf(k).l, Sport.scoreOf(k).us ? '#15803d' : '#be123c'] : ['•', String(k), '#475569']), ownKeys: () => Object.keys(EVS()), getOwnPropertyDescriptor: () => ({ enumerable: true, configurable: true }) });
+  const pts = e => { const s = Sport.scoreOf(e.type); return s ? s.pts : 0; };
+  const isUs = e => { const s = Sport.scoreOf(e.type); return !!(s && s.us); };
+  const isThem = e => { const s = Sport.scoreOf(e.type); return !!(s && !s.us); };
+  const OUT = new Set(['red']); // sent off: no longer on the pitch
+  const fmtOf = m => ((Store.get('teams', m.teamId) || {}).format) || Sport.defFormat();
+  const halfDefault = m => { const n = SP().periods; return m.duration && !SP().sets ? Math.round(m.duration / n) : SP().periodLen(fmtOf(m)); };
   const L = m => (m.live = m.live || { status: 'pre', periods: [], events: [], starters: [], halfLen: halfDefault(m) });
   const players = m => (m.convoked || []).map(id => Store.get('players', id)).filter(Boolean).sort((a, b) => (a.number || 99) - (b.number || 99) || Store.byName(a, b));
   const pname = id => { const p = Store.get('players', id); return p ? `${p.number ? p.number + '. ' : ''}${Store.shortName(p)}` : '?'; };
-  const size = m => +(((Store.get('teams', m.teamId) || {}).format) || 11);
+  const size = m => Sport.players(fmtOf(m));
+  // statuses: pre, p (a period is played), brk (between two periods), end — h1 / ht / h2 are the old football ones
+  const playing = st => st === 'p' || st === 'h1' || st === 'h2';
+  const pause = st => st === 'brk' || st === 'ht';
+  // « la 1re période », « le 1er quart-temps »
+  const masc = () => /quart|set/.test(SP().periodWord);
+  const nth = k => k === 1 ? (masc() ? '1er' : '1re') : k + 'e';
+  const theP = k => `${masc() ? 'le' : 'la'} ${nth(k)} ${SP().periodWord}`;
+
+  /* ---------- the score ---------- */
+  // points of one period (a set), or of the match
+  const sum = (l, f, p) => l.events.filter(e => f(e) && (!p || (e.period || 1) === p)).reduce((a, e) => a + pts(e), 0);
+  function sets(l) { return l.periods.map((x, i) => [sum(l, isUs, i + 1), sum(l, isThem, i + 1), !!x.end]); }
+  function score(l) {
+    if (!SP().sets) return [sum(l, isUs), sum(l, isThem)];
+    const done = sets(l).filter(s => s[2]); return [done.filter(s => s[0] > s[1]).length, done.filter(s => s[1] > s[0]).length];
+  }
 
   /* ---------- the clock ---------- */
   function periodAt(l, wall) { let p = 0; l.periods.forEach((x, i) => { if (wall >= x.start) p = i + 1; }); return p; }
-  // « 23' », « 45+2' » (added time), « Mi-temps »
+  // « 23' », « 45+2' » (added time); in volley, the set
   function minuteOf(l, wall) {
-    const p = periodAt(l, wall); if (!p) return "0'";
+    const p = periodAt(l, wall); if (!p) return SP().sets ? 'Set 1' : "0'";
+    if (SP().sets) return `Set ${p}`;
     const per = l.periods[p - 1], s = Math.max(0, ((per.end && wall > per.end ? per.end : wall) - per.start) / 1000), len = l.halfLen * 60;
     if (s > len) return `${l.halfLen * p}+${Math.ceil((s - len) / 60)}'`;
     return `${Math.floor(s / 60) + 1 + l.halfLen * (p - 1)}'`;
   }
   function clock(l) {
-    const now = Date.now();
-    if (l.status === 'pre') return ['Avant le match', '00:00'];
-    if (l.status === 'ht') return ['Mi-temps', mmss((l.periods[0].end - l.periods[0].start) / 1000)];
-    if (l.status === 'end') return ['Match terminé', ''];
-    const p = l.periods.length, s = (now - l.periods[p - 1].start) / 1000, base = (p - 1) * l.halfLen * 60;
-    return [p === 1 ? '1re période' : '2e période', mmss(base + s) + (s > l.halfLen * 60 ? ` (+${Math.ceil((s - l.halfLen * 60) / 60)})` : '')];
+    const now = Date.now(), k = l.periods.length;
+    if (l.status === 'pre') return ['Avant le match', SP().sets ? '' : '00:00'];
+    if (l.status === 'end') return ['Match terminé', SP().sets ? sets(l).map(s => `${s[0]}-${s[1]}`).join(' · ') : ''];
+    if (SP().sets) { const s = sets(l)[k - 1] || [0, 0]; return pause(l.status) ? [`Après le set ${k}`, sets(l).map(x => `${x[0]}-${x[1]}`).join(' · ')] : [`Set ${k}`, `${s[0]} – ${s[1]}`]; }
+    if (pause(l.status)) return [SP().periods === 2 && k === 1 ? 'Mi-temps' : `Pause après ${theP(k)}`, mmss((l.periods[k - 1].end - l.periods[k - 1].start) / 1000)];
+    const s = (now - l.periods[k - 1].start) / 1000, base = (k - 1) * l.halfLen * 60;
+    return [`${nth(k)} ${SP().periodWord}`, mmss(base + s) + (s > l.halfLen * 60 ? ` (+${Math.ceil((s - l.halfLen * 60) / 60)})` : '')];
   }
   const mmss = s => { s = Math.max(0, Math.floor(s)); return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; };
 
@@ -7666,7 +7967,7 @@ var Live = (() => {
     const on = new Set(l.starters);
     l.events.filter(e => e.wall <= until).sort((a, b) => a.wall - b.wall).forEach(e => {
       if (e.type === 'sub') { if (e.out) on.delete(e.out); if (e.in) on.add(e.in); }
-      if (e.type === 'red' && e.player) on.delete(e.player);
+      if (OUT.has(e.type) && e.player) on.delete(e.player);
     });
     return on;
   }
@@ -7680,23 +7981,25 @@ var Live = (() => {
         const t = Math.min(pe, Math.max(ps, e.wall));
         const leave = id => { if (id && since[id] != null) { secs[id] = (secs[id] || 0) + (t - since[id]); delete since[id]; } on.delete(id); };
         if (e.type === 'sub') { leave(e.out); if (e.in) { on.add(e.in); since[e.in] = t; } }
-        if (e.type === 'red') leave(e.player);
+        if (OUT.has(e.type)) leave(e.player);
       });
       on.forEach(id => { if (since[id] != null) { secs[id] = (secs[id] || 0) + (pe - since[id]); delete since[id]; } });
     });
     const out = {}; Object.keys(secs).forEach(id => { out[id] = Math.round(secs[id] / 60000); }); return out;
   }
-  // the match page gets the score, the scorers, the assists and the minutes
+  // the match page gets the score, the scorers (points of each player), the assists and the minutes
   function write(m) {
-    const l = L(m);
-    m.gf = l.events.filter(e => e.type === 'goal').length; m.ga = l.events.filter(e => e.type === 'against').length;
-    const st = {}; l.events.filter(e => e.type === 'goal').forEach(e => {
-      if (e.player && e.player !== 'csc') (st[e.player] = st[e.player] || {}).g = ((st[e.player] || {}).g || 0) + 1;
+    const l = L(m), [us, them] = score(l);
+    m.gf = us; m.ga = them;
+    if (SP().sets) m.sets = sets(l).filter(s => s[2]).map(s => [s[0], s[1]]);
+    const st = {}; l.events.filter(isUs).forEach(e => {
+      if (e.player && e.player !== 'csc') (st[e.player] = st[e.player] || {}).g = ((st[e.player] || {}).g || 0) + pts(e);
       if (e.assist) (st[e.assist] = st[e.assist] || {}).a = ((st[e.assist] || {}).a || 0) + 1; });
     m.stats = st;
     if (l.status === 'end') {
       const mins = minutes(l); m.minutes = {}; (m.convoked || []).forEach(id => { m.minutes[id] = mins[id] || 0; });
-      m.duration = l.halfLen * 2; m.played = true;
+      if (!SP().sets) m.duration = l.halfLen * Math.max(SP().periods, l.periods.length);
+      m.played = true;
     }
   }
 
@@ -7705,58 +8008,71 @@ var Live = (() => {
   async function keepAwake(on) {
     try { if (on && !wake && navigator.wakeLock) { wake = await navigator.wakeLock.request('screen'); wake.addEventListener('release', () => { wake = null; }); } if (!on && wake) { await wake.release(); wake = null; } } catch (e) {}
   }
+  function controls(l) {
+    const k = l.periods.length, N = SP().periods;
+    if (l.status === 'pre') return `<button class="btn primary lv-big" data-lv="ko">▶ ${Sport.isFoot() ? 'Coup d\'envoi' : SP().sets ? 'Début du 1er set' : 'Début du match'}</button>`;
+    if (l.status === 'end') return `<span class="lv-done">✅ Score, ${SP().scorer[1].toLowerCase()} et temps de jeu sont sur la page du match</span><button class="linkish" data-lv="reopen">Rouvrir</button>`;
+    if (pause(l.status)) return `<button class="btn primary lv-big" data-lv="next">▶ ${SP().sets ? 'Set ' + (k + 1) : `Reprise · ${nth(k + 1)} ${SP().periodWord}`}</button>${SP().sets ? '<button class="btn lv-big" data-lv="end">🏁 Fin du match</button>' : ''}`;
+    if (SP().sets) return `<button class="btn lv-big" data-lv="brk">🏁 Fin du set ${k}</button>`;
+    return k < N ? `<button class="btn lv-big" data-lv="brk">⏸ ${N === 2 ? 'Mi-temps' : `Fin ${masc() ? 'du' : 'de la'} ${nth(k)} ${SP().periodWord}`}</button><button class="linkish" data-lv="end">Fin du match</button>`
+      : `<button class="btn lv-big" data-lv="end">🏁 Fin du match</button><button class="linkish" data-lv="brk">Prolongation</button>`;
+  }
   function page(root, id) {
     const m = Store.get('matches', id); if (!m) { location.hash = '#/matchs'; return; }
     const l = L(m), all = players(m), save = () => { m.editedBy = (Auth.current() || {}).id; Store.upsert('matches', m); };
-    const us = (Store.get('teams', m.teamId) || {}).name || S().club.name, live = l.status === 'h1' || l.status === 'h2';
-    const on = onField(l), bench = all.filter(p => !on.has(p.id));
+    const us = (Store.get('teams', m.teamId) || {}).name || S().club.name, live = playing(l.status);
+    const on = onField(l), bench = all.filter(p => !on.has(p.id)), [a, b] = score(l), evs = EVS();
     const [plabel, ptime] = clock(l);
     root.innerHTML = `<header class="page-head"><div><h1>📱 Match en direct</h1><p class="sub">${esc(UI.fmtDate(m.date, { weekday: 'long', day: 'numeric', month: 'long' }))}${m.time ? ' · ' + esc(m.time.replace(':', 'h')) : ''}</p></div>
       <div class="head-actions"><a class="btn" href="#/match/${m.id}">${I.back}<span>Le match</span></a></div></header>
       <section class="lv-board ${live ? 'on' : ''}">
-        <div class="lv-teams"><span>${esc(m.home ? us : m.opponent || '?')}</span><b>${m.home ? l.events.filter(e => e.type === 'goal').length : l.events.filter(e => e.type === 'against').length} – ${m.home ? l.events.filter(e => e.type === 'against').length : l.events.filter(e => e.type === 'goal').length}</b><span>${esc(m.home ? m.opponent || '?' : us)}</span></div>
+        <div class="lv-teams"><span>${esc(m.home ? us : m.opponent || '?')}</span><b>${m.home ? a : b} – ${m.home ? b : a}</b><span>${esc(m.home ? m.opponent || '?' : us)}</span></div>
+        ${SP().sets ? '<div class="muted small" style="text-align:center">sets gagnés</div>' : ''}
         <div class="lv-clock"><span id="lvLabel">${plabel}</span><b id="lvTime">${ptime}</b></div>
-        <div class="lv-ctl">${({ pre: `<button class="btn primary lv-big" data-lv="ko">▶ Coup d'envoi</button>`, h1: `<button class="btn lv-big" data-lv="ht">⏸ Mi-temps</button>`,
-          ht: `<button class="btn primary lv-big" data-lv="h2">▶ Reprise · 2e période</button>`, h2: `<button class="btn lv-big" data-lv="end">🏁 Fin du match</button>`,
-          end: `<span class="lv-done">✅ Score, buteurs et temps de jeu sont sur la page du match</span><button class="linkish" data-lv="reopen">Rouvrir</button>` })[l.status]}</div>
+        <div class="lv-ctl">${controls(l)}</div>
       </section>
       ${l.status === 'pre' ? `<section class="card"><div class="row-head"><h2>Les titulaires</h2><b class="lv-count ${l.starters.length === size(m) ? 'ok' : ''}">${l.starters.length} / ${size(m)}</b></div>
         ${all.length ? `<div class="chips lv-pick">${all.map(p => `<button class="chip ${l.starters.includes(p.id) ? 'on' : ''}" data-start="${p.id}">${esc(pname(p.id))}</button>`).join('')}</div>`
           : `<p class="muted">Coche d'abord les convoqués sur la page du match.</p>`}
-        <label class="fld inline"><span>Durée d'une période</span><select id="lvHalf">${[15, 20, 25, 30, 35, 40, 45].map(n => `<option ${n === l.halfLen ? 'selected' : ''}>${n}</option>`).join('')}</select><span class="muted small">min</span></label>
+        ${SP().sets ? '' : `<label class="fld inline"><span>Durée d'une ${SP().periodWord === 'quart-temps' ? 'période (quart-temps)' : 'période'}</span><select id="lvHalf">${[5, 7, 8, 10, 12, 15, 20, 25, 30, 35, 40, 45].map(n => `<option ${n === l.halfLen ? 'selected' : ''}>${n}</option>`).join('')}</select><span class="muted small">min</span></label>`}
         <p class="muted small">Garde l'appli ouverte pendant le match : l'écran reste allumé. Si tu la fermes, le chrono continue quand même.</p></section>` : ''}
-      ${l.status !== 'pre' ? `<section class="lv-actions">${Object.entries(EV).map(([k, [ic, lab, c]]) => `<button class="lv-act" data-ev="${k}" style="--c:${c}" ${l.status === 'end' ? 'disabled' : ''}><b>${ic}</b><span>${lab}</span></button>`).join('')}</section>` : ''}
+      ${l.status !== 'pre' ? `<section class="lv-actions">${Object.entries(evs).map(([k, [ic, lab, c]]) => `<button class="lv-act" data-ev="${k}" style="--c:${c}" ${l.status === 'end' ? 'disabled' : ''}><b>${ic}</b><span>${lab}</span></button>`).join('')}</section>` : ''}
       ${l.status !== 'pre' ? `<div class="lv-field"><div><h3>Sur le terrain (${on.size})</h3><p>${[...on].map(id => `<span>${esc(pname(id))}</span>`).join('') || '<span class="muted">—</span>'}</p></div>
         <div><h3>Remplaçants (${bench.length})</h3><p>${bench.map(p => `<span>${esc(pname(p.id))}</span>`).join('') || '<span class="muted">—</span>'}</p></div></div>` : ''}
       <h2 class="section">Le fil du match</h2>
-      <div class="lv-feed">${l.events.slice().sort((a, b) => b.wall - a.wall).map(e => `<div class="lv-ev" style="--c:${EV[e.type][2]}"><b>${e.min}</b><span>${EV[e.type][0]} ${esc(desc(e))}</span>
+      <div class="lv-feed">${l.events.slice().sort((x, y) => y.wall - x.wall).map(e => `<div class="lv-ev" style="--c:${EV[e.type][2]}"><b>${e.min}</b><span>${EV[e.type][0]} ${esc(desc(e))}</span>
         <button class="icon-btn" data-edit="${e.id}" aria-label="Modifier">${I.edit}</button><button class="icon-btn danger" data-del="${e.id}" aria-label="Supprimer">${I.trash}</button></div>`).join('') || '<p class="muted">Rien pour l\'instant.</p>'}</div>
       ${l.status !== 'pre' ? `<details class="card lv-mins"><summary>⏱️ Temps de jeu en direct</summary>${(() => { const mins = minutes(l); return `<div class="lv-mintable">${all.map(p => `<span>${esc(pname(p.id))}</span><b>${mins[p.id] || 0}'</b>`).join('')}</div>`; })()}</details>` : ''}`;
     // the clock turns every second (only on this page)
-    clearInterval(tick); tick = setInterval(() => { const a = $('#lvTime'), b = $('#lvLabel'); if (!a || !document.body.contains(a)) { clearInterval(tick); keepAwake(false); return; } const [x, y] = clock(L(Store.get('matches', id) || m)); b.textContent = x; a.textContent = y; }, 1000);
+    clearInterval(tick); tick = setInterval(() => { const x = $('#lvTime'), y = $('#lvLabel'); if (!x || !document.body.contains(x)) { clearInterval(tick); keepAwake(false); return; } const [p, q] = clock(L(Store.get('matches', id) || m)); y.textContent = p; x.textContent = q; }, 1000);
     keepAwake(live);
     const redraw = () => page(root, id);
     const hs = $('#lvHalf', root); if (hs) hs.onchange = () => { l.halfLen = +hs.value; save(); };
     root.onclick = async e => {
-      const b = e.target.closest('button'); if (!b) return;
-      if (b.dataset.start) { const x = b.dataset.start; l.starters = l.starters.includes(x) ? l.starters.filter(y => y !== x) : [...l.starters, x]; save(); return redraw(); }
-      const a = b.dataset.lv;
-      if (a === 'ko') {
+      const btn = e.target.closest('button'); if (!btn) return;
+      if (btn.dataset.start) { const x = btn.dataset.start; l.starters = l.starters.includes(x) ? l.starters.filter(y => y !== x) : [...l.starters, x]; save(); return redraw(); }
+      const act = btn.dataset.lv;
+      if (act === 'ko') {
         if (!l.starters.length && !(await confirmBox('Aucun titulaire choisi : le temps de jeu ne pourra pas être calculé. Commencer quand même ?', 'Commencer'))) return;
-        l.periods = [{ start: Date.now() }]; l.status = 'h1'; save(); toast('C\'est parti ! Allez Raincy !'); return redraw();
+        l.periods = [{ start: Date.now() }]; l.status = 'p'; save(); toast(`C'est parti ! Allez ${Store.state.club.short || 'le club'} !`); return redraw();
       }
-      if (a === 'ht') { l.periods[0].end = Date.now(); l.status = 'ht'; save(); return redraw(); }
-      if (a === 'h2') { l.periods.push({ start: Date.now() }); l.status = 'h2'; save(); return redraw(); }
-      if (a === 'end') { if (!(await confirmBox('Siffler la fin du match ? Le score, les buteurs et le temps de jeu seront mis sur la page du match.', 'Fin du match'))) return;
-        l.periods[l.periods.length - 1].end = Date.now(); l.status = 'end'; write(m); save(); keepAwake(false); const before = Ratings.result(m); if (before === 'V') Ratings.celebrate(); return redraw(); }
-      if (a === 'reopen') { if (!(await confirmBox('Rouvrir le match ? Le chrono reprend là où il s\'était arrêté.', 'Rouvrir'))) return; l.status = 'h2'; delete l.periods[l.periods.length - 1].end; save(); return redraw(); }
-      if (b.dataset.ev) return addEvent(m, b.dataset.ev, redraw);
-      if (b.dataset.del) { if (await confirmBox('Supprimer cet événement ?', 'Supprimer')) { l.events = l.events.filter(x => x.id !== b.dataset.del); write(m); save(); redraw(); } return; }
-      if (b.dataset.edit) { const ev = l.events.find(x => x.id === b.dataset.edit); if (ev) return details(m, ev, redraw); }
+      if (act === 'brk') {
+        l.periods[l.periods.length - 1].end = Date.now(); l.status = 'brk';
+        // volley: the set is over; the match too when a team has won enough sets
+        if (SP().sets) { const [x, y] = score(l), need = SP().setsToWin(fmtOf(m)); if (x >= need || y >= need) { l.status = 'end'; write(m); save(); keepAwake(false); if (x > y) Ratings.celebrate(); toast(x > y ? 'Match gagné !' : 'Match terminé'); return redraw(); } }
+        write(m); save(); return redraw();
+      }
+      if (act === 'next') { l.periods.push({ start: Date.now() }); l.status = 'p'; save(); return redraw(); }
+      if (act === 'end') { if (!(await confirmBox(`Fin du match ? Le score, les ${SP().scorer[1].toLowerCase()} et le temps de jeu seront mis sur la page du match.`, 'Fin du match'))) return;
+        const last = l.periods[l.periods.length - 1]; if (last && !last.end) last.end = Date.now(); l.status = 'end'; write(m); save(); keepAwake(false); if (Ratings.result(m) === 'V') Ratings.celebrate(); return redraw(); }
+      if (act === 'reopen') { if (!(await confirmBox('Rouvrir le match ? Le chrono reprend là où il s\'était arrêté.', 'Rouvrir'))) return; l.status = 'p'; delete l.periods[l.periods.length - 1].end; save(); return redraw(); }
+      if (btn.dataset.ev) return addEvent(m, btn.dataset.ev, redraw);
+      if (btn.dataset.del) { if (await confirmBox('Supprimer cet événement ?', 'Supprimer')) { l.events = l.events.filter(x => x.id !== btn.dataset.del); write(m); save(); redraw(); } return; }
+      if (btn.dataset.edit) { const ev = l.events.find(x => x.id === btn.dataset.edit); if (ev) return details(m, ev, redraw); }
     };
   }
   const desc = e => {
-    if (e.type === 'goal') return `But${e.player === 'csc' ? ' (contre son camp adverse)' : e.player ? ' de ' + pname(e.player) : ''}${e.assist ? ', passe de ' + pname(e.assist) : ''}${e.text ? ' · ' + e.text : ''}`;
+    if (isUs(e)) return `${EV[e.type][1]}${e.player === 'csc' ? ' (contre son camp adverse)' : e.player ? ' · ' + pname(e.player) : ''}${e.assist ? ', ' + SP().assist.toLowerCase() + ' de ' + pname(e.assist) : ''}${e.text ? ' · ' + e.text : ''}`;
     if (e.type === 'sub') return `${e.out ? pname(e.out) : '?'} ➜ ${e.in ? pname(e.in) : '?'}`;
     return `${EV[e.type][1]}${e.player ? ' · ' + pname(e.player) : ''}${e.text ? ' · ' + e.text : ''}`;
   };
@@ -7764,18 +8080,21 @@ var Live = (() => {
   function addEvent(m, type, redraw) {
     const l = L(m), now = Date.now(), ev = { id: Store.uid(), type, wall: now, min: minuteOf(l, now), period: periodAt(l, now) || 1 };
     l.events.push(ev); write(m); Store.upsert('matches', m);
-    if (type === 'goal' || type === 'against') toast(type === 'goal' ? `⚽ BUT ! ${ev.min}` : `🥅 But encaissé ${ev.min}`);
+    if (isUs(ev)) toast(`${EV[type][0]} ${EV[type][1]} ! ${ev.min}`); else if (isThem(ev)) toast(`${EV[type][0]} ${EV[type][1]} · ${ev.min}`);
+    // volley: a point is one tap, no window
+    if (SP().sets && (isUs(ev) || isThem(ev))) return redraw();
     details(m, ev, redraw);
   }
   function details(m, ev, redraw) {
     const l = L(m), on = [...onField(l, ev.wall - 1)], all = players(m), benchIds = all.map(p => p.id).filter(id => !on.includes(id));
     const pick = (key, ids, extra = '') => `<div class="chips lv-pick">${extra}${ids.map(id => `<button class="chip ${ev[key] === id ? 'on' : ''}" data-k="${key}" data-v="${id}">${esc(pname(id))}</button>`).join('')}</div>`;
+    const csc = Sport.isFoot() || Sport.id() === 'hand';
     let body = '';
-    if (ev.type === 'goal') body = `<div class="lbl">Buteur</div>${pick('player', on.length ? on : all.map(p => p.id), `<button class="chip ${ev.player === 'csc' ? 'on' : ''}" data-k="player" data-v="csc">CSC adverse</button>`)}<div class="lbl">Passe décisive</div>${pick('assist', on.length ? on : all.map(p => p.id), `<button class="chip ${!ev.assist ? 'on' : ''}" data-k="assist" data-v="">Sans passe</button>`)}`;
+    if (isUs(ev)) body = `<div class="lbl">${SP().scorer[0]}</div>${pick('player', on.length ? on : all.map(p => p.id), csc ? `<button class="chip ${ev.player === 'csc' ? 'on' : ''}" data-k="player" data-v="csc">CSC adverse</button>` : '')}<div class="lbl">${SP().assist}</div>${pick('assist', on.length ? on : all.map(p => p.id), `<button class="chip ${!ev.assist ? 'on' : ''}" data-k="assist" data-v="">Aucune</button>`)}`;
     else if (ev.type === 'sub') body = `<div class="lbl">Sort</div>${pick('out', on.length ? on : all.map(p => p.id))}<div class="lbl">Entre</div>${pick('in', benchIds.length ? benchIds : all.map(p => p.id))}`;
-    else if (ev.type !== 'note' && ev.type !== 'against') body = `<div class="lbl">Joueur ${ev.type === 'chance' || ev.type === 'injury' ? '(facultatif)' : ''}</div>${pick('player', ev.type === 'chance' || ev.type === 'injury' ? all.map(p => p.id) : on.length ? on : all.map(p => p.id))}`;
-    body += `<label class="fld"><span>${ev.type === 'note' ? 'Note' : 'Précision (facultatif)'}</span><input id="lvText" value="${esc(ev.text || '')}" maxlength="120" placeholder="${ev.type === 'against' ? 'ex : sur corner, erreur de relance' : 'ex : frappe du gauche, sur corner'}"></label>
-      <label class="fld inline"><span>Minute</span><input id="lvMin" value="${esc(ev.min)}" maxlength="8" style="max-width:90px"></label>`;
+    else if (ev.type !== 'note' && !isThem(ev)) body = `<div class="lbl">Joueur ${ev.type === 'chance' || ev.type === 'injury' ? '(facultatif)' : ''}</div>${pick('player', ev.type === 'chance' || ev.type === 'injury' ? all.map(p => p.id) : on.length ? on : all.map(p => p.id))}`;
+    body += `<label class="fld"><span>${ev.type === 'note' ? 'Note' : 'Précision (facultatif)'}</span><input id="lvText" value="${esc(ev.text || '')}" maxlength="120" placeholder="${isThem(ev) ? 'ex : sur contre-attaque, erreur de placement' : 'ex : après une belle combinaison'}"></label>
+      <label class="fld inline"><span>${SP().sets ? 'Set' : 'Minute'}</span><input id="lvMin" value="${esc(ev.min)}" maxlength="8" style="max-width:90px"></label>`;
     modal({ title: `${EV[ev.type][0]} ${EV[ev.type][1]} · ${ev.min}`, noFocus: true, body,
       onOpen: r => $$('[data-k]', r).forEach(x => x.onclick = () => { ev[x.dataset.k] = x.dataset.v || null; $$(`[data-k="${x.dataset.k}"]`, r).forEach(y => y.classList.toggle('on', y === x)); }),
       actions: [{ label: 'Plus tard' }, { label: 'Enregistrer', kind: 'primary', onClick: (c, r) => {
@@ -7791,22 +8110,22 @@ var Live = (() => {
   // the card on the match page
   function card(m) {
     const l = m.live, st = l && l.status;
-    if (st === 'h1' || st === 'h2' || st === 'ht') return `<a class="card lv-card on" href="#/direct/${m.id}"><b>🔴 En direct</b><span>${esc(clock(l)[0])} · ${l.events.filter(e => e.type === 'goal').length} – ${l.events.filter(e => e.type === 'against').length}</span><span class="btn primary">Reprendre</span></a>`;
+    if (playing(st) || pause(st)) { const [a, b] = score(l); return `<a class="card lv-card on" href="#/direct/${m.id}"><b>🔴 En direct</b><span>${esc(clock(l)[0])} · ${a} – ${b}</span><span class="btn primary">Reprendre</span></a>`; }
     if (m.played && st !== 'end') return '';
-    return `<a class="card lv-card" href="#/direct/${m.id}"><b>📱 ${st === 'end' ? 'Le fil du match' : 'Suivre le match en direct'}</b><span class="muted small">${st === 'end' ? `${l.events.length} événement${l.events.length > 1 ? 's' : ''}` : 'Buts, changements, cartons : la minute se note toute seule, le temps de jeu se calcule tout seul.'}</span></a>`;
+    return `<a class="card lv-card" href="#/direct/${m.id}"><b>📱 ${st === 'end' ? 'Le fil du match' : 'Suivre le match en direct'}</b><span class="muted small">${st === 'end' ? `${l.events.length} événement${l.events.length > 1 ? 's' : ''}` : `${SP().score.filter(e => e.us).map(e => e.l).slice(0, 2).join(', ')}, changements… : ${SP().sets ? 'le score des sets se tient tout seul' : 'la minute se note toute seule, le temps de jeu se calcule tout seul'}.`}</span></a>`;
   }
 
   /* ---------- the match video: sequences from the live events ----------
      kick-off (and start of the 2nd half) located in the video → each event at its moment */
-  const TAG = { goal: 'but', against: 'encaisse', chance: 'occasion', yellow: 'erreur', red: 'erreur', injury: 'autre', note: 'autre' };
+  const tagOf = e => isUs(e) ? 'but' : isThem(e) ? 'encaisse' : ({ chance: 'occasion', yellow: 'erreur', red: 'erreur', two: 'erreur', foul: 'erreur', err: 'erreur', save: 'autre', reb: 'autre', stl: 'autre', ace: 'but', block: 'autre', injury: 'autre', note: 'autre' })[e.type];
   function videoClips(m, rec, ko1, ko2) {
     const l = m.live; if (!l || !l.periods.length) return [];
     const p1 = l.periods[0].start, p2 = l.periods[1] && l.periods[1].start;
     if (ko2 == null && p2) ko2 = ko1 + (p2 - p1) / 1000;
-    return l.events.filter(e => TAG[e.type]).map(e => {
+    return l.events.filter(tagOf).map(e => {
       const t = (e.period === 2 && p2 != null ? ko2 + (e.wall - p2) / 1000 : ko1 + (e.wall - p1) / 1000);
       // the coach taps a few seconds after the action: the sequence starts well before
-      return { id: Store.uid(), liveId: e.id, tag: TAG[e.type], start: Math.max(0, t - 20), end: t + 5, at: Math.max(0, t - 6), note: `${e.min} ${desc(e)}`, players: [e.player, e.assist].filter(x => x && x !== 'csc') };
+      return { id: Store.uid(), liveId: e.id, tag: tagOf(e), start: Math.max(0, t - 20), end: t + 5, at: Math.max(0, t - 6), note: `${e.min} ${desc(e)}`, players: [e.player, e.assist].filter(x => x && x !== 'csc') };
     }).filter(c => !(rec.clips || []).some(x => x.liveId === c.liveId));
   }
 
@@ -8148,6 +8467,99 @@ var Progress = (() => {
 })();
 
 ;
+/* ===== sport-exos.js ===== */
+/* The exercises of the other sports: their themes (with the words that find them in a text) and a base of classic exercises
+   that fills « Exercices du club » from the first day. Each line: [theme, title, minutes, organisation, consignes, matériel, formats, size].
+   Football keeps its own list (exos.js). */
+var SPORT_EXOS = {
+  basket: {
+    themes: [['echauffement', '🔥 Échauffement'], ['dribble', '🏀 Dribble'], ['passe', '🤝 Passe'], ['tir', '🎯 Tir'], ['un', '⚔️ 1 contre 1'], ['defense', '🛡️ Défense'],
+      ['rebond', '🙌 Rebond'], ['transitions', '⚡ Contre-attaque'], ['attaque', '🧠 Attaque placée'], ['physique', '🏃 Physique'], ['jeu', '🏟️ Jeu / match à thème'], ['calme', '🧘 Retour au calme']],
+    keys: { echauffement: /échauff|activation|mobilit/i, dribble: /dribbl|main faible|changement de main|cross/i, passe: /passe|réception/i, tir: /tir|shoot|lancer|double pas|lay/i,
+      un: /1 ?c(ontre)? ?1|duel|un contre un/i, defense: /défen|aide|rotation défensive|homme à homme|zone/i, rebond: /rebond|box ?out|écran retard/i,
+      transitions: /contre-attaque|transition|course|repli/i, attaque: /attaque placée|pick|écran|jeu à 2|système/i, physique: /physi|vitesse|sprint|appuis|gainage/i,
+      jeu: /match|3 ?c(ontre)? ?3|5 ?c(ontre)? ?5|jeu réduit/i, calme: /retour au calme|étirement/i },
+    base: [
+      ['echauffement', 'Gammes de dribble en ligne', 10, 'Une ligne par panier, aller-retour sur la longueur : dribble main droite, main gauche, changement de main devant, entre les jambes.', 'Regarder devant soi\nBallon à hauteur de hanche\nMain faible autant que main forte', 'Un ballon par joueur', '', ''],
+      ['echauffement', 'Passes à 3 en mouvement', 10, 'Trois colonnes, on monte sur la longueur en se passant le ballon sans dribbler, on finit par un double pas.', 'Passe devant le partenaire\nCourir dans son couloir\nFinir sans marcher', 'Ballons', '', ''],
+      ['dribble', 'Slalom de plots et changements de main', 12, '6 plots en zigzag : à chaque plot, un changement de main (devant, dans le dos, entre les jambes), puis tir.', 'Changer de rythme au plot\nProtéger le ballon avec le corps', 'Plots, ballons', '', ''],
+      ['passe', 'Passe et va au triangle', 10, 'Trois joueurs en triangle de 5 m : je passe et je prends la place de celui qui a reçu.', 'Passe à deux mains poitrine puis à terre\nAppeler le ballon, mains prêtes', 'Ballons, plots', '', '6x6'],
+      ['tir', 'Double pas des deux côtés', 12, 'Deux colonnes à 45° : un passeur, un tireur qui finit en double pas, côté droit puis gauche.', 'Bon pied d\'appel\nMonter la balle haut\nViser le carré de la planche', 'Ballons', '', ''],
+      ['tir', 'Tirs en 5 positions', 15, '5 spots autour de la raquette (0°, 45°, 90°) : 5 tirs par spot, un rebondeur passe.', 'Pieds orientés vers le panier\nCoude sous le ballon\nFinir le geste, poignet cassé', 'Ballons', '', ''],
+      ['un', '1 contre 1 depuis l\'aile', 12, 'L\'attaquant reçoit à l\'aile, le défenseur vient de la raquette : 1 contre 1 jusqu\'au panier ou à la perte.', 'Attaquer le pied avant du défenseur\nFeinte avant de partir\nDéfenseur : rester entre l\'attaquant et le panier', 'Ballons', '', ''],
+      ['defense', 'Glissés défensifs en zigzag', 8, 'Sur la largeur, l\'attaquant dribble en zigzag, le défenseur glisse sans croiser les pieds, mains actives.', 'Fléchi, poids sur l\'avant des pieds\nNe pas croiser les jambes', 'Ballons', '', ''],
+      ['rebond', 'Box-out à 2 contre 2', 10, 'Le coach tire, chaque défenseur bloque son attaquant puis va chercher le rebond.', 'Contact d\'abord, ballon ensuite\nFesses vers l\'attaquant, bras écartés', 'Ballons', '', ''],
+      ['transitions', 'Contre-attaque 3 contre 2 puis 2 contre 1', 15, 'Trois attaquants contre deux défenseurs, puis les deux défenseurs repartent à 2 contre 1 vers l\'autre panier.', 'Écarter dans les couloirs\nLe porteur au centre fixe\nPasse avant le dernier défenseur', 'Ballons', 'b5', ''],
+      ['attaque', 'Jeu à 2 : pick and roll', 15, 'Le meneur à 45°, le pivot vient poser l\'écran : 2 contre 2 sur la lecture (tir, pénétration, passe au roll).', 'Bien poser l\'écran, immobile\nUtiliser l\'écran épaule contre épaule\nLe pivot roule vers le panier', 'Ballons', '', ''],
+      ['jeu', '3 contre 3 demi-terrain', 15, 'Matchs de 3 minutes sur un panier : panier = on garde le ballon, après un rebond défensif on ressort derrière la ligne à 3 points.', 'Bouger sans ballon\nCommuniquer en défense', 'Chasubles, ballons', '', ''],
+      ['physique', 'Suicides avec ballon', 8, 'Aller-retour aux lignes successives (lancer franc, milieu, lancer franc opposé, fond) en dribblant.', 'Tenir le rythme\nToucher les lignes', 'Ballons', '', ''],
+      ['calme', 'Lancers francs et étirements', 8, 'Par deux : 10 lancers francs chacun en récupérant, puis étirements des jambes.', 'Routine avant chaque lancer\nRespirer', 'Ballons', '', ''],
+    ],
+  },
+  hand: {
+    themes: [['echauffement', '🔥 Échauffement'], ['technique', '🤝 Passe et réception'], ['tir', '🎯 Tir'], ['un', '⚔️ Duel 1 contre 1'], ['defense', '🛡️ Défense'],
+      ['gardien', '🧤 Gardien de but'], ['transitions', '⚡ Montée de balle'], ['attaque', '🧠 Attaque placée'], ['physique', '🏃 Physique'], ['jeu', '🏟️ Jeu / match à thème'], ['calme', '🧘 Retour au calme']],
+    keys: { echauffement: /échauff|activation|mobilit/i, technique: /passe|réception|manipulation|dribble/i, tir: /tir|appui|suspension|lob|rucher/i, un: /1 ?c(ontre)? ?1|duel|fixation|débordement/i,
+      defense: /défen|0-6|1-5|3-2-1|dissuasion|interception/i, gardien: /gardien|parade|arrêt/i, transitions: /montée de balle|contre-attaque|repli|transition/i,
+      attaque: /attaque placée|croisé|pivot|enclenchement|bloc/i, physique: /physi|vitesse|sprint|appuis|gainage/i, jeu: /match|jeu réduit|4 ?c(ontre)? ?4/i, calme: /retour au calme|étirement/i },
+    base: [
+      ['echauffement', 'Passes en mouvement par 2', 10, 'Par deux sur la longueur, on se passe le ballon en courant, sans marcher (3 pas maximum).', 'Recevoir en mouvement\nPasse à hauteur de poitrine\nRespecter les 3 pas', 'Ballons', '', ''],
+      ['technique', 'Passe et suis en carré', 10, 'Quatre plots en carré de 8 m, une colonne par plot : je passe au plot suivant et je suis ma passe.', 'Passe à une main, bras armé haut\nAppeler, mains en coupe', 'Plots, ballons', '', '8x8'],
+      ['tir', 'Tirs en appui depuis les 9 m', 12, 'Une colonne à 9 m face au but, le gardien en place : tir en appui en visant les coins.', 'Bras armé haut\nPied opposé au bras devant\nRegarder le gardien avant de tirer', 'Ballons, plots', '', ''],
+      ['tir', 'Tir en suspension après 3 pas', 12, 'Départ à 12 m : réception, 3 pas, impulsion et tir en suspension au-dessus d\'un obstacle bas.', 'Impulsion du pied opposé\nTirer au plus haut', 'Ballons, obstacle bas', '', ''],
+      ['un', 'Duel 1 contre 1 en couloir', 12, 'Couloir de 5 m de large jusqu\'à la zone : l\'attaquant doit déborder le défenseur et tirer.', 'Feinte de corps avant d\'accélérer\nDéfenseur : bras actifs, rester devant', 'Ballons, plots', '', '10x5'],
+      ['defense', 'Défense 0-6 : glisser ensemble', 15, 'Six défenseurs sur la zone contre 6 attaquants qui font circuler le ballon : la défense glisse et sort sur le porteur.', 'Sortir sur le porteur, puis revenir\nSe parler\nBras levés', 'Ballons, chasubles', 'h7', ''],
+      ['gardien', 'Gardien : tirs en série', 10, 'Le gardien en place, 6 tireurs à 7 m tirent l\'un après l\'autre (haut, bas, côtés).', 'Rester grand, bras ouverts\nSe replacer vite après chaque tir', 'Ballons', '', ''],
+      ['transitions', 'Montée de balle à 3 contre 2', 15, 'Après l\'arrêt, le gardien relance vite : 3 attaquants contre 2 défenseurs qui se replient.', 'Relance rapide et longue\nÉcarter le jeu\nFinir avant le repli', 'Ballons, chasubles', '', ''],
+      ['attaque', 'Croisé arrière - demi-centre', 15, 'L\'arrière part vers le centre, le demi-centre croise derrière lui : 2 contre 2 puis 3 contre 3 avec le pivot.', 'Fixer avant de passer\nCroiser dans le dos du porteur', 'Ballons', '', ''],
+      ['jeu', 'Match à 4 contre 4 sur demi-terrain', 15, 'Demi-terrain avec un but : après la récupération, ressortir au-delà de la ligne des 9 m avant d\'attaquer.', 'Occuper la largeur\nDéfense agressive sur le porteur', 'Chasubles, ballons', '', ''],
+      ['physique', 'Circuit appuis et gainage', 12, 'Ateliers de 30 s : échelle de rythme, sauts latéraux, gainage, sprint 10 m.', 'Qualité des appuis\nRécupérer entre les ateliers', 'Échelle, plots', '', ''],
+      ['calme', 'Jonglages et étirements', 8, 'Manipulation du ballon en marchant (autour de la taille, entre les jambes), puis étirements.', 'Respirer\nÉtirer sans à-coups', 'Ballons', '', ''],
+    ],
+  },
+  rugby: {
+    themes: [['echauffement', '🔥 Échauffement'], ['passe', '🤝 Passe et réception'], ['pied', '🦶 Jeu au pied'], ['plaquage', '🛡️ Plaquage et défense'], ['contact', '💥 Contact et ruck'],
+      ['conquete', '🏉 Conquête (mêlée, touche)'], ['soutien', '🔄 Soutien et continuité'], ['attaque', '⚡ Attaque et décalage'], ['physique', '🏃 Physique'], ['jeu', '🏟️ Jeu / match à thème'], ['calme', '🧘 Retour au calme']],
+    keys: { echauffement: /échauff|activation|mobilit/i, passe: /passe|réception|vrille|sautée/i, pied: /jeu au pied|coup de pied|chandelle|rasant|drop|pénalité/i,
+      plaquage: /plaqu|défen|montée|rideau/i, contact: /contact|ruck|maul|grattage|percussion/i, conquete: /mêlée|touche|alignement|lancer/i, soutien: /soutien|continuité|offload|libération/i,
+      attaque: /décalage|surnombre|2 ?c(ontre)? ?1|attaque|ligne d'avantage/i, physique: /physi|vitesse|sprint|appuis|gainage|puissance/i, jeu: /match|jeu réduit|toucher|flag/i, calme: /retour au calme|étirement/i },
+    base: [
+      ['echauffement', 'Passes en ligne de 4', 10, 'Quatre joueurs en ligne décalée, on avance et le ballon va d\'un bout à l\'autre puis revient.', 'Passer vers l\'arrière\nMains tendues vers le passeur\nCourir droit', 'Ballons, plots', '', '40x20'],
+      ['passe', 'Passes sautées et vrillées', 12, 'Par 4 sur la largeur : passe simple, puis passe qui saute un joueur, puis passe vrillée sur 15 m.', 'Pousser avec la main arrière\nViser devant le receveur', 'Ballons', '', ''],
+      ['attaque', '2 contre 1 en couloir', 12, 'Couloir de 10 m : deux attaquants contre un défenseur, fixer puis passer au bon moment.', 'Attaquer l\'épaule intérieure du défenseur\nPasser quand il s\'engage', 'Ballons, plots', '', '20x10'],
+      ['attaque', '3 contre 2 puis 4 contre 3', 15, 'Sur 30 m, le surnombre progresse : 3 contre 2, puis un défenseur et un attaquant entrent.', 'Fixer son vis-à-vis\nGarder la largeur', 'Ballons, chasubles', '', ''],
+      ['plaquage', 'Plaquage sur boucliers', 12, 'Par 2 : l\'un tient le bouclier en marchant, l\'autre plaque épaule dans le bouclier puis se relève.', 'Tête sur le côté, jamais devant\nEnserrer et serrer les bras\nSe relever vite', 'Boucliers', '', ''],
+      ['plaquage', 'Montée défensive en rideau', 12, 'Ligne de 4 défenseurs face à 5 attaquants : monter ensemble et glisser vers l\'extérieur.', 'Monter ensemble\nSe parler\nPlaquer bas', 'Chasubles, ballons', '', ''],
+      ['contact', 'Ruck : libération et grattage', 12, 'Un porteur va au sol, son soutien protège le ballon, un adversaire tente de le gratter.', 'Arriver bas, pieds en appui\nLibérer le ballon vite', 'Ballons, boucliers', '', ''],
+      ['conquete', 'Touche : lancer et saut', 15, 'Alignement de 3 (sauteur et deux lifteurs) et un lanceur à 5 m : appels, lancers et réceptions.', 'Lancer droit et tendu\nLifteurs synchronisés', 'Ballons', '', ''],
+      ['soutien', 'Jeu au toucher à 2 secondes', 15, 'Match au toucher : le porteur touché a 2 secondes pour passer, le soutien doit être là.', 'Soutien proche, derrière le porteur\nDonner une solution à gauche et à droite', 'Ballons, chasubles', '', '40x25'],
+      ['pied', 'Jeu au pied de déplacement', 12, 'Par 2 à 20 m : coups de pied rasants puis chandelles, le partenaire réceptionne.', 'Regarder le ballon jusqu\'au pied\nRéception bras en panier', 'Ballons', '', ''],
+      ['physique', 'Circuit vitesse et appuis', 12, 'Ateliers de 20 s : échelle, crochets entre plots, sprint 15 m, relevés du sol.', 'Appuis courts et rapides\nRécupérer entre les ateliers', 'Échelle, plots', '', ''],
+      ['calme', 'Passes en marchant et étirements', 8, 'Passes à deux en marchant, puis étirements des jambes et du dos.', 'Respirer\nÉtirer sans à-coups', 'Ballons', '', ''],
+    ],
+  },
+  volley: {
+    themes: [['echauffement', '🔥 Échauffement'], ['technique', '🤲 Touche et manchette'], ['service', '🎯 Service'], ['reception', '🛡️ Réception'], ['attaque', '💥 Attaque'],
+      ['contre', '🧱 Contre'], ['defense', '🤸 Défense'], ['physique', '🏃 Physique'], ['jeu', '🏟️ Jeu / match à thème'], ['calme', '🧘 Retour au calme']],
+    keys: { echauffement: /échauff|activation|mobilit/i, technique: /touche|manchette|passe/i, service: /service|smash de service|flottant/i, reception: /réception|recevoir/i,
+      attaque: /attaque|smash|frappe|élan/i, contre: /contre|bloc/i, defense: /défen|plonge|récupér/i, physique: /physi|détente|vitesse|appuis|gainage/i, jeu: /match|jeu réduit|2 ?c(ontre)? ?2|4 ?c(ontre)? ?4|6 ?c(ontre)? ?6/i, calme: /retour au calme|étirement/i },
+    base: [
+      ['echauffement', 'Échanges à 2 en touche', 10, 'Par 2 de part et d\'autre du filet (ou face à face à 4 m) : échanges en touche haute.', 'Mains en coupe au-dessus du front\nPousser avec les jambes', 'Ballons', '', ''],
+      ['technique', 'Manchette contre le mur', 8, 'Chacun face au mur : manchettes continues à 2 m de hauteur.', 'Bras tendus, plan de frappe stable\nSe placer sous le ballon avec les jambes', 'Ballons, mur', '', ''],
+      ['technique', 'Touche - manchette en triangle', 12, 'Trois joueurs en triangle : touche vers l\'un, manchette vers l\'autre, en tournant.', 'Orienter les épaules vers la cible\nAnnoncer « j\'ai »', 'Ballons', '', ''],
+      ['service', 'Service en zones', 12, 'Le terrain adverse est découpé en 6 zones : chacun sert 3 ballons par zone annoncée.', 'Lancer régulier\nBras qui frappe haut et vers l\'avant', 'Ballons, plots', '', ''],
+      ['reception', 'Réception à 3 sur service', 15, 'Trois réceptionneurs, un passeur à la cible : le coach ou un serveur sert, on vise le passeur.', 'Être arrêté avant le contact\nSe parler entre réceptionneurs', 'Ballons, cible', '', ''],
+      ['attaque', 'Attaque en zone 4 après passe', 15, 'Le passeur en zone 2-3 passe haut en 4, les attaquants prennent leur élan et frappent.', 'Élan en 3 temps, bras en arrière\nFrapper au point le plus haut', 'Ballons', '', ''],
+      ['contre', 'Contre à deux', 12, 'Deux contreurs se déplacent ensemble face à un attaquant sur plinth ou qui frappe en 4.', 'Pas chassés, pas croisés\nMains au-dessus du filet, pénétrer', 'Ballons, plinth', '', ''],
+      ['defense', 'Défense sur attaque du coach', 12, 'Le coach attaque depuis l\'autre côté, trois défenseurs remontent le ballon vers la cible.', 'Position basse, bras devant\nTout ballon est jouable', 'Ballons', '', ''],
+      ['jeu', 'Match à 4 contre 4 avec 3 touches obligatoires', 15, 'Terrain réduit, chaque équipe doit faire 3 touches avant de renvoyer.', 'Construire réception - passe - attaque\nCommuniquer', 'Ballons', '', ''],
+      ['physique', 'Détente et appuis', 10, 'Ateliers : sauts sur place bras en haut, pas chassés, sprint 6 m et retour.', 'Atterrir sur les deux pieds\nQualité avant quantité', 'Plots', '', ''],
+      ['calme', 'Jonglages et étirements', 8, 'Jonglages libres en touche et manchette, puis étirements épaules et jambes.', 'Respirer\nÉtirer sans à-coups', 'Ballons', '', ''],
+    ],
+  },
+};
+
+;
 /* ===== exos.js ===== */
 /* Exos: the exercise library of the club, and a session built on demand.
    Every exercise the coaches wrote in a session (with its diagram) is found here, by theme and by category;
@@ -8156,18 +8568,18 @@ var Progress = (() => {
 var Exos = (() => {
   const { esc, $, $$, toast, modal } = UI;
   const S = () => Store.state;
-  const THEMES = [['pressing', '🔥 Pressing / récupération'], ['conservation', '🔄 Conservation'], ['transitions', '⚡ Transitions'], ['finition', '🎯 Finition'],
+  const THEMES_F = [['pressing', '🔥 Pressing / récupération'], ['conservation', '🔄 Conservation'], ['transitions', '⚡ Transitions'], ['finition', '🎯 Finition'],
     ['defense', '🛡️ Défense'], ['construction', '🧱 Construction / relance'], ['technique', '⚽ Technique'], ['cpa', '🚩 Coups de pied arrêtés'], ['physique', '🏃 Physique / vitesse'],
     ['gardien', '🧤 Gardien de but'], ['echauffement', '🔥 Échauffement'], ['jeu', '🏟️ Jeu / match à thème'], ['calme', '🧘 Retour au calme']];
-  const KEYS = { pressing: /press|récup|contre-press|harc|déclench/i, conservation: /conserv|rondo|possess|toro|garder le ballon/i, transitions: /transit|contre-attaque|perte.*balle|récupération.*attaque|attaque rapide/i,
+  const KEYS_F = { pressing: /press|récup|contre-press|harc|déclench/i, conservation: /conserv|rondo|possess|toro|garder le ballon/i, transitions: /transit|contre-attaque|perte.*balle|récupération.*attaque|attaque rapide/i,
     finition: /finit|frapp|\btirs?\b|\bcentres?\b|devant le but|conclu/i, defense: /défen|duel|marquage|bloc|couverture|coulisse/i, construction: /construct|relance|sortie de balle|jeu court|premi[eè]re relance/i,
     technique: /techni|contrôle|passe|conduite|dribble|jongl|coordination|motricit/i, cpa: /cpa|corner|coup franc|coup-franc|penalty|touche longue|arrêté/i,
     physique: /physi|vitesse|sprint|endurance|puissance|fractionn|intermittent|explos|athlét/i, echauffement: /échauff|activation|mobilit|gamme/i,
     gardien: /gardien|plongeon|sortie aérienne|prise de balle/i, jeu: /match|jeu réduit|jeu à thème|opposition|\d ?c ?\d|contre \d/i, calme: /retour au calme|étirement|récupération active/i };
   // age groups: the format of the team (5, 8 or 11)
-  const fmtOf = teamId => ((Store.get('teams', teamId) || {}).format) || '11';
+  const fmtOf = teamId => ((Store.get('teams', teamId) || {}).format) || Sport.defFormat();
   // the classic base: [theme, title, minutes, organisation, consignes, matériel, formats]
-  const BASE = [
+  const BASE_F = [
     ['echauffement', 'Échauffement avec ballon par 2', 12, 'Par 2, 15 m d\'écart. Passes, contrôles orientés, puis déplacements.', 'Contrôle orienté du bon pied\nRegarder avant de recevoir\nMonter progressivement l\'intensité', 'Ballons, plots', '5,8,11'],
     ['echauffement', 'Activation : gammes et coordination', 10, 'Couloir de 20 m, échelle de rythme et petites haies.', 'Appuis rapides\nGainage du buste\nAccélération en sortie', 'Échelle, haies, plots', '8,11'],
     ['echauffement', 'Le béret / jeu de réaction', 10, 'Deux équipes face à face, un ballon au centre. Le coach appelle un numéro.', 'Réagir vite\nProtéger le ballon\nRevenir en défense', 'Ballons, plots', '5,8'],
@@ -8231,9 +8643,18 @@ var Exos = (() => {
     ['gardien', 'Gardien : jeu au pied et relance', 12, 'Passes en retrait, contrôle et relance vers une cible (plot) à gauche ou à droite.', 'Regarder avant de recevoir\nRelance rapide et précise', 'Ballons, plots', '5,8,11', '30x30'],
     ['gardien', 'Gardien : duels en 1 contre 1', 12, 'L\'attaquant part de 25 m, le gardien sort réduire l\'angle.', 'Sortir vite puis se fixer\nRester debout le plus longtemps', 'Ballons, but', '5,8,11', '25x20'],
   ].map(([theme, title, duration, org, consignes, materiel, formats, size], i) => ({ id: 'base' + i, theme, title, duration, org, consignes, materiel, formats: formats.split(','), size: size || '', base: true }));
+  // the lists of the club's sport (football: the ones above; the other sports: sport-exos.js)
+  const mapBase = (list, pre) => list.map(([theme, title, duration, org, consignes, materiel, formats, size], i) => ({ id: pre + i, theme, title, duration, org, consignes, materiel, formats: formats ? formats.split(',') : [], size: size || '', base: true }));
+  const SX = () => Sport.isFoot() ? null : SPORT_EXOS[Sport.id()];
+  const TH = () => SX() ? SX().themes : THEMES_F;
+  const KY = () => SX() ? SX().keys : KEYS_F;
+  let baseCache = null, baseOf = '';
+  const BS = () => { if (baseOf !== Sport.id()) { baseOf = Sport.id(); baseCache = SX() ? mapBase(SX().base, baseOf + '-') : BASE_F; } return baseCache; };
+  // the themes the generator can complete with (warm-up, game and cool-down apart)
+  const coreThemes = () => TH().map(t => t[0]).filter(k => !['echauffement', 'calme', 'jeu'].includes(k));
 
   const schemaOfBase = e => e.base && S().schemas.find(sc => sc.baseEx === e.id);
-  const themeOf = e => { if (e.theme) return [e.theme]; const t = `${e.title || ''} ${e.org || ''} ${e.consignes || ''}`; return Object.keys(KEYS).filter(k => KEYS[k].test(t)); };
+  const themeOf = e => { if (e.theme) return [e.theme]; const t = `${e.title || ''} ${e.org || ''} ${e.consignes || ''}`; return Object.keys(KY()).filter(k => KY()[k].test(t)); };
   const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   // every exercise of the club (one per title, the one with a diagram first), then the base
   function all() {
@@ -8247,7 +8668,7 @@ var Exos = (() => {
     }));
     const club = [...seen.values()];
     const clubTitles = new Set(club.map(e => norm(e.title)));
-    return [...club, ...BASE.filter(b => !clubTitles.has(norm(b.title))).map(b => { const sc = schemaOfBase(b); return sc ? Object.assign({}, b, { schemaId: sc.id }) : b; })];
+    return [...club, ...BS().filter(b => !clubTitles.has(norm(b.title))).map(b => { const sc = schemaOfBase(b); return sc ? Object.assign({}, b, { schemaId: sc.id }) : b; })];
   }
 
   /* ---------- the library page ---------- */
@@ -8255,16 +8676,16 @@ var Exos = (() => {
     const st = S().ui.exos = S().ui.exos || { theme: '', fmt: '', q: '' };
     const list = all().filter(e => (!st.theme || themeOf(e).includes(st.theme)) && (!st.fmt || e.formats.includes(st.fmt)) && (!st.q || norm(`${e.title} ${e.org} ${e.consignes}`).includes(norm(st.q))));
     const clubN = all().filter(e => e.club).length;
-    root.innerHTML = `<header class="page-head"><div><h1>📚 Exercices du club</h1><p class="sub">${clubN} exercice${clubN > 1 ? 's' : ''} des coachs du club + ${BASE.length} exercices de base</p></div>
+    root.innerHTML = `<header class="page-head"><div><h1>📚 Exercices du club</h1><p class="sub">${clubN} exercice${clubN > 1 ? 's' : ''} des coachs du club + ${BS().length} exercices de base</p></div>
       <div class="head-actions"><a class="btn" href="#/entrainements">${I.back}<span>Séances</span></a><a class="btn" href="#/systemes">🗂️<span>Séances par système</span></a><button class="btn" data-fromfile>📥<span>Depuis un fichier (PDF, photo)</span></button><button class="btn primary" data-gen>✨<span>Générer une séance</span></button></div></header>
-      <input class="hl-q" id="exQ" placeholder="Rechercher (ex : rondo, centre, pressing)" value="${esc(st.q)}" autocomplete="off">
-      <div class="chips ex-themes"><button class="chip ${!st.theme ? 'on' : ''}" data-th="">Tous</button>${THEMES.map(([k, l]) => `<button class="chip ${st.theme === k ? 'on' : ''}" data-th="${k}">${l}</button>`).join('')}</div>
-      <div class="chips"><button class="chip ${!st.fmt ? 'on' : ''}" data-fm="">Toutes catégories</button>${[['5', 'Foot à 5 (U6-U9)'], ['8', 'Foot à 8 (U10-U13)'], ['11', 'Foot à 11 (U14+)']].map(([k, l]) => `<button class="chip ${st.fmt === k ? 'on' : ''}" data-fm="${k}">${l}</button>`).join('')}</div>
-      <details class="card ex-res"><summary><b>📚 Ressources officielles gratuites (FFF)</b><span class="muted small"> · vidéos, fiches et guides par âge</span></summary>${RES.map(([age, n, u], i) => `<div class="ex-res-row"><span class="tag">${esc(age)}</span><a href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(n)}</a><button class="btn soft" data-res="${i}">${I.plus}<span>Bibliothèque</span></button></div>`).join('')}</details>
+      <input class="hl-q" id="exQ" placeholder="Rechercher (ex : ${Sport.isFoot() ? 'rondo, centre, pressing' : esc(coreThemes().slice(0, 3).map(k => (TH().find(t => t[0] === k) || ['', k])[1].replace(/^\S+\s/, '').toLowerCase()).join(', '))})" value="${esc(st.q)}" autocomplete="off">
+      <div class="chips ex-themes"><button class="chip ${!st.theme ? 'on' : ''}" data-th="">Tous</button>${TH().map(([k, l]) => `<button class="chip ${st.theme === k ? 'on' : ''}" data-th="${k}">${l}</button>`).join('')}</div>
+      <div class="chips"><button class="chip ${!st.fmt ? 'on' : ''}" data-fm="">Toutes catégories</button>${((Sport.isFoot() ? null : Sport.cur().formats.map(x => [x[0], x[1]])) || [['5', 'Foot à 5 (U6-U9)'], ['8', 'Foot à 8 (U10-U13)'], ['11', 'Foot à 11 (U14+)']]).map(([k, l]) => `<button class="chip ${st.fmt === k ? 'on' : ''}" data-fm="${k}">${l}</button>`).join('')}</div>
+      ${Sport.isFoot() ? `<details class="card ex-res"><summary><b>📚 Ressources officielles gratuites (FFF)</b><span class="muted small"> · vidéos, fiches et guides par âge</span></summary>${RES.map(([age, n, u], i) => `<div class="ex-res-row"><span class="tag">${esc(age)}</span><a href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(n)}</a><button class="btn soft" data-res="${i}">${I.plus}<span>Bibliothèque</span></button></div>`).join('')}</details>` : ''}
       <p class="muted small">${list.length} exercice${list.length > 1 ? 's' : ''}</p>
       <div class="ex-lib">${list.slice(0, 80).map(e => { const sc = e.schemaId && Store.get('schemas', e.schemaId), th = themeOf(e);
-        return `<article class="card ex-item"><div class="ex-item-head">${true ? `<img alt="" src="${UI.thumb(sc || AutoSchema.preview(e), 240, 156)}" data-big="${esc(e.id)}" style="cursor:zoom-in" title="Voir en grand">` : `<span class="ex-noimg">${(THEMES.find(t => t[0] === th[0]) || ['', '⚽'])[1].split(' ')[0]}</span>`}
-          <div><b>${esc(e.title)}</b><span class="muted small">${e.duration} min${e.size ? ' · ' + esc(e.size.replace('x', ' × ')) + ' m' : ''} · ${th.map(k => (THEMES.find(t => t[0] === k) || ['', k])[1].replace(/^\S+\s/, '')).join(', ') || 'Divers'}${e.club ? ` · ${esc((Store.get('teams', e.from.teamId) || {}).name || 'club')}` : ' · base'}</span></div></div>
+        return `<article class="card ex-item"><div class="ex-item-head">${true ? `<img alt="" src="${UI.thumb(sc || AutoSchema.preview(e), 240, 156)}" data-big="${esc(e.id)}" style="cursor:zoom-in" title="Voir en grand">` : `<span class="ex-noimg">${(TH().find(t => t[0] === th[0]) || ['', '⚽'])[1].split(' ')[0]}</span>`}
+          <div><b>${esc(e.title)}</b><span class="muted small">${e.duration} min${e.size ? ' · ' + esc(e.size.replace('x', ' × ')) + ' m' : ''} · ${th.map(k => (TH().find(t => t[0] === k) || ['', k])[1].replace(/^\S+\s/, '')).join(', ') || 'Divers'}${e.club ? ` · ${esc((Store.get('teams', e.from.teamId) || {}).name || 'club')}` : ' · base'}</span></div></div>
           ${e.org ? `<p class="small">${esc(e.org)}</p>` : ''}${e.consignes ? `<ul class="small ex-cons">${e.consignes.split('\n').filter(Boolean).slice(0, 4).map(c => `<li>${esc(c)}</li>`).join('')}</ul>` : ''}
           <div class="chips"><button class="btn soft" data-big="${esc(e.id)}">🔍<span>Voir en grand</span></button><button class="btn soft" data-addex="${esc(e.id)}">${I.plus}<span>Ajouter à une séance</span></button>${e.club ? `<a class="btn soft" href="#/entrainement/${e.from.id}">Voir la séance</a>` : sc ? `<a class="btn soft" href="#/schema/${sc.id}">${I.board}<span>Le schéma</span></a>` : `<button class="btn soft" data-draw="${esc(e.id)}">✨<span>Créer le schéma animé</span></button>`}</div></article>`; }).join('') || '<p class="muted">Aucun exercice ne correspond.</p>'}</div>`;
     const redraw = () => page(root);
@@ -8332,12 +8753,12 @@ var Exos = (() => {
       const list = all().filter(e => (!fmt || !e.formats.length || e.formats.includes(fmt)) && (!th || themeOf(e).includes(th)) && (!q || norm(`${e.title} ${e.org} ${e.consignes}`).includes(norm(q))))
         .sort((a, b) => (b.club ? 1 : 0) - (a.club ? 1 : 0));
       return list.slice(0, 120).map(e => { const sc = e.schemaId && Store.get('schemas', e.schemaId);
-        return `<button class="list-item hl-pickrow" data-pk="${esc(e.id)}">${sc ? `<img alt="" src="${UI.thumb(sc, 120, 78)}" style="width:60px;border-radius:4px">` : ''}<span class="li-main"><b>${esc(e.title)}</b><span class="muted small">${e.duration} min · ${e.club ? '📚 club' : 'base'}${themeOf(e).length ? ' · ' + themeOf(e).map(k => (THEMES.find(t => t[0] === k) || ['', k])[1].replace(/^\S+\s/, '')).join(', ') : ''}</span></span></button>`; }).join('')
+        return `<button class="list-item hl-pickrow" data-pk="${esc(e.id)}">${sc ? `<img alt="" src="${UI.thumb(sc, 120, 78)}" style="width:60px;border-radius:4px">` : ''}<span class="li-main"><b>${esc(e.title)}</b><span class="muted small">${e.duration} min · ${e.club ? '📚 club' : 'base'}${themeOf(e).length ? ' · ' + themeOf(e).map(k => (TH().find(t => t[0] === k) || ['', k])[1].replace(/^\S+\s/, '')).join(', ') : ''}</span></span></button>`; }).join('')
         || '<p class="muted small">Aucun exercice ne correspond.</p>';
     };
     const close = modal({ title: '📚 Choisir un exercice', noFocus: true, body: `
-      <input class="hl-q" id="pkQ" placeholder="Rechercher (ex : rondo, centre, pressing)" autocomplete="off">
-      <label class="fld"><span>Thème</span><select id="pkTh"><option value="">Tous</option>${THEMES.map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select></label>
+      <input class="hl-q" id="pkQ" placeholder="Rechercher (ex : ${Sport.isFoot() ? 'rondo, centre, pressing' : esc(coreThemes().slice(0, 3).map(k => (TH().find(t => t[0] === k) || ['', k])[1].replace(/^\S+\s/, '').toLowerCase()).join(', '))})" autocomplete="off">
+      <label class="fld"><span>Thème</span><select id="pkTh"><option value="">Tous</option>${TH().map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select></label>
       <div class="list" id="pkList">${rows()}</div>`,
       onOpen: r => {
         const bind = () => $$('[data-pk]', r).forEach(b => b.onclick = () => { const e = all().find(x => x.id === b.dataset.pk); if (!e) return; close(); done(copyEx(e)); });
@@ -8350,7 +8771,8 @@ var Exos = (() => {
   /* ---------- the generator ---------- */
   function generator(pre = {}) {
     const teams = Auth.teams(), g = Object.assign({ theme: 'pressing', teamId: S().ui.teamId || (teams[0] || {}).id, minutes: 75, date: UI.today() }, S().ui.exGen || {}, pre);
-    const body = () => `<div class="lbl">Thème</div><div class="chips">${THEMES.filter(t => !['echauffement', 'calme', 'jeu'].includes(t[0])).map(([k, l]) => `<button class="chip ${g.theme === k ? 'on' : ''}" data-gth="${k}">${l}</button>`).join('')}</div>
+    if (!coreThemes().includes(g.theme)) g.theme = coreThemes()[0]; // a theme of another sport (the club changed sport)
+    const body = () => `<div class="lbl">Thème</div><div class="chips">${TH().filter(t => !['echauffement', 'calme', 'jeu'].includes(t[0])).map(([k, l]) => `<button class="chip ${g.theme === k ? 'on' : ''}" data-gth="${k}">${l}</button>`).join('')}</div>
       <div class="row2"><label class="fld"><span>Catégorie</span><select id="gTeam">${teams.map(t => `<option value="${t.id}" ${t.id === g.teamId ? 'selected' : ''}>${esc(Store.teamLabel(t))}</option>`).join('')}</select></label>
         <label class="fld"><span>Durée</span><select id="gMin">${[45, 60, 75, 90, 105].map(n => `<option ${n === +g.minutes ? 'selected' : ''} value="${n}">${n} min</option>`).join('')}</select></label>
         <label class="fld"><span>Date</span><input type="date" id="gDate" value="${esc(g.date)}"></label></div>
@@ -8375,13 +8797,13 @@ var Exos = (() => {
     // too few exercises of the theme for this category: a close theme completes (never one exercise of 45 min)
     const NEAR = { defense: ['pressing', 'physique'], pressing: ['transitions', 'defense'], transitions: ['pressing', 'finition'], finition: ['technique', 'transitions'],
       conservation: ['construction', 'technique'], construction: ['conservation', 'technique'], technique: ['conservation', 'finition'], cpa: ['finition', 'defense'], physique: ['pressing', 'transitions'] };
-    for (const alt of [...(NEAR[g.theme] || []), 'conservation', 'technique']) { if (coreEx.length >= nCore) break; coreEx.push(...pick(alt, used, nCore - coreEx.length)); }
+    for (const alt of Sport.isFoot() ? [...(NEAR[g.theme] || []), 'conservation', 'technique'] : coreThemes().filter(k => k !== g.theme)) { if (coreEx.length >= nCore) break; coreEx.push(...pick(alt, used, nCore - coreEx.length)); }
     const each = Math.max(5, Math.floor(core / Math.max(1, coreEx.length) / 5) * 5);
     const plan = [...pick('echauffement', used).map(e => [e, warm]), ...coreEx.map((e, i) => [e, i === coreEx.length - 1 ? core - each * (coreEx.length - 1) : each]),
       ...pick('jeu', used).map(e => [e, game]), ...pick('calme', used).map(e => [e, calm])];
     // not enough exercises of the theme: another close theme completes
-    const have = plan.reduce((a, [, d]) => a + d, 0); if (have < total - 10) { const extra = pick('conservation', used)[0] || pick('technique', used)[0]; if (extra) plan.splice(1 + nCore, 0, [extra, total - have]); }
-    const thLabel = (THEMES.find(t => t[0] === g.theme) || ['', g.theme])[1].replace(/^\S+\s/, '');
+    const have = plan.reduce((a, [, d]) => a + d, 0); if (have < total - 10) { const extra = Sport.isFoot() ? pick('conservation', used)[0] || pick('technique', used)[0] : coreThemes().map(k => pick(k, used)[0]).find(Boolean); if (extra) plan.splice(1 + nCore, 0, [extra, total - have]); }
+    const thLabel = (TH().find(t => t[0] === g.theme) || ['', g.theme])[1].replace(/^\S+\s/, '');
     const tr = Store.upsert('trainings', { id: Store.uid(), title: thLabel, date: g.date, time: '', teamId: g.teamId, goal: `Thème : ${thLabel}. Séance générée : échauffement, ${nCore} exercice${nCore > 1 ? 's' : ''} du thème, jeu à thème, retour au calme.`,
       exercises: plan.map(([e, d]) => Object.assign(copyEx(e), { duration: d })), presents: [] });
     toast(`Séance « ${thLabel} » créée : ${plan.length} exercices, ${plan.reduce((a, [, d]) => a + d, 0)} min`);
@@ -8389,7 +8811,7 @@ var Exos = (() => {
   }
 
   document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('[data-exgen]'); if (b) generator(); });
-  return { page, generator, all, themeOf, pick, THEMES };
+  return { page, generator, all, themeOf, pick, get THEMES() { return TH(); } };
 })();
 
 ;
@@ -8539,6 +8961,414 @@ SESSIONS_FOOT.push(
     ['jeu', '3 contre 2', 12, 'Zone de 20 x 15 m : 3 attaquants contre 2.', 'Fixer et passer', 'Ballons, mini-but', '20x15'],
     ['jeu', 'Match 4 contre 4', 15, 'Terrain de foot à 5 : chacun à son poste.', 'Revenir défendre', 'Chasubles', '']] }
 );
+
+;
+/* ===== sessions-sports.js ===== */
+/* The library of sessions by game system — basket, handball, rugby, volley (written for the app, no copy of any website).
+   Same shape as SESSIONS_FOOT: { sys, fmt, title, goal, ex: [[theme, title, minutes, organisation, consignes « | », matériel, size]] }. */
+var SESSIONS_SPORTS = {
+  basket: [
+    { sys: 'Défense homme à homme', fmt: 'b5', title: 'Défendre chacun son joueur, aider ensemble', goal: 'Pression sur le porteur, aide côté opposé, se replacer.', ex: [
+      ['defense', 'Position de défense sur le porteur', 12, '1 contre 1 sur demi-terrain : le défenseur empêche le dribble vers le panier.', 'Entre son joueur et le panier|Bras actifs, fléchi|Pas glissés', 'Ballons', ''],
+      ['defense', 'Aide et reprise à 4 contre 4', 18, '4 contre 4 sur demi-terrain : les attaquants font tourner le ballon, la défense se place selon le ballon (aide côté opposé).', 'Voir le ballon et son joueur|Aider sur la pénétration puis revenir|Se parler', 'Chasubles, ballons', ''],
+      ['jeu', 'Match 5 contre 5 : défense forte', 20, 'Match normal. Une interception ou un passage en force provoqué vaut 2 points.', 'Défense agressive sur le porteur|Rebond défensif', 'Chasubles', '']] },
+    { sys: 'Zone 2-3', fmt: 'b5', title: 'Défense de zone 2-3', goal: 'Deux devant, trois derrière : protéger la raquette et coulisser vers le ballon.', ex: [
+      ['defense', 'Coulissement de la zone 2-3 sans ballon', 10, 'Les 5 défenseurs en zone 2-3, le coach déplace le ballon entre 5 positions : la zone glisse.', 'Le plus proche sort sur le ballon|Les intérieurs protègent la raquette|Mains hautes', 'Ballon', ''],
+      ['defense', 'Zone 2-3 contre 5 attaquants', 18, 'Demi-terrain : la zone contre une attaque qui fait circuler. 3 arrêts défensifs d\'affilée = changement.', 'Fermer les passes vers le poste bas|Sortir sur les tireurs à 3 points|Rebond défensif', 'Chasubles, ballons', ''],
+      ['jeu', 'Match avec zone obligatoire', 20, 'Match normal : chaque équipe défend en zone 2-3.', 'Communication|Rebond', 'Chasubles', '']] },
+    { sys: 'Attaque contre zone', fmt: 'b5', title: 'Attaquer une défense de zone', goal: 'Se placer dans les trous de la zone, faire circuler vite, tirer à 3 points ou trouver le poste haut.', ex: [
+      ['attaque', 'Circulation contre zone 1-3-1', 15, '5 attaquants contre une zone 1-3-1 : passes rapides pour trouver un tireur seul.', 'Se placer entre deux défenseurs|Passer vite, sans dribble inutile|Le poste haut est la clé', 'Chasubles, ballons', ''],
+      ['tir', 'Tirs après circulation', 12, 'Trois passes autour de la ligne à 3 points puis tir du joueur seul.', 'Pieds prêts avant de recevoir|Tirer dans le rythme', 'Ballons', ''],
+      ['jeu', 'Match : zone contre attaque', 20, 'Une équipe en zone, l\'autre attaque : un panier à 3 points vaut 4 points.', 'Patience|Rebond offensif', 'Chasubles', '']] },
+    { sys: 'Pick and roll', fmt: 'b5', title: 'Le jeu à deux : écran porteur', goal: 'Bien poser et utiliser l\'écran, lire la défense (tir, pénétration, passe au poseur).', ex: [
+      ['attaque', 'Pick and roll à 2 contre 2', 15, 'Le meneur à 45°, le pivot vient poser l\'écran : 2 contre 2 jusqu\'au panier.', 'Écran immobile, pieds écartés|Frôler l\'écran|Le poseur roule vers le panier', 'Ballons', ''],
+      ['attaque', 'Pick and roll à 3 contre 3 avec le tireur', 15, 'Ajout d\'un tireur dans le coin : il punit l\'aide défensive.', 'Lire l\'aide|Passe au coin si son défenseur aide', 'Ballons, chasubles', ''],
+      ['jeu', 'Match : 2 points de bonus sur pick and roll', 20, 'Match normal : un panier après un écran porteur vaut 1 point de plus.', 'Espacement|Patience', 'Chasubles', '']] },
+    { sys: 'Jeu rapide', fmt: 'b5', title: 'Contre-attaque et jeu rapide', goal: 'Récupérer, sortir vite, courir dans les couloirs et finir avant le repli.', ex: [
+      ['transitions', 'Sortie de rebond et passe longue', 12, 'Rebond défensif, première passe au meneur sur le côté, course des ailiers dans les couloirs.', 'Sortir le ballon en moins de 2 secondes|Courir large', 'Ballons', ''],
+      ['transitions', '3 contre 2 puis 2 contre 1', 15, 'Trois attaquants contre deux, puis les deux défenseurs contre-attaquent à 2 contre 1.', 'Le porteur au centre|Passe avant le dernier défenseur', 'Ballons', ''],
+      ['jeu', 'Match : panier en moins de 8 secondes = bonus', 20, 'Match normal : un panier marqué en moins de 8 secondes après la récupération vaut 1 point de plus.', 'Courir|Repli défensif immédiat', 'Chasubles', '']] },
+  ],
+  hand: [
+    { sys: 'Défense 0-6', fmt: 'h7', title: 'Défense étagée 0-6', goal: 'Six défenseurs sur la zone : sortir sur le porteur, revenir, glisser ensemble.', ex: [
+      ['defense', 'Glissements de la 0-6', 12, 'Six défenseurs contre six attaquants qui se passent le ballon sans tirer : la défense glisse et sort sur le porteur.', 'Sortir bras levés|Revenir après la passe|Se parler', 'Ballons', ''],
+      ['defense', 'Défense 0-6 contre attaque placée', 18, 'Attaque placée 6 contre 6 : la défense doit récupérer avant 40 secondes.', 'Contact avec le porteur|Fermer l\'intérieur|Aider le voisin', 'Ballons, chasubles', ''],
+      ['jeu', 'Match : défense 0-6', 20, 'Match normal, défense 0-6 obligatoire.', 'Discipline défensive|Montée de balle après récupération', 'Chasubles', '']] },
+    { sys: 'Défense 1-5', fmt: 'h7', title: 'Défense 1-5 avec un avancé', goal: 'Un défenseur avancé gêne le demi-centre, cinq sur la zone.', ex: [
+      ['defense', 'Le rôle de l\'avancé', 12, 'L\'avancé contre le demi-centre et deux arrières : il coupe les passes et gêne la circulation.', 'Rester entre le ballon et le demi-centre|Bras dans les lignes de passe', 'Ballons', ''],
+      ['defense', '1-5 contre attaque placée', 18, 'Attaque placée 6 contre 6 contre une défense 1-5.', 'Les arrières défensifs sortent fort|Le pivot est toujours marqué', 'Ballons, chasubles', ''],
+      ['jeu', 'Match : défense 1-5', 20, 'Match normal, défense 1-5 obligatoire. Une interception vaut un but.', 'Agressivité|Contre-attaque', 'Chasubles', '']] },
+    { sys: 'Défense 3-2-1', fmt: 'h7', title: 'Défense 3-2-1 offensive', goal: 'Une défense étagée qui va chercher le ballon haut pour provoquer des pertes.', ex: [
+      ['defense', 'Les 3 lignes de la 3-2-1', 15, 'Placement des 3 lignes contre une circulation lente : chacun sait qui il prend.', 'Pointe très haute|Distances entre les lignes|Fermer les passes', 'Ballons', ''],
+      ['defense', 'Interception en 3-2-1', 15, 'Attaque 6 contre 6 : chaque interception lance une contre-attaque à 3.', 'Anticiper la passe|Partir vite après l\'interception', 'Ballons, chasubles', ''],
+      ['jeu', 'Match : 3-2-1', 20, 'Match normal en 3-2-1.', 'Communication', 'Chasubles', '']] },
+    { sys: 'Attaque placée 3-3', fmt: 'h7', title: 'Attaque placée en 3-3', goal: 'Trois arrières, deux ailiers et un pivot : fixer, croiser, trouver le pivot.', ex: [
+      ['attaque', 'Fixation et passe', 15, '2 contre 2 arrières : l\'attaquant fixe son défenseur puis passe au voisin.', 'Attaquer l\'intervalle|Passer quand le défenseur s\'engage', 'Ballons', ''],
+      ['attaque', 'Croisé et jeu avec le pivot', 18, '3 arrières + pivot contre 4 défenseurs : croisé demi-centre/arrière, puis passe au pivot.', 'Croiser dans le dos du porteur|Le pivot bloque son défenseur', 'Ballons', ''],
+      ['jeu', 'Match : but du pivot = 2 points', 20, 'Match normal, un but du pivot compte double.', 'Patience|Jeu avec le pivot', 'Chasubles', '']] },
+  ],
+  rugby: [
+    { sys: 'Organisation 1-3-3-1', fmt: 'r15', title: 'Le 1-3-3-1 : occuper la largeur', goal: 'Les avants répartis en pods de 3, un avant à chaque aile : du jeu dans tout le terrain.', ex: [
+      ['soutien', 'Les pods de 3', 15, 'Trois avants en pod reçoivent du demi de mêlée, percutent et libèrent vite.', 'Un porteur, deux soutiens|Ballon sorti en 3 secondes', 'Ballons, boucliers', ''],
+      ['attaque', 'Circulation 1-3-3-1', 18, 'Demi-terrain : lancements depuis un ruck, le jeu change de côté en passant par les pods.', 'Chacun à sa place|Avancer à chaque temps de jeu', 'Ballons, plots', ''],
+      ['jeu', 'Match à thème : 5 temps de jeu', 20, 'Match au contact réduit : un essai après 5 temps de jeu vaut 2 points de plus.', 'Garder le ballon|Avancer', 'Chasubles', '']] },
+    { sys: 'Organisation 2-4-2', fmt: 'r15', title: 'Le 2-4-2 : un gros bloc au centre', goal: 'Quatre avants au centre pour avancer, deux de chaque côté pour finir.', ex: [
+      ['contact', 'Percussion à 4', 15, 'Quatre avants au centre : percussion, ruck, libération.', 'Avancer au contact|Libérer vite', 'Boucliers, ballons', ''],
+      ['attaque', 'Écarter vers les côtés', 15, 'Après deux temps au centre, le ballon part vers les deux avants de côté et les trois-quarts.', 'Fixer au centre|Passer vite au large', 'Ballons', ''],
+      ['jeu', 'Match à thème', 20, 'Match au contact réduit : chaque essai marqué au large vaut 2 points de plus.', 'Alterner centre et large', 'Chasubles', '']] },
+    { sys: 'Défense en rideau', fmt: 'r15', title: 'Défendre en rideau', goal: 'Monter ensemble sur une ligne, plaquer et se relever.', ex: [
+      ['plaquage', 'Montée en ligne à 5 contre 6', 15, 'Sur 30 m, 5 défenseurs montent ensemble contre 6 attaquants au toucher.', 'Monter ensemble|Le dernier défenseur glisse|Se parler', 'Chasubles, ballons', ''],
+      ['plaquage', 'Plaquer et se relever', 12, 'Plaquage sur bouclier, se relever et se replacer dans la ligne.', 'Tête sur le côté|Se relever vite', 'Boucliers', ''],
+      ['jeu', 'Match : défense en rideau', 20, 'Match au contact réduit : un ballon récupéré vaut 3 points.', 'Ligne défensive', 'Chasubles', '']] },
+    { sys: 'Jeu au pied stratégique', fmt: 'r15', title: 'Occuper le terrain au pied', goal: 'Choisir le bon coup de pied : touche, chandelle, jeu rasant ; poursuivre ensemble.', ex: [
+      ['pied', 'Les 3 coups de pied', 15, 'Par 2 : coup de pied en touche, chandelle, rasant ; le partenaire réceptionne.', 'Viser une zone|Réception bras en panier', 'Ballons, plots', ''],
+      ['pied', 'Chandelle et poursuite', 15, 'Le demi lance une chandelle, deux chasseurs vont la disputer, deux réceptionneurs en face.', 'Partir au moment du coup de pied|Sauter pour le ballon', 'Ballons', ''],
+      ['jeu', 'Match : 3 coups de pied obligatoires', 20, 'Chaque équipe doit jouer au pied 3 fois par période.', 'Bonne zone|Poursuite', 'Chasubles', '']] },
+  ],
+  volley: [
+    { sys: '4-2', fmt: 'v6', title: 'Le système 4-2', goal: 'Deux passeurs opposés : le passeur avant passe, simple pour débuter.', ex: [
+      ['technique', 'Passe du passeur avant', 15, 'Réception sur service facile, le passeur avant passe en 4 ou en 2.', 'Annoncer la passe|Passe haute vers l\'avant', 'Ballons', ''],
+      ['reception', 'Réception à 4 en 4-2', 15, 'Quatre réceptionneurs, le passeur avant à la cible : service, réception, passe, attaque.', 'Se parler|Viser le passeur', 'Ballons', ''],
+      ['jeu', 'Match en 4-2', 20, 'Match normal avec rotation 4-2.', 'Rotation correcte', 'Ballons', '']] },
+    { sys: '5-1', fmt: 'v6', title: 'Le système 5-1', goal: 'Un seul passeur qui pénètre depuis l\'arrière : trois attaquants devant.', ex: [
+      ['technique', 'Pénétration du passeur', 12, 'Le passeur part de la zone 1 au service adverse et rejoint la zone 2-3 pour passer.', 'Partir au moment du service|Être arrêté avant la passe', 'Ballons', ''],
+      ['attaque', 'Attaque à 3 devant', 18, 'Le passeur pénètre, passe en 4, en 3 (courte) ou en 2.', 'Varier les passes|Les attaquants prêts', 'Ballons', ''],
+      ['jeu', 'Match en 5-1', 20, 'Match normal en 5-1 : un point d\'attaque au centre vaut 2.', 'Rotations|Communication', 'Ballons', '']] },
+    { sys: 'Réception à 3', fmt: 'v6', title: 'Réceptionner à 3', goal: 'Trois réceptionneurs (deux réceptionneurs-attaquants et le libéro) couvrent le terrain.', ex: [
+      ['reception', 'Couloirs de réception', 15, 'Trois réceptionneurs, chacun son couloir, sur service flottant.', 'Être arrêté|Annoncer « j\'ai »|Viser la cible', 'Ballons, cible', ''],
+      ['reception', 'Réception puis attaque', 18, 'Réception à 3, passe, attaque : point si l\'attaque est réussie.', 'Qualité de la réception d\'abord', 'Ballons', ''],
+      ['jeu', 'Match : réception notée', 20, 'Match normal : une réception parfaite vaut un point bonus.', 'Concentration', 'Ballons', '']] },
+    { sys: 'Défense en 6 arrière', fmt: 'v6', title: 'Défendre avec le 6 en arrière', goal: 'Le joueur en zone 6 recule au fond, les côtés défendent les diagonales.', ex: [
+      ['defense', 'Placement en défense', 12, 'Le coach attaque depuis l\'autre côté : les défenseurs se placent selon l\'attaquant.', 'Position basse|Lire l\'épaule de l\'attaquant', 'Ballons', ''],
+      ['contre', 'Contre et défense ensemble', 18, 'Deux contreurs et trois défenseurs contre une attaque en 4.', 'Le contre ferme la ligne|Les défenseurs couvrent la diagonale', 'Ballons', ''],
+      ['jeu', 'Match : défense récompensée', 20, 'Match normal : une défense remontée puis attaquée gagnante vaut 2 points.', 'Ne rien lâcher', 'Ballons', '']] },
+  ],
+};
+
+// more systems (written for the app)
+SESSIONS_SPORTS.basket.push(
+  { sys: 'Zone 3-2', fmt: 'b5', title: 'Défense de zone 3-2', goal: 'Trois devant pour gêner les tireurs, deux derrière pour la raquette.', ex: [
+    ['defense', 'Glissements de la zone 3-2', 10, 'Le coach fait circuler le ballon entre 5 positions, la zone suit.', 'La pointe sur le ballon|Les ailes ferment les passes vers le coin', 'Ballon', ''],
+    ['defense', 'Zone 3-2 contre 5', 18, 'Demi-terrain : la zone contre une attaque qui fait circuler.', 'Sortir sur les tireurs|Rebond', 'Chasubles, ballons', ''],
+    ['jeu', 'Match en zone 3-2', 20, 'Chaque équipe défend en 3-2.', 'Communication', 'Chasubles', '']] },
+  { sys: 'Box and one', fmt: 'b5', title: 'Box and one : stopper le meilleur adversaire', goal: 'Quatre défenseurs en carré, un défenseur colle le meilleur joueur adverse.', ex: [
+    ['defense', 'Le défenseur collant', 12, '1 contre 1 tout terrain sur le meilleur attaquant : l\'empêcher de recevoir.', 'Toujours entre lui et le ballon|Bras dans la ligne de passe', 'Ballons', ''],
+    ['defense', 'Le carré de 4', 15, 'Quatre défenseurs en carré contre 4 attaquants.', 'Garder le carré|Aider sur la pénétration', 'Chasubles, ballons', ''],
+    ['jeu', 'Match avec box and one', 20, 'Une équipe défend en box and one.', 'Discipline', 'Chasubles', '']] },
+  { sys: 'Motion offense (5 extérieurs)', fmt: 'b5', title: 'Attaque en mouvement', goal: 'Cinq joueurs à l\'extérieur qui coupent, passent et se replacent.', ex: [
+    ['attaque', 'Passe et coupe', 15, '5 contre 0 puis 5 contre 5 : après chaque passe, on coupe vers le panier puis on se replace.', 'Couper fort|Remplir la place libre', 'Ballons', ''],
+    ['attaque', 'Lecture sur la coupe', 15, '3 contre 3 : passe au coupeur s\'il est libre, sinon on continue.', 'Lire son défenseur|Passe à terre', 'Ballons', ''],
+    ['jeu', 'Match : pas de dribble de plus de 2 rebonds', 20, 'Match normal avec 2 dribbles maximum.', 'Mouvement', 'Chasubles', '']] },
+  { sys: 'Presse tout terrain', fmt: 'b5', title: 'Presse tout terrain', goal: 'Mettre la pression dès la remise en jeu pour provoquer des pertes.', ex: [
+    ['defense', 'Prise à deux sur la remise en jeu', 12, 'Remise en jeu : deux défenseurs piègent le receveur dans le coin.', 'Fermer la ligne de touche|Bras hauts', 'Ballons', ''],
+    ['defense', 'Presse 2-2-1', 15, '5 contre 5 tout terrain avec une presse 2-2-1.', 'Le dernier défenseur protège le panier', 'Chasubles, ballons', ''],
+    ['jeu', 'Match avec presse', 20, 'Après chaque panier, presse tout terrain.', 'Repli si la presse est battue', 'Chasubles', '']] }
+);
+SESSIONS_SPORTS.hand.push(
+  { sys: 'Défense 5+1', fmt: 'h7', title: 'Défense 5+1 : un défenseur individuel', goal: 'Cinq sur la zone, un défenseur qui suit le meilleur tireur adverse.', ex: [
+    ['defense', 'L\'individuel', 12, '1 contre 1 sur le meilleur arrière : l\'empêcher de recevoir.', 'Toujours entre lui et le ballon', 'Ballons', ''],
+    ['defense', 'Les 5 sur la zone', 15, 'Cinq défenseurs contre 5 attaquants (le sixième est pris en individuel).', 'Glisser ensemble|Le pivot marqué', 'Ballons, chasubles', ''],
+    ['jeu', 'Match en 5+1', 20, 'Défense 5+1 obligatoire.', 'Discipline', 'Chasubles', '']] },
+  { sys: 'Attaque à 2 pivots', fmt: 'h7', title: 'Attaquer à deux pivots', goal: 'Deux pivots qui bloquent et libèrent les arrières.', ex: [
+    ['attaque', 'Blocs des pivots', 15, 'Deux pivots posent des blocs pour les arrières qui tirent.', 'Bloc immobile|Tirer au-dessus du bloc', 'Ballons', ''],
+    ['attaque', 'Passe au pivot libre', 15, '4 arrières/ailiers + 2 pivots contre 6 : trouver le pivot qui se libère.', 'Fixer avant de passer|Passe à terre au pivot', 'Ballons', ''],
+    ['jeu', 'Match à 2 pivots', 20, 'But d\'un pivot = 2 points.', 'Patience', 'Chasubles', '']] },
+  { sys: 'Montée de balle', fmt: 'h7', title: 'Montée de balle et engagement rapide', goal: 'Marquer avant que la défense soit en place : première, deuxième et troisième vague.', ex: [
+    ['transitions', 'Première vague', 12, 'Arrêt du gardien, relance longue vers l\'ailier qui part.', 'Partir au moment de l\'arrêt|Relance précise', 'Ballons', ''],
+    ['transitions', 'Deuxième vague à 3 contre 2', 15, 'Les arrières montent vite contre 2 défenseurs qui se replient.', 'Largeur|Tir rapide', 'Ballons', ''],
+    ['jeu', 'Match : but en moins de 10 secondes = 2 points', 20, 'Match normal.', 'Vitesse', 'Chasubles', '']] }
+);
+SESSIONS_SPORTS.rugby.push(
+  { sys: 'Jeu au large', fmt: 'r15', title: 'Faire vivre le ballon au large', goal: 'Attirer au centre puis écarter vite vers les ailes.', ex: [
+    ['passe', 'Passes longues sautées', 12, 'Ligne de 5 : le ballon va de l\'ouvreur à l\'ailier en 2 passes.', 'Passe vrillée|Courir droit', 'Ballons', ''],
+    ['attaque', 'Surnombre au large', 15, '4 contre 3 sur un couloir de 25 m après un ruck.', 'Fixer l\'intérieur|Ailier dans la course', 'Ballons, plots', ''],
+    ['jeu', 'Match : essai au large = bonus', 20, 'Match au contact réduit : essai dans les 15 m = 2 points de plus.', 'Largeur', 'Chasubles', '']] },
+  { sys: 'Touche et maul', fmt: 'r15', title: 'Conquête en touche et maul', goal: 'Gagner la touche et avancer en maul.', ex: [
+    ['conquete', 'Alignement à 4', 15, 'Lancer, saut et réception avec deux lifteurs.', 'Appel clair|Synchronisation', 'Ballons', ''],
+    ['contact', 'Former le maul', 15, 'Après réception, les avants se lient et poussent sur 5 m.', 'Lier fort|Ballon caché au fond', 'Boucliers, ballons', ''],
+    ['jeu', 'Match : touche obligatoire', 20, 'Chaque sortie de ballon donne une touche.', 'Conquête', 'Chasubles', '']] },
+  { sys: 'Mêlée', fmt: 'r15', title: 'La mêlée fermée', goal: 'Se lier, pousser ensemble et sortir un ballon propre (en sécurité).', ex: [
+    ['conquete', 'Liaisons de la première ligne', 12, 'Liaisons sans pousser, puis poussée légère contre bouclier (encadré par l\'éducateur).', 'Dos droit, tête haute|Pieds bien placés', 'Boucliers', ''],
+    ['conquete', 'Introduction et talonnage', 12, 'Le demi introduit, le talonneur talonne, le 8 contrôle.', 'Signal du talonneur|Ballon au 8', 'Ballons', ''],
+    ['jeu', 'Match : mêlée sur chaque en-avant', 20, 'Mêlée simulée à la sortie des en-avants.', 'Sécurité avant tout', 'Chasubles', '']] }
+);
+SESSIONS_SPORTS.volley.push(
+  { sys: '6-2', fmt: 'v6', title: 'Le système 6-2', goal: 'Deux passeurs opposés : celui de l\'arrière passe, trois attaquants devant.', ex: [
+    ['technique', 'Le passeur arrière', 12, 'Le passeur en zone 1 pénètre et passe à 3 attaquants.', 'Pénétrer vite|Passe haute', 'Ballons', ''],
+    ['attaque', 'Trois attaquants devant', 18, 'Réception, passe du passeur arrière, attaque en 4, 3 ou 2.', 'Varier|Annoncer', 'Ballons', ''],
+    ['jeu', 'Match en 6-2', 20, 'Rotation 6-2 obligatoire.', 'Rotation correcte', 'Ballons', '']] },
+  { sys: 'Réception à 4', fmt: 'v6', title: 'Réceptionner à 4', goal: 'Quatre réceptionneurs en W pour les débutants.', ex: [
+    ['reception', 'Le W', 15, 'Quatre réceptionneurs en W, service facile.', 'Chacun sa zone|Annoncer', 'Ballons', ''],
+    ['reception', 'Réception puis passe', 15, 'Réception à 4, passe vers la cible.', 'Viser le passeur', 'Ballons, cible', ''],
+    ['jeu', 'Match : réception à 4', 20, 'Réception à 4 obligatoire.', 'Communication', 'Ballons', '']] },
+  { sys: 'Attaque rapide (courte)', fmt: 'v6', title: 'L\'attaque courte au centre', goal: 'Le central attaque une passe courte et rapide devant le passeur.', ex: [
+    ['attaque', 'Timing de la courte', 15, 'Le central saute pendant que le passeur touche le ballon.', 'Partir avant la passe|Bras haut', 'Ballons', ''],
+    ['attaque', 'Courte et feinte', 15, 'Le passeur choisit : courte au centre ou passe haute en 4.', 'Lire le contre adverse', 'Ballons', ''],
+    ['jeu', 'Match : point en courte = 2', 20, 'Match normal.', 'Vitesse', 'Ballons', '']] }
+);
+
+;
+/* ===== sport-more.js ===== */
+/* More exercises and sessions for basket, handball, rugby and volley (1.21), so that these sports have as much as football.
+   Written for the app (no copy). Same shapes as sport-exos.js (base: [theme, title, minutes, organisation, consignes « \n », matériel, formats, size])
+   and sessions-sports.js ({ sys, fmt, title, goal, ex: [[theme, title, minutes, organisation, consignes « | », matériel, size]] }). */
+(() => {
+  const X = typeof SPORT_EXOS !== 'undefined' ? SPORT_EXOS : null, SS = typeof SESSIONS_SPORTS !== 'undefined' ? SESSIONS_SPORTS : null;
+  const EX = {
+    basket: [
+      ['echauffement', 'Jeu des 10 passes', 8, 'Deux équipes sur demi-terrain, sans dribble : 10 passes d\'affilée sans perte = 1 point.', 'Se démarquer juste après la passe\nPasse appuyée à deux mains\nCompter à voix haute', 'Chasubles, 1 ballon', '', ''],
+      ['echauffement', 'Activation avec ballon autour du corps', 8, 'Chacun son ballon : tours de taille, de tête, entre les jambes, puis dribbles bas sur place.', 'Doigts écartés, pas la paume\nRegarder devant soi\nAccélérer peu à peu', '1 ballon par joueur', '', ''],
+      ['dribble', 'Dribble à deux ballons', 10, 'Chacun deux ballons sur la longueur : dribbles simultanés, puis alternés, puis en marchant vite.', 'Dribble bas et fort\nTête haute\nMain faible aussi forte que l\'autre', '2 ballons par joueur', '', ''],
+      ['dribble', 'Le chat et la souris en dribble', 8, 'Dans la raquette puis sur demi-terrain : un chat sans ballon touche les dribbleurs, le joueur touché devient chat.', 'Protéger le ballon avec le corps\nChanger de main loin du chat\nNe jamais arrêter le dribble', '1 ballon par joueur, plots', '', ''],
+      ['dribble', 'Le roi du cercle', 10, 'Tous dans le rond central puis dans la raquette : chacun dribble et essaie de faire sortir le ballon des autres.', 'Bras libre pour se protéger\nDribble bas près du corps\nVoir tout le monde', '1 ballon par joueur', '', ''],
+      ['dribble', 'Changements de rythme ligne à ligne', 10, 'Sur la longueur : lent jusqu\'au lancer franc, explosion jusqu\'au milieu, freinage, nouvelle accélération.', 'Le premier pas fait la différence\nFreiner sur deux appuis\nGarder le contrôle', '1 ballon par joueur', '', ''],
+      ['passe', 'Passes variées sur la longueur', 10, 'Par 2 sur la longueur en pas chassés : passes poitrine, à rebond, par-dessus la tête, puis à une main.', 'Passe sur la cible (les mains du partenaire)\nPasse à rebond aux deux tiers de la distance\nRecevoir en avançant vers le ballon', '1 ballon pour 2', '', ''],
+      ['passe', 'La tresse à 3', 12, 'Trois colonnes sur la ligne de fond : on monte en se passant le ballon, celui qui passe court derrière celui qui reçoit. Double pas au bout.', 'Passe devant le receveur, dans sa course\nCourir derrière le receveur\nAucun dribble', 'Ballons', '', ''],
+      ['passe', 'Rondo 4 contre 1', 10, 'Carré de 5 m : 4 attaquants sur les côtés, 1 défenseur au milieu. Passe interceptée = on change de défenseur.', 'Feinte de passe avant de passer\nPasse vite, sans dribble\nSe déplacer sur son côté pour offrir une ligne', 'Plots, 1 ballon', '', ''],
+      ['tir', 'Tir après réception (catch and shoot)', 12, 'Un passeur sous le panier, le tireur part du coin et vient recevoir à 45° prêt à tirer : 5 tirs puis on tourne.', 'Mains prêtes avant la réception\nPieds déjà orientés vers le panier\nMême geste à chaque tir', 'Ballons', '', ''],
+      ['tir', 'Le tour du monde', 12, '7 positions autour de la raquette : on avance d\'une position à chaque panier, le premier qui fait le tour gagne.', 'Routine identique\nBras qui finit vers le cercle\nRebond suivi par le partenaire', 'Ballons', '', ''],
+      ['tir', 'Tir en suspension après dribble', 12, 'Départ du milieu de terrain : 2 dribbles d\'attaque, arrêt sur deux pieds au coude de la raquette, tir.', 'Arrêt équilibré avant de monter\nMonter droit, pas vers l\'avant\nLâcher en haut du saut', 'Ballons, plots', '', ''],
+      ['tir', 'Lancers francs dans la fatigue', 10, 'Sprint aller-retour sur la largeur, puis 2 lancers francs. Chaque raté = un aller-retour de plus pour l\'équipe.', 'Respirer avant la routine\nToujours les mêmes gestes\nCoude sous le ballon', 'Ballons', '', ''],
+      ['tir', 'Finitions sous le panier en continu', 10, 'Sous le panier : main droite côté droit, main gauche côté gauche, sans laisser tomber le ballon, 30 secondes.', 'Utiliser la planche\nPied d\'appel opposé à la main\nRythme régulier', 'Ballons', '', ''],
+      ['un', '1 contre 1 tout terrain en couloir', 12, 'Couloir d\'un tiers de la largeur : l\'attaquant remonte tout le terrain en dribble, le défenseur l\'oriente vers la ligne.', 'Attaquant : changements de main et de rythme\nDéfenseur : un bras d\'avance, pas glissés\nFinir au panier', 'Ballons, plots', '', ''],
+      ['un', '1 contre 1 au poste bas', 12, 'Le pivot se démarque au poste bas, reçoit d\'un passeur à l\'aile, puis 1 contre 1 dos au panier.', 'Prendre position avec le bassin\nRegarder le défenseur par-dessus l\'épaule\nPivot puis tir ou crochet', 'Ballons', '', ''],
+      ['defense', 'Fermer la ligne de fond', 12, 'L\'attaquant reçoit au coin et veut passer par la ligne de fond, le défenseur l\'oblige à rentrer vers l\'aide.', 'Pied extérieur en avant\nNe jamais laisser la ligne de fond\nAide qui arrive de la raquette', 'Ballons', '', ''],
+      ['defense', 'Défendre l\'écran : passer devant ou derrière', 15, '2 contre 2 sur un écran porteur : le coach annonce la défense (passer devant, derrière, ou changer).', 'Annoncer l\'écran à voix haute\nLe défenseur de l\'écran montre sa main\nRevenir chacun sur son joueur', 'Chasubles, ballons', '', ''],
+      ['defense', 'Sortir sur le tireur (close-out)', 10, 'Le défenseur sous le panier passe le ballon au tireur à l\'aile et sort sur lui : contester le tir sans se faire déborder.', 'Sprint puis petits pas\nUne main haute devant le ballon\nRester entre le joueur et le panier', 'Ballons', '', ''],
+      ['rebond', 'Rebond offensif à 3 contre 3', 12, 'Le coach tire : 3 défenseurs bloquent, 3 attaquants contournent pour prendre le rebond. Rebond offensif = 2 points.', 'Attaquant : ne jamais rester bloqué, faire le tour\nDéfenseur : contact puis ballon\nPrendre le ballon à deux mains', 'Chasubles, ballons', '', ''],
+      ['transitions', 'Jeu rapide sur passe du rebondeur', 15, 'Le coach tire et rate exprès : le rebondeur passe vite à l\'aile, trois joueurs montent dans les couloirs et finissent en moins de 6 secondes.', 'Passe de sortie au-dessus de la tête\nOccuper trois couloirs\nLe ballon va plus vite que le dribble', 'Ballons', '', ''],
+      ['transitions', '4 contre 4 avec retour défensif', 15, 'Après un tir, l\'équipe qui défendait attaque tout de suite l\'autre panier : 4 contre 4 en continu.', 'Revenir d\'abord protéger le panier\nTrouver son joueur en courant\nAttaque rapide si la défense n\'est pas en place', 'Chasubles, ballons', 'b5', ''],
+      ['attaque', 'Passe et coupe', 12, '2 contre 2 sur demi-terrain : le passeur coupe tout de suite vers le panier, il reçoit en retour s\'il gagne sa course.', 'Changer de vitesse dans la coupe\nMain cible pour réclamer\nRemplir la place laissée', 'Ballons', '', ''],
+      ['attaque', 'Écran sans ballon à 3 contre 3', 15, 'Demi-terrain : le joueur sans ballon pose un écran pour un partenaire qui se démarque vers l\'aile pour recevoir et tirer.', 'Écran immobile, pieds écartés\nAttendre l\'écran avant de partir\nL\'écraneur se rend disponible après', 'Chasubles, ballons', '', ''],
+      ['jeu', '3x3 : le gagnant reste', 15, 'Un panier, matchs de 3 minutes ou jusqu\'à 7 points : l\'équipe qui gagne reste, une nouvelle entre.', 'Ressortir derrière l\'arc après un rebond défensif\nJouer vite : 12 secondes pour tirer\nParler en défense', 'Chasubles, ballons', 'b3', ''],
+      ['jeu', '5 contre 5 : trois passes avant de tirer', 20, 'Match sur tout le terrain : chaque attaque doit faire 3 passes avant le tir, sauf en contre-attaque.', 'Écarter le jeu\nBouger après avoir passé\nDéfense qui parle', 'Chasubles', 'b5', ''],
+      ['physique', 'Gainage et pas défensifs', 10, 'Ateliers de 30 s : planche, pas glissés entre deux plots, sauts latéraux, sprints de 5 m.', 'Dos droit\nAppuis courts\nRécupérer entre les ateliers', 'Plots, tapis', '', ''],
+      ['calme', 'Tirs de près et respiration', 8, 'Par 2 : tirs à 2 m du panier en marchant, puis respiration lente et étirements des mollets et des épaules.', 'Tir doux, de la planche\nSouffler longuement\nÉtirer sans à-coups', 'Ballons', '', ''],
+    ],
+    hand: [
+      ['echauffement', 'Balle au capitaine', 10, 'Deux équipes sur demi-terrain, un capitaine dans une zone de chaque côté : 5 passes puis une passe au capitaine = 1 point.', 'Se démarquer dans les espaces libres\n3 pas, 3 secondes\nPasser vite à celui qui est libre', 'Chasubles, plots, 1 ballon', '', ''],
+      ['echauffement', 'Échauffement des épaules', 8, 'Par 2 à 6 m : passes à deux mains, puis à une main de plus en plus fortes, puis passes en sautant.', 'Monter progressivement\nCoude haut au moment de lancer\nRécupérer en souplesse', '1 ballon pour 2', '', ''],
+      ['technique', 'Navettes de passes en course', 10, 'Deux colonnes face à face à 15 m : on court vers l\'autre colonne en recevant et en passant dans la course.', 'Recevoir bras tendus devant\nPasser sans s\'arrêter\nRespecter les 3 pas', 'Ballons', '', ''],
+      ['technique', 'Réception en course et 3 pas', 10, 'Le joueur court sur l\'aile, reçoit d\'un passeur au centre, fait ses 3 pas et passe au suivant.', 'Compter les appuis\nLever le bras tôt\nGarder la vitesse', 'Ballons, plots', '', ''],
+      ['technique', 'Passes variées : à rebond, en cloche, dans le dos', 10, 'Par 3 en triangle de 6 m : chaque joueur enchaîne les passes demandées par le coach.', 'Passe à rebond près du receveur\nPasse en cloche au-dessus d\'un bras levé\nPrécision avant force', '1 ballon pour 3', '', ''],
+      ['technique', 'Dribble et changements de direction', 8, 'Slalom entre 6 plots en dribble, puis passe au suivant.', 'Ballon devant le corps\nDribble à hauteur de hanche\nRegarder devant', 'Plots, ballons', '', ''],
+      ['tir', 'Tir de l\'aile en angle fermé', 12, 'Une colonne à chaque aile : réception, plongée vers le but, tir en s\'ouvrant l\'angle.', 'Sauter vers l\'intérieur pour ouvrir l\'angle\nViser le premier poteau ou le côté opposé\nRegarder le gardien', 'Ballons', '', ''],
+      ['tir', 'Tir du pivot dos au but', 12, 'Le pivot se démarque entre deux plots, reçoit dos au but, pivote et tire.', 'Recevoir près du corps\nPivoter côté libre\nTirer vite, près de la zone', 'Ballons, plots', '', ''],
+      ['tir', 'Jet de 7 mètres', 8, 'Chacun tire 3 penaltys face au gardien, puis les tireurs changent de place de tir.', 'Pied d\'appui fixe derrière la ligne\nChoisir son coin avant\nRegarder le gardien, pas le coin', 'Ballons', '', ''],
+      ['tir', 'Tir en suspension avec feinte', 12, 'Arrière à 10 m : feinte de tir en appui, deux pas d\'accélération, tir en suspension.', 'Feinte crédible, bras armé\nImpulsion vers le haut\nTir puis réception sur deux pieds', 'Ballons', '', ''],
+      ['un', '1 contre 1 de l\'arrière', 12, 'L\'arrière reçoit à 10 m face à un défenseur : feinte d\'un côté, débordement de l\'autre et tir.', 'Feinte avec le corps entier\nAccélérer dans l\'intervalle\nProtéger le ballon du bras extérieur', 'Ballons', '', ''],
+      ['un', '2 contre 2 arrière et pivot', 15, 'L\'arrière et le pivot contre deux défenseurs : jeu de bloc, passe au pivot ou tir de l\'arrière.', 'Le pivot bloque le défenseur de l\'arrière\nL\'arrière fixe avant de passer\nLire où va la défense', 'Chasubles, ballons', '', ''],
+      ['defense', 'Monter sur le tireur et revenir', 12, 'Le défenseur sur la zone sort sur l\'arrière qui reçoit à 9 m, l\'empêche de tirer, puis recule quand le ballon part.', 'Sortir bras levé\nContact sur le bras de tir\nRevenir vite à sa place', 'Ballons', '', ''],
+      ['defense', 'Défendre l\'intervalle', 12, 'Trois défenseurs contre trois attaquants : la défense ferme les intervalles et dissuade la passe.', 'Se placer côté ballon\nAider le partenaire qui sort\nCommuniquer', 'Chasubles, ballons', '', ''],
+      ['defense', 'Contre du défenseur', 10, 'Le défenseur face au tireur en suspension saute bras tendus pour contrer, le gardien couvre l\'autre côté.', 'Sauter au bon moment\nBras collés, mains ouvertes\nSe partager le but avec le gardien', 'Ballons', '', ''],
+      ['gardien', 'Gardien : déplacements et réflexes', 10, 'Le coach lance des ballons à droite, à gauche, en haut, en bas : le gardien se déplace et arrête.', 'Appuis légers, sur l\'avant du pied\nBras et jambe ensemble du même côté\nSe relever tout de suite', 'Ballons', '', ''],
+      ['gardien', 'Gardien : relance rapide', 10, 'Après chaque arrêt, le gardien relance vers l\'ailier qui part en contre-attaque.', 'Regarder avant de relancer\nPasse longue tendue, devant l\'ailier\nRelancer en moins de 3 secondes', 'Ballons', '', ''],
+      ['transitions', 'Repli défensif après la perte', 12, 'Attaque à 4 contre 4 : à la perte, tout le monde sprinte se replacer en défense, le coach compte 5 secondes.', 'Sprinter d\'abord, regarder ensuite\nLe plus proche gêne le porteur\nSe replacer à 6 m', 'Chasubles, ballons', '', ''],
+      ['transitions', 'Contre-attaque des deux ailiers', 12, 'Le gardien arrête, les deux ailiers partent : passe longue à l\'un, puis 2 contre 1 contre le défenseur qui revient.', 'Partir dès l\'arrêt\nRester large\nFinir avant que la défense revienne', 'Ballons', '', ''],
+      ['attaque', 'Circulation de balle à 6 contre 0', 10, 'Les 6 attaquants en place : le ballon circule de l\'ailier à l\'autre ailier, chacun attaque l\'intervalle avant de passer.', 'Attaquer le but avant de passer\nPasse dans la course\nRythme qui accélère', 'Ballons', '', ''],
+      ['attaque', 'Croisé ailier-arrière', 12, 'L\'ailier rentre vers le centre et croise derrière l\'arrière : 2 contre 2 puis tir.', 'L\'ailier part au bon moment\nPasse courte et protégée\nAttaquer l\'espace libéré', 'Ballons', '', ''],
+      ['attaque', 'Bloc du pivot', 15, 'Le pivot bloque le défenseur de l\'arrière : l\'arrière passe du côté du bloc, puis 3 contre 3.', 'Bloc immobile, bien appuyé\nL\'arrière frôle le pivot\nLe pivot se retourne pour recevoir', 'Chasubles, ballons', '', ''],
+      ['jeu', 'Match à thème : but de l\'aile = 2 points', 20, 'Match à 7 contre 7 : un but marqué par un ailier compte double.', 'Écarter le jeu jusqu\'aux ailes\nFixer au centre pour libérer l\'aile\nAiliers prêts à recevoir', 'Chasubles', 'h7', ''],
+      ['jeu', 'Match à 4 contre 4 + gardiens', 15, 'Petit terrain en largeur, deux buts : relance rapide du gardien obligatoire.', 'Jouer vite\nSoutien proche du porteur\nRepli immédiat à la perte', 'Chasubles, 2 buts', '', ''],
+      ['physique', 'Navettes et sauts', 10, 'Navettes 6 m - 9 m - 6 m, puis 5 sauts au-dessus de petites haies, 4 séries.', 'Freiner sur deux appuis\nSauter loin, pas haut\nRécupérer en marchant', 'Plots, haies basses', '', ''],
+      ['calme', 'Passes en marchant et étirements des épaules', 8, 'Par 2 en marchant, passes à deux mains, puis étirements des épaules, du dos et des jambes.', 'Respirer\nÉtirer sans à-coups\nBoire', 'Ballons', '', ''],
+    ],
+    rugby: [
+      ['echauffement', 'Béret rugby', 10, 'Deux équipes face à face, un ballon au centre : le coach appelle des numéros, le joueur qui prend le ballon doit revenir sans être touché.', 'Réagir vite\nProtéger le ballon\nFeinter pour passer', 'Plots, 1 ballon', '', ''],
+      ['echauffement', 'Passes en cercle et déplacement', 8, 'En cercle de 8 joueurs : passes à droite, à gauche, puis on change de place après avoir passé.', 'Mains prêtes devant la poitrine\nPasse vers le partenaire, pas au hasard\nAppeler le ballon', '1 à 2 ballons', '', ''],
+      ['passe', 'Passe et redoublement (boucle)', 12, 'Par 3 sur 20 m : le passeur fait le tour derrière le receveur et revient recevoir à l\'extérieur.', 'Passer puis courir tout de suite\nRedoubler près du receveur\nRecevoir lancé', 'Ballons, plots', '', ''],
+      ['passe', 'Passes sous pression : 4 contre 2 dans un carré', 12, 'Carré de 15 m : 4 attaquants se passent le ballon au toucher, 2 défenseurs essaient de toucher le porteur.', 'Passer avant d\'être touché\nSoutien de chaque côté du porteur\nPasses courtes et précises', 'Plots, 1 ballon', '', ''],
+      ['passe', 'Passe après contact', 12, 'Le porteur va au contact d\'un bouclier, garde les bras libres et passe au soutien qui arrive.', 'Contact épaule, ballon protégé\nBras libres au-dessus du défenseur\nLe soutien arrive lancé', 'Boucliers, ballons', '', ''],
+      ['pied', 'Coup de pied de transition et poursuite', 12, 'Le botteur tape devant lui à 20 m, ses partenaires poursuivent en ligne pour mettre la pression sur le receveur.', 'Les poursuivants partent derrière le botteur\nMonter en ligne\nPlaquer ou bloquer le receveur', 'Ballons', '', ''],
+      ['pied', 'Réception de chandelle', 10, 'Le coach tape des chandelles : le receveur annonce « à moi », saute ou reçoit sur un pied, protège le ballon.', 'Annoncer fort\nBras en corbeille, coude serré\nSe retourner vers ses partenaires', 'Ballons', '', ''],
+      ['pied', 'Coup d\'envoi et renvoi aux 22 mètres', 12, 'Un botteur au centre, une ligne de poursuivants : on vise une zone, l\'autre équipe s\'organise pour réceptionner.', 'Viser une zone, pas un joueur\nPoursuivre ensemble\nLe receveur est protégé par ses partenaires', 'Ballons', '', ''],
+      ['plaquage', 'Plaquage à genoux', 10, 'Par 2, les deux à genoux : le plaqueur met la joue contre la fesse du porteur, entoure les cuisses et le fait tomber sur le côté.', 'Tête sur le côté, jamais devant\nSerrer les bras\nAccompagner au sol', 'Tapis', 'r10', ''],
+      ['plaquage', 'Plaquage sur un porteur qui marche', 12, 'Le porteur marche vers le plaqueur, qui s\'approche à petits pas, se baisse et plaque aux cuisses.', 'Petits pas avant le contact\nÉpaule dans les cuisses\nPieds qui continuent d\'avancer', 'Ballons, boucliers', '', ''],
+      ['plaquage', 'Double plaquage haut et bas', 12, 'Deux défenseurs contre un porteur : le premier plaque bas, le second ceinture le ballon.', 'Le premier part bas\nLe second vise le ballon\nSe parler avant le contact', 'Ballons, boucliers', 'r15,r7', ''],
+      ['plaquage', 'Défense : pousser vers la touche', 12, 'Quatre défenseurs contre cinq attaquants : la ligne glisse et pousse l\'attaque vers la touche.', 'Monter ensemble\nL\'extérieur ferme le couloir\nChacun prend son vis-à-vis', 'Plots, ballons', '', ''],
+      ['contact', 'Maul : construire et avancer', 15, 'Après la réception d\'une touche, les avants se lient autour du porteur et poussent ensemble sur 10 m.', 'Se lier fermement\nBas et groupés\nLe ballon passe vers l\'arrière du maul', 'Boucliers, ballons', 'r15', ''],
+      ['contact', 'Rester debout au contact', 12, 'Le porteur va au contact d\'un bouclier, reste sur ses pieds et présente le ballon à son soutien.', 'Appuis larges\nÉpaule basse\nBallon loin du défenseur', 'Boucliers, ballons', '', ''],
+      ['conquete', 'Mêlée à 3 : liaison et poussée', 12, 'Trois contre trois sur les genoux puis debout : se lier, prendre position, pousser au signal.', 'Dos plat\nTête haute\nPousser ensemble au signal', 'Tapis', 'r15,r10', ''],
+      ['conquete', 'Touche courte et touche longue', 12, 'Le lanceur et trois sauteurs : le capitaine annonce le code, touche au premier sauteur ou au fond.', 'Code annoncé avant le lancer\nLancer tendu\nSauteur soulevé au bon moment', 'Ballons', 'r15,r7', ''],
+      ['soutien', 'Soutien intérieur après une percée', 12, 'Le porteur perce entre deux plots, le soutien arrive à l\'intérieur pour recevoir la passe.', 'Le soutien suit le porteur\nAppeler le ballon\nPasse courte à l\'intérieur', 'Plots, ballons', '', ''],
+      ['soutien', 'Ruck rapide : deux arrivées au soutien', 12, 'Le porteur va au sol, deux soutiens nettoient le ruck, le demi de mêlée sort le ballon.', 'Arriver bas, bras dans le ruck\nPousser au-delà du ballon\nBallon dégagé en moins de 3 secondes', 'Boucliers, ballons', '', ''],
+      ['attaque', 'Le cadrage-débordement', 12, 'Couloir de 15 m : le porteur fixe son défenseur vers l\'intérieur puis accélère à l\'extérieur.', 'Attaquer l\'épaule intérieure\nChanger d\'appui au dernier moment\nAccélérer après le changement', 'Plots, ballons', '', ''],
+      ['attaque', 'Croisée et passe décalée', 12, 'Trois attaquants : croisée entre les deux premiers, puis passe à l\'extérieur.', 'Courses qui se croisent près\nPasse courte, protégée\nLire le défenseur', 'Plots, ballons', '', ''],
+      ['attaque', 'Jeu à partir d\'un ruck', 15, 'Après un ruck, le demi de mêlée passe à l\'ouvreur, qui choisit : jouer au large, au pied ou avec un avant.', 'Demi de mêlée : sortie rapide\nOuvreur : lire la défense\nLes avants se replacent pour le temps suivant', 'Plots, ballons', 'r15', ''],
+      ['jeu', 'Match à 5 contre 5 au toucher', 15, 'Petit terrain : au toucher, le porteur pose le ballon et un partenaire le relève. 6 touchers = ballon rendu.', 'Écarter le jeu\nSoutien des deux côtés\nDéfense qui monte ensemble', 'Chasubles, plots', '', ''],
+      ['jeu', 'Match à thème : l\'essai vaut double après 3 passes', 20, 'Match au contact adapté : un essai après au moins 3 passes compte double.', 'Faire vivre le ballon\nSoutien proche\nPatience avant d\'accélérer', 'Chasubles', '', ''],
+      ['physique', 'Navettes et relevés du sol', 10, 'Course 10 m, plaquage au sol simulé, relevé, course 10 m : 6 répétitions.', 'Se relever vite\nRepartir sur l\'avant du pied\nRécupérer entre les séries', 'Plots', '', ''],
+      ['physique', 'Lutte et gainage par deux', 8, 'Par 2 de même gabarit : lutte pour le ballon au sol, gainage de face et de côté.', 'Rester gainé\nRespecter son partenaire\nRespirer', 'Tapis, ballons', '', ''],
+    ],
+    volley: [
+      ['echauffement', 'Balle brûlante à la main', 8, 'Deux équipes de part et d\'autre du filet : on se renvoie le ballon à la main, il ne doit jamais toucher le sol.', 'Se déplacer avant que le ballon arrive\nRenvoyer vers un espace vide\nSe parler', 'Filet, 1 ou 2 ballons', '', ''],
+      ['echauffement', 'Épaules et poignets avec ballon', 8, 'Chacun son ballon : rotations des bras, frappes contre le mur à une main, échanges légers par deux.', 'Monter progressivement\nPoignet souple\nÉpaules bien échauffées avant de frapper', '1 ballon par joueur', '', ''],
+      ['technique', 'Touche haute en déplacement', 10, 'Par 2 : l\'un envoie en avant, sur le côté, en arrière, l\'autre se déplace et renvoie en touche.', 'Arriver sous le ballon avant qu\'il descende\nMains en coupe au-dessus du front\nJambes qui poussent', '1 ballon pour 2', '', ''],
+      ['technique', 'Manchette en déplacement latéral', 10, 'Le coach lance à droite et à gauche, le joueur se déplace en pas chassés et renvoie en manchette vers la cible.', 'Pas chassés, pas croisés\nBras tendus, plan stable\nOrienter les épaules vers la cible', 'Ballons, cible', '', ''],
+      ['technique', 'Passe arrière en touche', 10, 'Par 3 en ligne : le joueur du milieu reçoit de face et passe en arrière par-dessus sa tête.', 'Ballon au-dessus du front\nCambrer légèrement\nBras qui finissent vers l\'arrière', '1 ballon pour 3', '', ''],
+      ['technique', 'Jonglages assis-debout', 8, 'En jonglant en touche : s\'asseoir, se relever, sans laisser tomber le ballon.', 'Ballon haut\nSe relever en gardant les yeux sur le ballon\nGestes doux', '1 ballon par joueur', '', ''],
+      ['service', 'Service cuillère', 10, 'À 3 m du filet puis de plus en plus loin : service par en dessous vers le terrain adverse.', 'Lancer bas, devant\nFrapper avec la base de la main\nBras qui finit vers la cible', 'Ballons, filet', 'v4', ''],
+      ['service', 'Service tennis flottant', 12, 'Derrière la ligne de fond : service tennis sans rotation du ballon, vers une zone annoncée.', 'Lancer devant l\'épaule de frappe\nMain ferme, frappe sèche au centre du ballon\nNe pas accompagner le geste', 'Ballons, filet', '', ''],
+      ['service', 'Service sous pression : 10 sur 10', 10, 'Chaque joueur doit réussir 10 services de suite dans le terrain ; un raté, on recommence à zéro.', 'Même routine à chaque service\nRespirer avant de lancer\nViser large, pas les lignes', 'Ballons, filet', '', ''],
+      ['reception', 'Réception à deux sur service flottant', 12, 'Deux réceptionneurs se partagent le terrain, un serveur en face : la réception vise le passeur.', 'Annoncer « j\'ai » tôt\nÊtre arrêté avant la frappe\nPlan de frappe vers le passeur', 'Ballons, filet', '', ''],
+      ['reception', 'Réception puis attaque', 15, 'Service, réception, passe, attaque : le réceptionneur va ensuite attaquer en zone 4.', 'Réception haute et au centre\nSe replacer vite pour l\'élan\nEnchaîner sans pause', 'Ballons, filet', '', ''],
+      ['attaque', 'Attaque en zone 2', 12, 'Le passeur en zone 3 passe en arrière vers la zone 2, l\'attaquant prend son élan et frappe.', 'Élan en 3 temps\nFrapper le ballon devant soi\nViser la diagonale ou la ligne', 'Ballons, filet', '', ''],
+      ['attaque', 'Attaque de la zone arrière', 12, 'L\'attaquant part de la zone 6, saute avant la ligne des 3 m et frappe un ballon haut.', 'Sauter avant la ligne\nFrapper au-dessus du ballon\nRetomber et revenir défendre', 'Ballons, filet', 'v6', ''],
+      ['attaque', 'Feinte et balle placée', 10, 'L\'attaquant prend son élan comme pour frapper puis place le ballon derrière le contre, du bout des doigts.', 'Même élan que pour frapper\nPoser au dernier moment\nViser l\'espace vide', 'Ballons, filet', '', ''],
+      ['contre', 'Contre seul : lire le passeur', 12, 'Le contreur regarde le passeur, se déplace vers l\'attaquant servi et saute au moment de la frappe.', 'Regarder passeur puis attaquant\nSauter juste après l\'attaquant\nMains au-dessus du filet, vers l\'intérieur', 'Ballons, filet', '', ''],
+      ['contre', 'Contre et retour en couverture', 12, 'Après le contre, le contreur se retourne et se place pour défendre ou couvrir son attaquant.', 'Retomber sur deux pieds\nSe retourner vers le ballon\nDescendre vite en position basse', 'Ballons, filet', '', ''],
+      ['defense', 'Défense et relance en manchette', 12, 'Le coach attaque depuis une chaise de l\'autre côté, le défenseur remonte le ballon haut vers le centre.', 'Position basse avant la frappe\nBras sous le ballon\nBallon haut et au centre', 'Ballons, chaise, filet', '', ''],
+      ['defense', 'Couvrir son attaquant', 12, 'Quand l\'attaquant frappe, les autres se rapprochent en arc de cercle pour reprendre un ballon contré.', 'Se rapprocher bas\nBras prêts\nRelancer haut pour une nouvelle attaque', 'Ballons, filet', '', ''],
+      ['defense', 'Plongeon et roulade', 10, 'Sur tapis : le coach lance un ballon loin, le joueur plonge ou roule pour le remonter.', 'Se lancer bas\nAmortir avec les bras ou en roulant\nRemonter le ballon avant de tomber', 'Tapis, ballons', '', ''],
+      ['jeu', 'Match à 2 contre 2', 15, 'Petit terrain : deux contre deux, trois touches obligatoires.', 'Se parler à chaque ballon\nCouvrir tout le terrain à deux\nAttaquer les espaces', 'Ballons, filet', '', ''],
+      ['jeu', 'Match à 6 avec rotation obligatoire', 20, 'Match normal à 6 : à chaque point gagné au service, l\'équipe tourne, chacun passe à tous les postes.', 'Connaître sa place à chaque rotation\nRéception au passeur\nConstruire avant d\'attaquer', 'Ballons, filet', 'v6', ''],
+      ['jeu', 'Le roi du terrain', 15, 'Une équipe « roi » d\'un côté : les équipes qui attendent servent ; si elles gagnent le point, elles prennent la place du roi.', 'Concentration à chaque ballon\nService sûr\nSe parler', 'Ballons, filet', '', ''],
+      ['physique', 'Sauts sur banc et réception', 10, 'Sauts à deux pieds sur un banc bas, puis réception et saut bras tendus vers le filet : 4 séries de 6.', 'Atterrir souple, genoux dans l\'axe\nBras qui aident le saut\nQualité avant quantité', 'Bancs bas', '', ''],
+      ['physique', 'Déplacements défensifs en étoile', 8, 'Au centre d\'une étoile de 5 plots : aller toucher chaque plot en position basse et revenir.', 'Rester bas\nPetits pas rapides\nRegarder devant', 'Plots', '', ''],
+      ['calme', 'Services de précision et respiration', 8, 'Services doux vers des cerceaux posés au sol, puis respiration et étirements des épaules.', 'Geste lent et précis\nSouffler longuement\nÉtirer sans à-coups', 'Ballons, cerceaux', '', ''],
+    ],
+  };
+  const SES = {
+    basket: [
+      { sys: 'Jeu 3x3', fmt: 'b3', title: 'Le 3x3 : jouer vite et ressortir', goal: 'Ressortir derrière l\'arc après chaque rebond défensif, attaquer en moins de 12 secondes.', ex: [
+        ['transitions', 'Rebond et ressortie derrière l\'arc', 12, 'Le coach tire : le rebondeur ressort en dribble ou en passe derrière l\'arc avant d\'attaquer.', 'Ressortir les deux pieds derrière l\'arc|Passe de sortie rapide|Attaquer tout de suite', 'Ballons', ''],
+        ['attaque', 'Écran porteur à 2 contre 2 sur un panier', 15, 'Deux contre deux sur le panier du 3x3 : écran, lecture, tir ou passe.', 'Écran solide|Lire le défenseur de l\'écran|Le troisième se rend disponible', 'Ballons', ''],
+        ['jeu', '3x3 : matchs à 21 points', 20, 'Matchs à 21 points ou 10 minutes, règles du 3x3 (1 point / 2 points derrière l\'arc).', 'Shot-clock de 12 secondes|Pas de temps mort en défense|Parler', 'Chasubles', '']] },
+      { sys: 'Défense 3x3', fmt: 'b3', title: 'Défendre à 3 en 3x3', goal: 'Défendre fort sur le porteur, changer sur les écrans, prendre le rebond.', ex: [
+        ['defense', 'Pression sur le porteur à 1 contre 1', 10, 'L\'attaquant part de l\'arc, le défenseur l\'empêche d\'entrer dans la raquette.', 'Pas glissés|Bras actifs|Orienter vers la ligne', 'Ballons', ''],
+        ['defense', 'Changer sur l\'écran', 12, '2 contre 2 : sur chaque écran, les défenseurs changent de joueur en l\'annonçant.', 'Annoncer « change »|Le nouveau défenseur se colle tout de suite|Aucun espace pour tirer', 'Ballons', ''],
+        ['jeu', '3x3 : un arrêt défensif = 1 point', 15, 'Match 3x3 : une défense qui récupère le ballon sans encaisser marque 1 point.', 'Défense agressive|Rebond à deux mains|Ressortir vite', 'Chasubles', '']] },
+      { sys: 'Passe et coupe', fmt: 'b5', title: 'Attaquer l\'homme à homme sans écran', goal: 'Bouger après chaque passe : couper vers le panier, remplir les places.', ex: [
+        ['attaque', 'Passe et coupe à 2 contre 2', 12, 'Le passeur coupe vers le panier après sa passe, il reçoit s\'il gagne sa course.', 'Changer de vitesse|Main cible|Remplir la place vide', 'Ballons', ''],
+        ['attaque', 'Remplir les places à 4 contre 4', 15, 'Demi-terrain, 4 extérieurs : chaque coupe libère une place, le joueur le plus proche la remplit.', 'Une coupe, un remplacement|Espaces de 4 à 5 m|Passe dans la coupe', 'Chasubles, ballons', ''],
+        ['jeu', '5 contre 5 sans dribble en demi-terrain', 15, 'Demi-terrain : l\'attaque n\'a pas le droit de dribbler, seulement des passes et des coupes.', 'Bouger sans ballon|Passes rapides|Feintes de passe', 'Chasubles', '']] },
+      { sys: 'Jeu intérieur', fmt: 'b5', title: 'Faire jouer les intérieurs au poste bas', goal: 'Donner le ballon au pivot et jouer autour de lui (tir, ressortie).', ex: [
+        ['un', '1 contre 1 au poste bas', 12, 'Le pivot reçoit dos au panier et joue son 1 contre 1.', 'Prendre position|Sentir le défenseur|Pivot puis finition', 'Ballons', ''],
+        ['passe', 'Entrée de balle au poste bas', 10, 'L\'ailier passe au pivot par-dessus ou à côté du défenseur, puis se replace pour une ressortie.', 'Passe du côté où le pivot montre la main|Feinter avant|Se replacer après', 'Ballons', ''],
+        ['jeu', '4 contre 4 : le pivot doit toucher le ballon', 15, 'Demi-terrain : avant chaque tir, le ballon doit passer par le poste bas.', 'Patience|Jeu intérieur-extérieur|Tir ouvert après ressortie', 'Chasubles, ballons', '']] },
+      { sys: 'Zone 1-3-1', fmt: 'b5', title: 'Défense de zone 1-3-1', goal: 'Un devant, trois au milieu, un derrière : piéger le porteur dans les coins.', ex: [
+        ['defense', 'Placement en 1-3-1 sans ballon', 10, 'Les 5 défenseurs se placent, le coach déplace le ballon : la zone glisse et piège dans les coins.', 'Le haut oriente vers le côté|Le bas couvre la ligne de fond|Piège à deux dans le coin', 'Ballon', ''],
+        ['defense', 'Zone 1-3-1 contre 5 attaquants', 18, 'Demi-terrain : l\'attaque fait circuler, la défense cherche le piège et l\'interception.', 'Bras tendus dans les lignes de passe|Se parler|Rebond défensif', 'Chasubles, ballons', ''],
+        ['jeu', 'Match avec zone 1-3-1 obligatoire', 20, 'Match normal : chaque équipe défend en 1-3-1.', 'Communication|Rebond', 'Chasubles', '']] },
+      { sys: 'Défense du pick and roll', fmt: 'b5', title: 'Défendre le jeu à deux', goal: 'Choisir sa défense sur l\'écran porteur et revenir sur son joueur.', ex: [
+        ['defense', 'Montrer et revenir (hedge)', 12, 'Le défenseur de l\'écraneur sort devant le porteur pour le freiner, puis revient sur son joueur.', 'Sortir fort, bien en dehors|Revenir dès que le porteur ralentit|Le défenseur du porteur passe au-dessus', 'Ballons', ''],
+        ['defense', 'Défense basse (drop)', 12, 'Le défenseur de l\'écraneur reste entre le porteur et le panier, sous l\'écran.', 'Protéger le panier|Le défenseur du porteur passe derrière l\'écran|Contester sans faute', 'Ballons', ''],
+        ['jeu', '3 contre 3 avec écran porteur à chaque attaque', 15, 'Demi-terrain : chaque attaque commence par un écran porteur, la défense choisit sa réponse.', 'Annoncer la défense|Aide du troisième défenseur|Rebond', 'Chasubles, ballons', '']] },
+      { sys: '4 extérieurs - 1 intérieur', fmt: 'b5', title: 'Écarter le jeu à 4 extérieurs', goal: 'Quatre joueurs autour de l\'arc, un intérieur : pénétrer et ressortir pour le tir ouvert.', ex: [
+        ['tir', 'Tir après ressortie', 12, 'Un pénétrateur attire l\'aide et ressort vers le tireur à l\'aile ou au coin.', 'Tireur prêt, pieds placés|Passe dans les mains|Tirer sans hésiter', 'Ballons', ''],
+        ['attaque', 'Pénétrer et ressortir à 4 contre 4', 15, 'Demi-terrain : chaque pénétration doit faire bouger l\'aide, le ballon ressort vers le joueur libre.', 'Attaquer le panier pour de vrai|Voir l\'aide|Se décaler pour recevoir', 'Chasubles, ballons', ''],
+        ['jeu', '5 contre 5 : panier à 3 points = 4 points', 20, 'Match : un panier à 3 points après une ressortie compte 4 points.', 'Espacement|Patience|Rebond offensif', 'Chasubles', '']] },
+      { sys: 'Remises en jeu', fmt: 'b5', title: 'Remises en jeu sous le panier', goal: 'Trois façons de remettre en jeu sous son panier et marquer vite.', ex: [
+        ['attaque', 'Remise en jeu en boîte', 12, 'Quatre joueurs en carré dans la raquette : écrans croisés, le remiseur choisit le joueur libre.', 'Écrans au signal|Le remiseur lit la défense|5 secondes maximum', 'Ballons', ''],
+        ['attaque', 'Remise en jeu en ligne', 12, 'Quatre joueurs alignés : ils partent chacun dans une direction au signal.', 'Départs simultanés|Une option près du panier|Une option de sécurité loin', 'Ballons', ''],
+        ['jeu', 'Fins de match : 1 minute à jouer', 15, 'Situations : 2 points de retard, 1 minute, possession sous le panier. On rejoue plusieurs fois.', 'Garder son calme|Connaître le temps et le score|Faute ou pas faute : décider ensemble', 'Chasubles, chrono', '']] },
+    ],
+    hand: [
+      { sys: 'Défense 4-2', fmt: 'h7', title: 'Défense 4-2 : deux avancés', goal: 'Deux défenseurs avancés gênent les arrières, quatre restent sur la zone.', ex: [
+        ['defense', 'Les avancés gênent les arrières', 12, 'Deux défenseurs avancés à 9 m contre deux arrières qui se passent le ballon.', 'Gêner les passes|Rester entre le ballon et le but|Revenir quand le ballon passe à l\'aile', 'Ballons', ''],
+        ['defense', 'Défense 4-2 contre 6 attaquants', 18, 'Les 6 défenseurs en 4-2 contre une attaque placée qui fait circuler.', 'Les quatre glissent ensemble|Les avancés coupent les passes|Communication', 'Chasubles, ballons', ''],
+        ['jeu', 'Match avec défense 4-2', 20, 'Match à 7 contre 7 : chaque équipe défend en 4-2.', 'Organisation|Repli', 'Chasubles', '']] },
+      { sys: 'Défense 3-3', fmt: 'h7', title: 'Défense 3-3 : très haute', goal: 'Trois défenseurs sur la zone, trois haut sur les arrières : récupérer vite.', ex: [
+        ['defense', 'Pression sur les arrières à 3 contre 3', 12, 'Trois défenseurs hauts contre trois arrières : couper les passes, chercher l\'interception.', 'Défense haute|Bras dans les lignes de passe|Aider le voisin', 'Ballons', ''],
+        ['transitions', 'Récupérer et contre-attaquer', 15, 'Chaque interception lance une contre-attaque immédiate vers l\'autre but.', 'Partir tout de suite|Passe vers l\'avant|Finir vite', 'Chasubles, ballons', ''],
+        ['jeu', 'Match : une interception = 1 point', 20, 'Match à 7 contre 7 : chaque interception rapporte 1 point en plus.', 'Défense active|Repli', 'Chasubles', '']] },
+      { sys: 'Défense individuelle', fmt: 'h7', title: 'Défense individuelle tout terrain', goal: 'Chacun son joueur sur tout le terrain : gêner la montée de balle.', ex: [
+        ['defense', '1 contre 1 tout terrain', 10, 'Chaque défenseur suit un attaquant qui remonte le terrain en dribble.', 'Rester entre l\'attaquant et le but|Pas glissés|Intercepter si possible', 'Ballons', ''],
+        ['defense', '3 contre 3 sur tout le terrain', 15, 'Trois contre trois en individuelle, l\'attaque doit traverser le terrain.', 'Coller son joueur|Couper les passes longues|Aide si le voisin est battu', 'Chasubles, ballons', ''],
+        ['jeu', 'Match : individuelle les 5 dernières minutes', 20, 'Match normal : les 5 dernières minutes, l\'équipe menée défend en individuelle.', 'Changer d\'attitude au signal|Rester calme en attaque', 'Chasubles', '']] },
+      { sys: 'Attaque contre 0-6', fmt: 'h7', title: 'Attaquer une défense 0-6', goal: 'Faire bouger une défense alignée sur la zone : fixer, passer, tirer de loin.', ex: [
+        ['tir', 'Tirs de loin au-dessus de la défense', 12, 'Les arrières tirent en suspension à 9 m au-dessus d\'une ligne de défenseurs avec boucliers.', 'Impulsion haute|Tirer au-dessus des bras|Varier haut et bas', 'Boucliers, ballons', ''],
+        ['attaque', 'Fixer et passer : 6 contre 6', 15, 'Chaque attaquant attaque son intervalle et passe au moment où deux défenseurs viennent sur lui.', 'Fixer deux défenseurs|Passer au joueur libre|Jeu à l\'aile en bout de chaîne', 'Chasubles, ballons', ''],
+        ['jeu', 'Match contre défense 0-6', 20, 'Match : la défense doit rester en 0-6.', 'Patience|Tirs de loin|Jeu avec le pivot', 'Chasubles', '']] },
+      { sys: 'Jeu avec les ailiers', fmt: 'h7', title: 'Faire marquer les ailiers', goal: 'Écarter la défense pour trouver l\'ailier en position de tir.', ex: [
+        ['tir', 'Tir de l\'aile en angle fermé', 12, 'Une colonne à chaque aile : réception, plongée, tir.', 'S\'ouvrir l\'angle|Viser le premier poteau ou l\'autre côté|Regarder le gardien', 'Ballons', ''],
+        ['attaque', 'Circulation jusqu\'à l\'aile', 12, 'Six contre six : le ballon circule vite d\'un ailier à l\'autre, chacun attaque avant de passer.', 'Passe dans la course|Attaquer le but|L\'ailier prêt à tirer', 'Chasubles, ballons', ''],
+        ['jeu', 'Match : but de l\'aile = 2 points', 20, 'Match à 7 contre 7 : un but de l\'ailier compte double.', 'Largeur|Fixer au centre', 'Chasubles', '']] },
+      { sys: 'Supériorité numérique', fmt: 'h7', title: 'Jouer à 7 contre 6 (gardien remplacé)', goal: 'Profiter du joueur en plus pour trouver un tir facile.', ex: [
+        ['attaque', 'Placement à 7 joueurs de champ', 12, 'Sept attaquants contre six défenseurs : deux pivots, on cherche le joueur libre.', 'Écarter le jeu|Passe rapide vers le joueur libre|Ne pas se précipiter', 'Chasubles, ballons', ''],
+        ['transitions', 'Revenir vite après une perte à 7 contre 6', 12, 'À la perte, le joueur en plus sort, le gardien revient : chacun sprinte se replacer.', 'Remplacement rapide|Protéger le but vide|Le plus proche gêne le tireur', 'Chasubles, ballons', ''],
+        ['jeu', 'Match à thème : 7 contre 6 en fin de match', 15, 'Les 3 dernières minutes, l\'équipe menée joue à 7 contre 6.', 'Organisation|Sang-froid', 'Chasubles', '']] },
+      { sys: 'Infériorité numérique', fmt: 'h7', title: 'Défendre à 5 (exclusion de 2 minutes)', goal: 'Tenir 2 minutes à 5 contre 6 sans encaisser.', ex: [
+        ['defense', 'Défense à 5 sur la zone', 15, 'Cinq défenseurs contre six attaquants : la défense resserre l\'axe et laisse le tir difficile à l\'aile.', 'Resserrer l\'axe|Sortir seulement sur le porteur dangereux|Laisser l\'angle fermé', 'Chasubles, ballons', ''],
+        ['attaque', 'Attaquer à 5 : garder le ballon', 12, 'Cinq attaquants contre six : garder le ballon longtemps et tirer seulement sûr.', 'Passes sûres|Utiliser le temps|Tir à coup sûr', 'Chasubles, ballons', ''],
+        ['jeu', 'Match avec exclusions', 20, 'Match normal : le coach exclut un joueur 2 minutes de temps en temps.', 'S\'organiser vite|Se parler', 'Chasubles, chrono', '']] },
+      { sys: 'Jeu du pivot', fmt: 'h7', title: 'Trouver le pivot', goal: 'Utiliser les blocs du pivot et lui donner le ballon près de la zone.', ex: [
+        ['attaque', 'Bloc du pivot pour l\'arrière', 15, 'Le pivot bloque le défenseur de l\'arrière, l\'arrière passe du côté du bloc.', 'Bloc immobile|L\'arrière frôle le pivot|Le pivot se retourne pour recevoir', 'Ballons', ''],
+        ['tir', 'Tir du pivot dos au but', 12, 'Le pivot reçoit dos au but entre deux plots, pivote et tire.', 'Recevoir près du corps|Pivoter côté libre|Tirer vite', 'Ballons, plots', ''],
+        ['jeu', 'Match : but du pivot = 2 points', 20, 'Match à 7 contre 7 : un but du pivot compte double.', 'Jeu au pivot|Fixer avant de passer', 'Chasubles', '']] },
+    ],
+    rugby: [
+      { sys: 'Rugby à 7 : attaque', fmt: 'r7', title: 'À 7 : faire courir la défense', goal: 'Utiliser toute la largeur et le surnombre pour marquer.', ex: [
+        ['attaque', 'Surnombre à 3 contre 2 sur la largeur', 12, 'Trois attaquants contre deux défenseurs sur toute la largeur : fixer, passer, finir.', 'Fixer son vis-à-vis|Passer au dernier moment|Finir en accélérant', 'Plots, ballons', ''],
+        ['soutien', 'Garder le ballon après le contact', 12, 'Le porteur va au contact, deux soutiens arrivent vite et relancent.', 'Rester debout|Soutien immédiat|Ballon relancé vite', 'Boucliers, ballons', ''],
+        ['jeu', 'Match à 7 : 7 minutes par mi-temps', 20, 'Match au format du rugby à 7.', 'Patience|Largeur|Repli', 'Chasubles', '']] },
+      { sys: 'Rugby à 7 : défense', fmt: 'r7', title: 'À 7 : défendre la largeur', goal: 'Défendre à 7 sur toute la largeur sans laisser d\'espace.', ex: [
+        ['plaquage', 'Défense en glissée à 4 contre 5', 12, 'Quatre défenseurs contre cinq attaquants : la défense glisse vers la touche.', 'Monter ensemble|L\'extérieur ferme|Plaquer le porteur', 'Plots, ballons', ''],
+        ['plaquage', 'Plaquage en 1 contre 1 dans un couloir large', 12, 'Couloir de 15 m : un défenseur contre un attaquant lancé.', 'Réduire l\'espace|Petits pas|Plaquer bas', 'Plots, boucliers', ''],
+        ['jeu', 'Match à 7 : un plaquage réussi = 1 point', 15, 'Match : chaque plaquage qui arrête l\'attaque rapporte 1 point à la défense.', 'Défense agressive|Communication', 'Chasubles', '']] },
+      { sys: 'École de rugby : avancer', fmt: 'r10', title: 'Avancer ensemble avec le ballon', goal: 'Porter le ballon vers l\'avant, passer en arrière, soutenir le porteur.', ex: [
+        ['passe', 'Passes en arrière en avançant', 10, 'Par 3 sur 20 m : on avance et on passe toujours vers l\'arrière.', 'Passer en arrière|Soutien derrière le porteur|Courir droit', 'Ballons, plots', ''],
+        ['soutien', 'Le porteur et ses soutiens', 12, 'Le porteur avance, deux soutiens le suivent de près et reçoivent quand il est touché.', 'Rester proche|Appeler le ballon|Se placer derrière', 'Ballons', ''],
+        ['jeu', 'Jeu au toucher à 5 contre 5', 15, 'Petit terrain : au toucher, passe obligatoire.', 'Avancer|Passer en arrière|Soutenir', 'Chasubles', '']] },
+      { sys: 'École de rugby : plaquer', fmt: 'r10', title: 'Plaquer en sécurité', goal: 'Apprendre le plaquage pas à pas, sans risque.', ex: [
+        ['plaquage', 'Plaquage à genoux', 10, 'Par 2 à genoux : joue contre la fesse, bras autour des cuisses, on accompagne au sol.', 'Tête sur le côté|Serrer les bras|Accompagner', 'Tapis', ''],
+        ['plaquage', 'Plaquage accroupi sur porteur qui marche', 12, 'Le porteur marche, le plaqueur accroupi le plaque aux cuisses.', 'Tête sur le côté|Épaule dans les cuisses|Serrer', 'Tapis, ballons', ''],
+        ['jeu', 'Match à thème : plaquage à deux mains au début', 15, 'Petit match où le plaquage est remplacé par une ceinture à deux mains.', 'Viser la taille|Serrer|Se relever vite', 'Chasubles', '']] },
+      { sys: 'Jeu groupé (après ruck)', fmt: 'r15', title: 'Avancer par le jeu groupé', goal: 'Enchaîner les rucks rapides et avancer temps de jeu après temps de jeu.', ex: [
+        ['soutien', 'Ruck rapide à deux arrivées', 12, 'Le porteur va au sol, deux soutiens nettoient, le demi sort le ballon.', 'Arriver bas|Pousser au-delà du ballon|Ballon dégagé vite', 'Boucliers, ballons', ''],
+        ['contact', 'Porteur qui reste debout', 12, 'Le porteur va au contact d\'un bouclier, reste debout et présente le ballon.', 'Appuis larges|Épaule basse|Ballon loin', 'Boucliers, ballons', ''],
+        ['jeu', 'Match : 5 temps de jeu avant de jouer au large', 20, 'Match : l\'attaque doit enchaîner 5 rucks avant de passer au large.', 'Patience|Soutien|Placement des avants', 'Chasubles', '']] },
+      { sys: 'Défense glissée', fmt: 'r15', title: 'Défense glissée vers la touche', goal: 'Monter ensemble puis glisser pour pousser l\'attaque vers la touche.', ex: [
+        ['plaquage', 'Glisser à 4 contre 5', 12, 'Quatre défenseurs contre cinq attaquants : la ligne glisse vers l\'extérieur.', 'Monter ensemble|Glisser dès la passe|L\'extérieur ferme', 'Plots, ballons', ''],
+        ['plaquage', 'Plaquage puis relevé', 12, 'Le défenseur plaque un porteur, se relève et revient dans la ligne.', 'Plaquer bas|Se relever vite|Se replacer', 'Boucliers, ballons', ''],
+        ['jeu', 'Match : la défense marque si elle pousse en touche', 20, 'Match : un porteur poussé en touche donne 2 points à la défense.', 'Organisation|Communication', 'Chasubles', '']] },
+      { sys: 'Contre-attaque', fmt: 'r15', title: 'Contre-attaquer sur un coup de pied', goal: 'Réceptionner le coup de pied adverse et relancer avant que la défense se place.', ex: [
+        ['pied', 'Réception de chandelle', 10, 'Le receveur annonce, réceptionne, protège le ballon.', 'Annoncer fort|Bras en corbeille|Se retourner', 'Ballons', ''],
+        ['attaque', 'Relance à 3 après réception', 12, 'Le receveur et deux partenaires relancent face à deux poursuivants.', 'Se regrouper vite|Attaquer l\'espace|Passer avant le contact', 'Ballons, plots', ''],
+        ['jeu', 'Match : chaque coup de pied doit être relancé', 20, 'Match : sur coup de pied adverse, interdiction de retaper au pied.', 'Lire les espaces|Soutien', 'Chasubles', '']] },
+      { sys: 'Lancement de jeu', fmt: 'r15', title: 'Lancer le jeu en première main', goal: 'Marquer ou avancer dès la première passe après une mêlée ou une touche.', ex: [
+        ['attaque', 'Croisée et passe décalée', 12, 'Trois attaquants : croisée, puis passe à l\'extérieur.', 'Courses qui se croisent près|Passe courte|Lire le défenseur', 'Plots, ballons', ''],
+        ['attaque', 'Jeu à partir de la mêlée', 15, 'Après la mêlée, le demi passe à l\'ouvreur, les trois-quarts lancent une combinaison annoncée.', 'Annonce avant la mêlée|Alignement profond|Tenir sa course', 'Ballons', ''],
+        ['jeu', 'Match à thème : lancement imposé', 20, 'Match : à chaque mêlée, l\'attaque joue la combinaison du jour.', 'Précision|Soutien', 'Chasubles', '']] },
+    ],
+    volley: [
+      { sys: '4 contre 4 : passeur au centre', fmt: 'v4', title: 'Jouer à 4 : passeur au centre', goal: 'Un passeur au centre, deux attaquants, un défenseur arrière : construire chaque point.', ex: [
+        ['technique', 'Touche haute en déplacement', 10, 'Le passeur se déplace sous chaque réception et passe vers l\'aile.', 'Arriver sous le ballon|Mains en coupe|Pousser avec les jambes', 'Ballons', ''],
+        ['attaque', 'Attaque des ailes à 4', 12, 'Réception, passe au centre, attaque en zone 4 ou 2.', 'Élan en 3 temps|Frapper devant soi|Viser l\'espace', 'Ballons, filet', ''],
+        ['jeu', 'Match à 4 contre 4 avec 3 touches', 20, 'Match : trois touches obligatoires.', 'Construire|Se parler', 'Ballons, filet', '']] },
+      { sys: '4 contre 4 : défense', fmt: 'v4', title: 'Défendre à 4', goal: 'Se partager le terrain à 4 et couvrir l\'attaquant.', ex: [
+        ['defense', 'Défense à 3 sur attaque du coach', 12, 'Le coach attaque, trois défenseurs remontent le ballon vers le passeur.', 'Position basse|Bras sous le ballon|Ballon haut au centre', 'Ballons, chaise', ''],
+        ['defense', 'Couverture de l\'attaquant', 12, 'Les trois autres entourent l\'attaquant pour reprendre un ballon contré.', 'Se rapprocher bas|Bras prêts|Relancer haut', 'Ballons, filet', ''],
+        ['jeu', 'Match à 4 : défense = 1 point', 15, 'Match : une défense réussie sur attaque rapporte 1 point.', 'Engagement|Couverture', 'Ballons, filet', '']] },
+      { sys: 'Service tactique', fmt: 'v6', title: 'Servir pour gêner l\'adversaire', goal: 'Viser le réceptionneur faible ou la zone du passeur.', ex: [
+        ['service', 'Service tennis flottant', 12, 'Service flottant vers une zone annoncée.', 'Lancer devant l\'épaule|Frappe sèche au centre|Ne pas accompagner', 'Ballons, filet', ''],
+        ['service', 'Service sur le réceptionneur désigné', 12, 'Le coach désigne un réceptionneur, les serveurs le visent.', 'Regarder la cible avant|Service sûr|Varier court et long', 'Ballons, filet', ''],
+        ['jeu', 'Match : as = 2 points', 20, 'Match : un service gagnant compte double, un service raté donne 2 points à l\'autre.', 'Prendre un risque mesuré|Routine', 'Ballons, filet', '']] },
+      { sys: 'Attaque croisée', fmt: 'v6', title: 'L\'attaque croisée', goal: 'Deux attaquants qui se croisent pour tromper le contre.', ex: [
+        ['attaque', 'Attaque en zone 2', 12, 'Le passeur passe en arrière vers la zone 2.', 'Élan en 3 temps|Frapper devant|Viser diagonale ou ligne', 'Ballons, filet', ''],
+        ['attaque', 'Croisé entre le central et l\'ailier', 15, 'Le central fait un appel court, l\'ailier croise derrière lui : le passeur choisit.', 'Appel du central crédible|Timing de l\'ailier|Passe rapide', 'Ballons, filet', ''],
+        ['jeu', 'Match : attaque croisée = 2 points', 20, 'Match : un point marqué sur attaque croisée compte double.', 'Communication passeur-attaquants', 'Ballons, filet', '']] },
+      { sys: 'Contre à trois', fmt: 'v6', title: 'Fermer le filet à trois', goal: 'Trois contreurs qui se déplacent ensemble vers l\'attaquant servi.', ex: [
+        ['contre', 'Contre seul : lire le passeur', 12, 'Le contreur lit le passeur puis l\'attaquant et saute au bon moment.', 'Passeur puis attaquant|Sauter juste après|Mains vers l\'intérieur', 'Ballons, filet', ''],
+        ['contre', 'Déplacement du contre à trois', 12, 'Trois contreurs se déplacent ensemble vers l\'aile appelée par le coach.', 'Pas chassés puis croisé|Se coller l\'un à l\'autre|Mains fermées', 'Filet', ''],
+        ['jeu', 'Match : contre gagnant = 2 points', 20, 'Match : un point marqué au contre compte double.', 'Organisation|Couverture derrière', 'Ballons, filet', '']] },
+      { sys: 'Défense en 6 avancé', fmt: 'v6', title: 'Défendre avec le 6 avancé', goal: 'Le joueur de la zone 6 monte derrière le contre pour récupérer les balles placées.', ex: [
+        ['defense', 'Défense sur balles placées', 12, 'Le coach place des ballons derrière le contre, le 6 avancé les récupère.', 'Monter derrière le contre|Rester bas|Remonter haut', 'Ballons, filet', ''],
+        ['defense', 'Défense en 6 avancé sur attaque', 15, 'Attaque du coach en zones 4 et 2 : les arrières se placent avec le 6 avancé.', 'Chacun sa zone|Bras prêts|Se parler', 'Ballons, filet', ''],
+        ['jeu', 'Match avec 6 avancé', 20, 'Match normal : les équipes défendent en 6 avancé.', 'Placement|Communication', 'Ballons, filet', '']] },
+      { sys: 'Transition défense-attaque', fmt: 'v6', title: 'Contre-attaquer après une défense', goal: 'Défendre, se replacer et attaquer vite derrière.', ex: [
+        ['defense', 'Défense et relance en manchette', 12, 'Le coach attaque, le défenseur remonte haut vers le centre.', 'Position basse|Bras sous le ballon|Ballon haut', 'Ballons, chaise', ''],
+        ['attaque', 'Défense puis attaque enchaînée', 15, 'Après chaque défense, le passeur sert un attaquant qui s\'est replacé pour l\'élan.', 'Se replacer vite|Passe haute|Attaque décidée', 'Ballons, filet', ''],
+        ['jeu', 'Match : point en transition = 2 points', 20, 'Match : un point marqué juste après une défense compte double.', 'Enchaîner|Se parler', 'Ballons, filet', '']] },
+      { sys: 'Jeu du libéro', fmt: 'v6', title: 'Le libéro au cœur de la réception', goal: 'Le libéro prend le plus de réceptions et organise la défense.', ex: [
+        ['reception', 'Réception à 3 avec libéro au centre', 15, 'Le libéro au centre prend toutes les balles qu\'il peut, les ailes prennent le reste.', 'Annoncer tôt|Être arrêté avant la frappe|Viser le passeur', 'Ballons, filet', ''],
+        ['defense', 'Le libéro dirige la défense', 12, 'Sur attaques du coach, le libéro annonce les placements.', 'Parler fort|Position basse|Relancer haut', 'Ballons, filet', ''],
+        ['jeu', 'Match avec libéro', 20, 'Match normal avec un libéro dans chaque équipe.', 'Remplacements du libéro|Réception', 'Ballons, filet', '']] },
+    ],
+  };
+  if (X) Object.keys(EX).forEach(k => { if (!X[k]) return; const has = new Set(X[k].base.map(b => b[1])); EX[k].forEach(b => { if (!has.has(b[1])) X[k].base.push(b); }); });
+  if (SS) Object.keys(SES).forEach(k => { SS[k] = SS[k] || []; SES[k].forEach(s => { if (!SS[k].some(x => x.sys === s.sys && x.title === s.title)) SS[k].push(s); }); });
+})();
 
 ;
 /* ===== seslib.js ===== */
@@ -9191,12 +10021,12 @@ var Season = (() => {
       <label class="fld inline"><span>Équipe</span><select id="ssTeam">${teams.map(x => `<option value="${x.id}" ${x.id === t.id ? 'selected' : ''}>${esc(Store.teamLabel(x))}</option>`).join('')}</select></label>
       ${UI.kindSeg()}
       <div class="tiles"><div class="tile"><b>${d.ms.length}</b><span>Matchs</span></div><div class="tile v"><b>${d.r.V}</b><span>Victoires</span></div><div class="tile n"><b>${d.r.N}</b><span>Nuls</span></div><div class="tile d"><b>${d.r.D}</b><span>Défaites</span></div>
-        <div class="tile"><b>${d.gf} – ${d.ga}</b><span>Buts pour – contre</span></div><div class="tile"><b>${d.trs.length}</b><span>Séances (${Math.round(d.trMin / 60)} h)</span></div></div>
+        <div class="tile"><b>${d.gf} – ${d.ga}</b><span>${Sport.W().Units} pour – contre</span></div><div class="tile"><b>${d.trs.length}</b><span>Séances (${Math.round(d.trMin / 60)} h)</span></div></div>
       <div class="cards2">
-        <section class="card"><h2>⚽ Buteurs</h2>${top('g').map((x, i) => `<p class="ss-row"><span>${i + 1}. ${esc(Store.fullName(x.p))}</span><b>${x.g}</b></p>`).join('') || '<p class="muted">—</p>'}</section>
+        <section class="card"><h2>${Sport.W().icon} ${Sport.W().Scorers}</h2>${top('g').map((x, i) => `<p class="ss-row"><span>${i + 1}. ${esc(Store.fullName(x.p))}</span><b>${x.g}</b></p>`).join('') || '<p class="muted">—</p>'}</section>
         <section class="card"><h2>🅿️ Passeurs</h2>${top('a').map((x, i) => `<p class="ss-row"><span>${i + 1}. ${esc(Store.fullName(x.p))}</span><b>${x.a}</b></p>`).join('') || '<p class="muted">—</p>'}</section>
       </div>
-      <section class="card"><h2>👥 Les joueurs</h2><div class="ss-table"><table><thead><tr><th>Joueur</th><th>Matchs</th><th>Minutes</th><th>Buts</th><th>Passes</th><th>Présence</th><th>Éval.</th><th>Blessé</th></tr></thead>
+      <section class="card"><h2>👥 Les joueurs</h2><div class="ss-table"><table><thead><tr><th>Joueur</th><th>Matchs</th><th>Minutes</th><th>${Sport.W().Units}</th><th>Passes</th><th>Présence</th><th>Éval.</th><th>Blessé</th></tr></thead>
         <tbody>${d.players.map(x => `<tr><td><a href="#/joueur/${x.p.id}">${esc(Store.fullName(x.p))}</a></td><td>${x.mp}</td><td>${x.minutes}'</td><td>${x.g || ''}</td><td>${x.a || ''}</td><td>${x.att == null ? '–' : x.att + ' %'}</td><td>${x.evalG == null ? '–' : x.evalG.toFixed(1).replace('.', ',')}</td><td>${x.inj ? x.inj + ' j' : ''}</td></tr>`).join('')}</tbody></table></div></section>
       <section class="card"><h2>📋 Les résultats</h2><div class="ss-results">${d.ms.map(m => `<a href="#/match/${m.id}" class="res-${res(m)}"><span>${esc(UI.fmtDate(m.date, { day: 'numeric', month: 'short' }))}</span><span>${m.home ? 'contre' : 'chez'} ${esc(m.opponent || '?')}</span><b>${m.gf} – ${m.ga}</b></a>`).join('') || '<p class="muted">Pas encore de match joué.</p>'}</div></section>
       <section class="card"><h2>🗣️ Le mot du coach</h2><textarea id="ssNote" rows="4" placeholder="Ce qu'on retient de la saison, les progrès, les objectifs pour la suivante (apparaît dans le PDF)">${esc(note)}</textarea></section>`;
@@ -9204,7 +10034,7 @@ var Season = (() => {
     $('#ssNote', root).oninput = e => { t.seasonNotes = Object.assign({}, t.seasonNotes || {}, { [season]: e.target.value }); clearTimeout(page.t); page.t = setTimeout(() => Store.upsert('teams', t), 600); };
     root.onclick = async e => { const b = e.target.closest('[data-ss]'); if (!b) return;
       if (b.dataset.ss === 'pdf') return pdf(t);
-      if (b.dataset.ss === 'save') { try { const r = await Exporter.json(Store.exportAll(), `raincy-saison-${season}`); if (r === 'downloaded') toast('Sauvegarde enregistrée dans Téléchargements'); } catch (err) { toast('Sauvegarde impossible', 'err'); } } };
+      if (b.dataset.ss === 'save') { try { const r = await Exporter.json(Store.exportAll(), `saison-${season}`); if (r === 'downloaded') toast('Sauvegarde enregistrée dans Téléchargements'); } catch (err) { toast('Sauvegarde impossible', 'err'); } } };
   }
 
   async function pdf(t) {
@@ -9212,12 +10042,12 @@ var Season = (() => {
     try {
       const d = data(t), season = People.seasonLabel(), P = Exporter.pdfDoc(S().club), note = ((t.seasonNotes || {})[season]) || '';
       P.header('Bilan de saison', `${t.name} · ${season}`); P.h2(`${t.name} · saison ${season}`);
-      P.facts([['Matchs', String(d.ms.length)], ['V / N / D', `${d.r.V} / ${d.r.N} / ${d.r.D}`], ['Buts', `${d.gf} pour · ${d.ga} contre`], ['Séances', `${d.trs.length} (${Math.round(d.trMin / 60)} h)`]]);
+      P.facts([['Matchs', String(d.ms.length)], ['V / N / D', `${d.r.V} / ${d.r.N} / ${d.r.D}`], [Sport.W().Units, `${d.gf} pour · ${d.ga} contre`], ['Séances', `${d.trs.length} (${Math.round(d.trMin / 60)} h)`]]);
       if (note) { P.label('Le mot du coach'); P.para(note, 11.5); }
       const top = k => d.players.filter(x => x[k] > 0).sort((a, c) => c[k] - a[k]).slice(0, 5);
-      if (top('g').length) { P.label('Meilleurs buteurs'); P.table(['Joueur', 'Buts'], top('g').map(x => [Store.fullName(x.p), String(x.g)]), [.8, .2]); }
+      if (top('g').length) { P.label('Meilleurs ' + Sport.W().scorers); P.table(['Joueur', Sport.W().Units], top('g').map(x => [Store.fullName(x.p), String(x.g)]), [.8, .2]); }
       if (top('a').length) { P.label('Meilleurs passeurs'); P.table(['Joueur', 'Passes'], top('a').map(x => [Store.fullName(x.p), String(x.a)]), [.8, .2]); }
-      P.label('Les joueurs'); P.table(['Joueur', 'Matchs', 'Min.', 'Buts', 'Passes', 'Présence', 'Éval.'], d.players.map(x => [Store.fullName(x.p), String(x.mp), String(x.minutes), String(x.g || ''), String(x.a || ''), x.att == null ? '-' : x.att + ' %', x.evalG == null ? '-' : x.evalG.toFixed(1)]), [.34, .1, .1, .1, .1, .13, .13]);
+      P.label('Les joueurs'); P.table(['Joueur', 'Matchs', 'Min.', Sport.W().Units, 'Passes', 'Présence', 'Éval.'], d.players.map(x => [Store.fullName(x.p), String(x.mp), String(x.minutes), String(x.g || ''), String(x.a || ''), x.att == null ? '-' : x.att + ' %', x.evalG == null ? '-' : x.evalG.toFixed(1)]), [.34, .1, .1, .1, .1, .13, .13]);
       if (d.ms.length) { P.label('Les résultats'); P.table(['Date', 'Adversaire', 'Score', ''], d.ms.map(m => [UI.fmtDate(m.date), `${m.home ? 'contre' : 'chez'} ${m.opponent || '?'}`, `${m.gf} - ${m.ga}`, { V: 'Victoire', N: 'Nul', D: 'Défaite' }[res(m)]]), [.25, .45, .15, .15]); }
       const r = await Exporter.deliver(P.blob(), `bilan-${String(t.name).replace(/[^\wÀ-ÿ-]+/g, '-')}-${season}.pdf`);
       if (r === 'downloaded') toast('Bilan enregistré dans Téléchargements');
@@ -9242,7 +10072,7 @@ var Season = (() => {
       <div class="adv-grid"><div><h3>🏠 À domicile</h3><p>${home.V} V · ${home.N} N · ${home.D} D</p><p class="muted small">${home.gf} – ${home.ga}</p></div>
         <div><h3>🚌 À l'extérieur</h3><p>${away.V} V · ${away.N} N · ${away.D} D</p><p class="muted small">${away.gf} – ${away.ga}</p></div>
         <div><h3>🧤 Sans encaisser</h3><p>${cs} match${cs > 1 ? 's' : ''}</p><p class="muted small">${Math.round(cs / ms.length * 100)} % des matchs</p></div>
-        <div><h3>⚽ A marqué</h3><p>${scored} match${scored > 1 ? 's' : ''} sur ${ms.length}</p><p class="muted small">${(ms.reduce((a, m) => a + (+m.gf || 0), 0) / ms.length).toFixed(1).replace('.', ',')} but${ms.length ? 's' : ''} par match</p></div>
+        <div><h3>${Sport.W().icon} A marqué</h3><p>${scored} match${scored > 1 ? 's' : ''} sur ${ms.length}</p><p class="muted small">${(ms.reduce((a, m) => a + (+m.gf || 0), 0) / ms.length).toFixed(1).replace('.', ',')} but${ms.length ? 's' : ''} par match</p></div>
         ${big ? `<div><h3>🏆 Plus large victoire</h3><p>${big.gf} – ${big.ga}</p><p class="muted small">${big.home ? 'contre' : 'chez'} ${esc(big.opponent || '?')}</p></div>` : ''}
         ${bad && bad.gf < bad.ga ? `<div><h3>📉 Plus lourde défaite</h3><p>${bad.gf} – ${bad.ga}</p><p class="muted small">${bad.home ? 'contre' : 'chez'} ${esc(bad.opponent || '?')}</p></div>` : ''}</div>
       ${lives.length ? `<h3>⏱️ Buts par période de 15 min (${lives.length} match${lives.length > 1 ? 's' : ''} suivi${lives.length > 1 ? 's' : ''} en direct)</h3>
@@ -9251,7 +10081,7 @@ var Season = (() => {
         : '<p class="muted small">Suis tes matchs en direct (📱 sur la page du match) pour voir les buts par période et les résultats selon qui marque le premier.</p>'}</section>`;
   }
   /* ---------- the detailed stats of a match (shots, key passes, interceptions, crosses, corners, cards, saves) ---------- */
-  const DET = [['g', '⚽', 'Buts'], ['a', '🅿️', 'Passes déc.'], ['sc', '🎯', 'Tirs cadrés'], ['snc', '↗️', 'Non cadrés'], ['d', '🔑', 'Passes clés'], ['iv', '✋', 'Interceptions'],
+  const DET = [['g', '⚽', 'Buts / points'], ['a', '🅿️', 'Passes déc.'], ['sc', '🎯', 'Tirs cadrés'], ['snc', '↗️', 'Non cadrés'], ['d', '🔑', 'Passes clés'], ['iv', '✋', 'Interceptions'],
     ['cr', '📐', 'Centres'], ['co', '🚩', 'Corners'], ['yc', '🟨', 'Jaunes'], ['rc', '🟥', 'Rouges'], ['sv', '🧤', 'Arrêts']];
   function detailCard(m) {
     const det = m.detail || {}, st = m.stats || {}, ids = [...new Set([...Object.keys(det), ...Object.keys(st)])].filter(id => Store.get('players', id));
@@ -9492,7 +10322,7 @@ var ACImport = (() => {
       let p = ours.find(x => x.acId === a.id) || (lic && ours.find(x => digits(x.licence) === lic))
         || ours.find(x => norm(`${x.firstName} ${x.lastName}`) === n1 && (!a.dob || !x.birth || x.birth === a.dob))
         || ours.find(x => norm(x.lastName) === norm(a.nom) && x.birth && x.birth === a.dob);
-      // « D'HONT » = « DHONT »; the same first and last name, only one such player: the same person even if one date of birth is wrong
+      // « D'ARTOIS » = « DARTOIS »; the same first and last name, only one such player: the same person even if one date of birth is wrong
       const sq = s => norm(s).replace(/ /g, ''), same = ours.filter(x => !x.acId && sq(`${x.firstName}${x.lastName}`) === sq(`${a.prenom}${a.nom}`));
       if (!p && same.length === 1) p = same[0];
       const posts = POST[a.poste] || null;
@@ -9911,7 +10741,7 @@ var Analyse = (() => {
     ['cpa', '🚩', 'Coup de pied arrêté', '#7c3aed'], ['defense', '🛡️', 'Bien défendu', '#0d9488'], ['erreur', '⚠️', 'Erreur', '#a16207'], ['autre', '✏️', 'Autre', '#475569']];
   const tagOf = k => TAGS.find(t => t[0] === k) || TAGS[TAGS.length - 1];
   const mmss = t => { t = Math.max(0, Math.floor(t || 0)); const h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), s = t % 60; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(s).padStart(2, '0'); };
-  const BRIEF = 'raincy-briefings';
+  const BRIEF = AppCfg.key('briefings');
   const briefings = () => { try { return JSON.parse(localStorage.getItem(BRIEF)) || []; } catch (e) { return []; } };
   const saveBriefings = l => { try { localStorage.setItem(BRIEF, JSON.stringify(l)); } catch (e) { toast('Impossible d\'enregistrer le briefing sur cet appareil', 'err'); } };
   const pref = () => Object.assign({ before: 8, after: 4 }, S().ui.clipPref || {});
@@ -10355,7 +11185,7 @@ var Analyse = (() => {
     };
     try {
       if (rec) rec.start(250);
-      await card('#8c1024', `${S().club.name || 'Raincy Coach'} · Briefing vidéo`, name, `${items.length} séquence${items.length > 1 ? 's' : ''}`, 2200);
+      await card('#8c1024', `${S().club.name || AppCfg.name} · Briefing vidéo`, name, `${items.length} séquence${items.length > 1 ? 's' : ''}`, 2200);
       for (let k = 0; k < items.length; k++) {
         const { rec: m, clip } = items[k], t = tagOf(clip.tag), ps = (clip.players || []).map(pid => Store.get('players', pid)).filter(Boolean);
         bz.progress(k / items.length);
@@ -10393,7 +11223,7 @@ var Analyse = (() => {
             requestAnimationFrame(tick);
           } catch (e) { rej(e); } }; tick(); });
       }
-      await card('#8c1024', S().club.name || 'Raincy Coach', 'Fin du briefing', '', 1200);
+      await card('#8c1024', S().club.name || AppCfg.name, 'Fin du briefing', '', 1200);
       let blob;
       if (wr) blob = await wr.finish();
       else { rec.stop(); await stopped; blob = new Blob(chunks, { type: (rec.mimeType || mime || 'video/webm').split(';')[0] }); }
@@ -10598,7 +11428,7 @@ var Parents = (() => {
   const familyName = id => (family(id) || {}).name || '';
   // Explanation shown when the server has not been updated yet (3.8 functions missing)
   const needUpdate = e => e && e.code === 'MISE_A_JOUR'
-    ? 'Le serveur du club est en cours de mise à jour : réessaie dans quelques minutes.' : (e && e.message) || 'Erreur';
+    ? 'Le serveur Clubbo est en cours de mise à jour : réessaie dans quelques minutes.' : (e && e.message) || 'Erreur';
   // (3.42) The pages of the players and of the parents are opened with each licensee's personal code: the category has a QR code
   // that leads to the page where the code is typed, and the codes are handed out from « Codes personnels ».
   function shareDialog(teamId) {
@@ -10948,7 +11778,7 @@ var Codes = (() => {
     Promise.all([...area.querySelectorAll('img')].map(im => im.decode ? im.decode().catch(() => {}) : null)).then(() => setTimeout(() => window.print(), 150));
   }
   function printPoster(title, url, kind) {
-    print(`<div class="qr-poster"><img src="icons/crest.png" alt=""><h1>${esc(title)}</h1>
+    print(`<div class="qr-poster"><img src="${esc(Supporters.crest())}" alt=""><h1>${esc(title)}</h1>
       <p class="qp-sub">${kind === 'app' ? 'Scanne pour ouvrir l\'appli des coachs' : 'Joueurs et parents : scanne, puis tape ton code personnel'}</p>
       <div class="qp-qr">${svg(url, 10)}</div><p class="qp-url">${esc(url)}</p>
       ${kind === 'app' ? '' : '<p class="qp-note">Ton code personnel t\'est remis par le coach. Il n\'ouvre que tes informations : ne le donne à personne.</p>'}</div>`, 'pa-poster');
@@ -10956,7 +11786,7 @@ var Codes = (() => {
   async function printCards(t, rows, map) {
     try { await loadQr(); } catch (e) { return toast(e.message, 'err'); }
     const club = S().club.name, url = catUrl(t.name), q = svg(url, 3), host = base().replace(/^https?:\/\//, '') + 'moi.html';
-    const card = p => `<div class="pc"><div class="pc-top"><img src="icons/crest.png" alt=""><span>${esc(club)}<br><b>Espace joueur · parents</b></span></div>
+    const card = p => `<div class="pc"><div class="pc-top"><img src="${esc(Supporters.crest())}" alt=""><span>${esc(club)}<br><b>Espace joueur · parents</b></span></div>
       <div class="pc-name">${esc(full(p))}</div><div class="pc-team">${esc(t.name)}</div>
       <div class="pc-mid"><div class="pc-qr">${q}</div><div><div class="pc-lbl">Code personnel</div><div class="pc-code">${esc(pretty((map[p.id] || {}).code || ''))}</div>
       <div class="pc-how">1. Scanne le QR code (ou ouvre ${esc(host)})<br>2. Tape ton code</div></div></div>
@@ -11152,7 +11982,7 @@ var Imports = (() => {
       if (!ln && !fn) return null;
       const o = { lastName: ln.toUpperCase(), firstName: cap(fn), phone: phone(get('phone')), email: get('email').toLowerCase() };
       if (kind === 'staff') return Object.assign(o, { role: get('role'), cat: get('cat') });
-      const pos = norm(get('pos')), pm = POS.find(([re]) => re.test(pos));
+      const pos = norm(get('pos')), pm = Sport.isFoot() ? POS.find(([re]) => re.test(pos)) : (pt => pt && [null, pt[0]])(Sport.POSTS.find(x => pos && (norm(x[1]) === pos || norm(x[2]) === pos || pos.includes(norm(x[1])))));
       return Object.assign(o, { birth: date(get('birth'), true), licence: digits(get('licence')) ? get('licence').replace(/\s+/g, ' ') : '', cat: get('cat'),
         pos: pm ? pm[1] : '', number: digits(get('number')).slice(0, 2), parent: get('parent'), parentPhone: phone(get('parentPhone')) });
     }
@@ -11291,6 +12121,304 @@ var Imports = (() => {
 })();
 
 ;
+/* ===== onboard.js ===== */
+/* Onboard: the club's own settings on Clubbo — name, short name, crest, colours, town (weather), FFF name, slogan,
+   and its categories. Shown once after the club is created (then Réglages → Le club), followed by the import of the club's data. */
+var Onboard = (() => {
+  const { esc, $, $$, toast, modal } = UI;
+  const S = () => Store.state;
+  const FOOT_CATS = ['École de foot', 'U6', 'U7', 'U8', 'U9', 'U10', 'U11', 'U12', 'U13', 'U14', 'U15', 'U16', 'U17', 'U18', 'U19', 'U20', 'Seniors', 'Vétérans', 'Féminines'];
+  const catKey = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/\s+/g, '');
+  const has = cat => S().teams.some(t => catKey(t.name) === catKey(cat) || catKey(t.category) === catKey(cat) && !/ [A-Z]$/.test(t.name));
+  const CATS = () => Sport.isFoot() ? FOOT_CATS : [Sport.cur().school, ...Sport.cur().cats, 'Féminines'];
+  const formatOf = cat => { if (!Sport.isFoot()) return Sport.cur().formatOfCat(cat); if (/^[ÉE]cole|^U[6-9]$/.test(cat)) return '5'; const n = +String(cat).slice(1); return cat[0] !== 'U' ? '11' : n <= 13 ? '8' : '11'; };
+
+  // the crest: resized to 256 px (PNG, transparent background kept), about 30 KB, so it travels with the club's settings
+  async function crestFrom(file) {
+    const url = URL.createObjectURL(file), im = new Image(); im.src = url; await im.decode();
+    const k = Math.min(1, 256 / Math.max(im.naturalWidth, im.naturalHeight)), c = document.createElement('canvas');
+    c.width = Math.round(im.naturalWidth * k); c.height = Math.round(im.naturalHeight * k);
+    c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+    let d = c.toDataURL('image/png'); if (d.length > 120000) d = c.toDataURL('image/jpeg', .85);
+    return d;
+  }
+  async function geocode(city) {
+    const r = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=fr&countryCode=FR`);
+    const x = ((await r.json()).results || [])[0]; return x ? { city: x.name, lat: x.latitude, lon: x.longitude } : null;
+  }
+  function form() {
+    const c = S().club;
+    return `<div class="ob-form"><div class="ob-s" data-obs="1"><div class="lbl">Le sport du club</div><div class="chips" id="obSport">${Sport.KEYS.map(k => `<button type="button" class="chip ${k === Sport.id() ? 'on' : ''}" data-sport="${k}">${Sport.SPORTS[k].icon} ${Sport.SPORTS[k].label}</button>`).join('')}</div>
+      <div class="ob-crest"><img src="${esc(Supporters.crest())}" alt="Blason" id="obCrestImg"><label class="btn">🖼️<span>${c.crest ? 'Changer le blason' : 'Ajouter le blason'}</span><input type="file" accept="image/*" id="obCrest" hidden></label>
+        ${c.crest ? '<button class="btn soft" id="obCrestDel">Retirer</button>' : ''}</div>
+      <label class="fld"><span>Nom du club</span><input id="obName" value="${esc(c.name || '')}" maxlength="60"></label>
+      <div class="row2"><label class="fld"><span>Nom court (« Allez … ! »)</span><input id="obShort" value="${esc(c.short || '')}" maxlength="20" placeholder="ex : Le FC"></label>
+      <label class="fld"><span>Ville (météo des séances)</span><input id="obCity" value="${esc(c.city || '')}" maxlength="60" placeholder="ex : Montreuil"></label></div>
+      <div class="row2"><label class="fld"><span>Couleur principale</span><input type="color" id="obC1" value="${esc(c.color1 || '#8c1024')}"></label>
+      <label class="fld"><span>Couleur secondaire</span><input type="color" id="obC2" value="${esc(c.color2 || '#0e1d45')}"></label></div>
+      <label class="fld"><span>Devise du club (facultatif, au dos du blason et sur le drapeau)</span><input id="obSlogan" value="${esc(c.slogan || '')}" maxlength="120" placeholder="ex : Un club, une famille"></label>
+      <details><summary class="muted small">Pour l'import des calendriers ${esc(Sport.fed()[0])} (facultatif)</summary>
+        <label class="fld" ${Sport.isFoot() ? '' : 'hidden'}><span>Nom du club sur la FFF (tel qu'il apparaît dans les calendriers)</span><input id="obFff" value="${esc(c.fffName || '')}" placeholder="ex : FC EXEMPLE"></label>
+        <label class="fld"><span>Page du club sur le site de la ${esc(Sport.fed()[0])}</span><input id="obFffUrl" value="${esc(c.fffUrl || '')}" placeholder="${esc(Sport.fed()[2])}…"></label></details></div>
+      <div class="ob-s" data-obs="2"><div class="lbl">Les catégories du club</div>
+      <div class="chips" id="obCats">${CATS().map(k => `<button type="button" class="chip ${has(k) ? 'on' : ''}" data-cat="${esc(k)}" ${has(k) ? 'disabled title="Déjà créée"' : ''}>${esc(k)}</button>`).join('')}</div>
+      <label class="switch"><input type="checkbox" id="obAB"><span>Créer aussi des équipes A et B dans les catégories choisies</span></label></div></div>`;
+  }
+  function bind(r) {
+    let crest = S().club.crest || '';
+    $('#obCrest', r).onchange = async e => { const f = e.target.files[0]; if (!f) return; try { crest = await crestFrom(f); $('#obCrestImg', r).src = crest; } catch (x) { toast('Image illisible', 'err'); } };
+    const del = $('#obCrestDel', r); if (del) del.onclick = () => { crest = ''; $('#obCrestImg', r).src = AppCfg.crest; };
+    $$('#obCats .chip:not([disabled])', r).forEach(b => b.onclick = () => b.classList.toggle('on'));
+    // another sport: the courts, positions and categories change at once (the categories already created stay)
+    $$('#obSport [data-sport]', r).forEach(b => b.onclick = async () => {
+      const k = b.dataset.sport; if (k === Sport.id()) return;
+      setSport(k); const keep = { name: $('#obName', r).value, short: $('#obShort', r).value, city: $('#obCity', r).value, slogan: $('#obSlogan', r).value };
+      const host = $('#obSport', r).closest('.ob-form'); host.outerHTML = form(); if (r._obStep) r._obStep();
+      $('#obName', r).value = keep.name; $('#obShort', r).value = keep.short; $('#obCity', r).value = keep.city; $('#obSlogan', r).value = keep.slogan;
+      const again = bind(r); r._obSave = again; toast(`${Sport.cur().icon} Club de ${Sport.cur().label.toLowerCase()} : terrains, postes, catégories et scores changent (joueurs et matchs restent). Touche l'ancien sport pour revenir.`);
+    });
+    return async () => {
+      const c = S().club, name = $('#obName', r).value.trim();
+      if (name.length < 2) { toast('Écris le nom du club', 'err'); return false; }
+      Object.assign(c, { name, short: $('#obShort', r).value.trim(), color1: $('#obC1', r).value, color2: $('#obC2', r).value, slogan: $('#obSlogan', r).value.trim(),
+        fffName: $('#obFff', r).value.trim(), fffUrl: $('#obFffUrl', r).value.trim(), crest });
+      const city = $('#obCity', r).value.trim();
+      if (city && city !== c.city) { try { const g = await geocode(city); if (g) Object.assign(c, g); else { c.city = city; delete c.lat; delete c.lon; toast('Ville introuvable pour la météo', 'err'); } } catch (e) { c.city = city; } }
+      if (!city) { delete c.city; delete c.lat; delete c.lon; }
+      const ab = $('#obAB', r).checked;
+      $$('#obCats .chip.on:not([disabled])', r).forEach(b => {
+        const cat = b.dataset.cat, t = People.ageTeam(cat); if (!t.format) { t.format = formatOf(cat); Store.upsert('teams', t); }
+        if (ab && cat !== Sport.cur().school && cat !== 'École de foot') ['A', 'B'].forEach(l => { const nm = cat + ' ' + l; if (!S().teams.some(x => catKey(x.name) === catKey(nm))) Store.upsert('teams', { id: 'cat-' + catKey(nm), name: nm, category: cat, format: formatOf(cat) }); });
+      });
+      Store.sortTeams(); Store.save(); App.refreshChrome();
+      return true;
+    };
+  }
+  function setSport(k) {
+    const c = S().club; c.sport = k; Sport.apply();
+    if (k !== 'foot') ['teams', 'schemas', 'trainings', 'matches', 'players'].forEach(col => S()[col].filter(x => x.example).forEach(x => Store.remove(col, x.id)));
+    S().teams.forEach(t => { if (Sport.sportOfFormat(t.format) !== k || !t.format) { t.format = formatOf(t.category || t.name); Store.upsert('teams', t); } });
+    Store.save(); App.refreshChrome();
+  }
+  // the whole club, in one window (Réglages → Le club)
+  function edit(done) {
+    let save;
+    modal({ title: '🏟️ Le club', noFocus: true, body: form(), onOpen: r => { save = bind(r); r._obSave = save; },
+      actions: [{ label: 'Annuler' }, { label: 'Enregistrer', kind: 'primary', onClick: (close, r) => { (r._obSave || save)().then(ok => { if (ok) { close(); toast('Club enregistré'); done && done(); App.route(true); } }); return false; } }] });
+  }
+  // just after the club is created: 3 steps — the club, its teams, its coaches (everything can be changed later in Réglages → Le club)
+  function start() {
+    let n = 1;
+    const LEAD = { 1: () => `Le nom, le sport et les couleurs de <b>${esc(S().club.name || 'ton club')}</b>.`, 2: () => 'Coche les catégories du club : elles sont créées tout de suite. Les joueurs viendront ensuite.',
+      3: () => 'Invite les coachs : ils reçoivent un lien, choisissent leur nom et créent leur mot de passe. Tu peux aussi importer tes joueurs et tes matchs.' };
+    const close = modal({ title: 'Bienvenue sur Clubbo 👋', noFocus: true,
+      body: `<div class="ob-prog"><span data-p="1">1 · Le club</span><span data-p="2">2 · Les équipes</span><span data-p="3">3 · Les coachs</span></div>
+        <p class="lead" id="obLead"></p>${form()}
+        <div class="ob-s" data-obs="3"><div class="ob-three">
+          <button class="quick-item" data-ob3="invite"><b>📲</b><span>Inviter les coachs</span><small>Un lien à envoyer sur WhatsApp</small></button>
+          <button class="quick-item" data-ob3="players"><b>👥</b><span>Mes joueurs</span><small>Photo d'une liste, PDF, Excel</small></button>
+          <button class="quick-item" data-ob3="matches"><b>${Sport.cur().icon}</b><span>Mes matchs</span><small>Le calendrier de la saison</small></button>
+          <button class="quick-item" data-ob3="staff"><b>🧢</b><span>Mes éducateurs</span><small>La liste des coachs</small></button></div>
+          <p class="muted small">Tout se retrouve plus tard dans Réglages.</p></div>
+        <div class="ob-nav"><button class="btn" id="obBack" type="button">Retour</button><button class="btn primary" id="obNext" type="button">Suivant</button></div>`,
+      onOpen: r => {
+        r._obSave = bind(r);
+        const show = () => {
+          r.querySelectorAll('[data-obs]').forEach(x => { x.hidden = +x.dataset.obs !== n; });
+          r.querySelectorAll('[data-p]').forEach(x => { x.classList.toggle('on', +x.dataset.p === n); x.classList.toggle('done', +x.dataset.p < n); });
+          $('#obLead', r).innerHTML = LEAD[n](); $('#obBack', r).hidden = n === 1; $('#obNext', r).textContent = n === 3 ? 'Terminer' : 'Suivant';
+          const sc = r.closest('.modal-card') || r; sc.scrollTop = 0;
+        };
+        r._obStep = show; show();
+        $('#obBack', r).onclick = () => { n = Math.max(1, n - 1); show(); };
+        $('#obNext', r).onclick = async () => {
+          if (n === 1) { if ($('#obName', r).value.trim().length < 2) return toast('Écris le nom du club', 'err'); n = 2; return show(); }
+          if (n === 2) { if (!(await r._obSave())) return; App.route(true); n = 3; return show(); }
+          close(); App.route(true); toast('Ton club est prêt 🎉');
+        };
+        r.querySelectorAll('[data-ob3]').forEach(b => b.onclick = () => {
+          const k = b.dataset.ob3; close(); App.route(true);
+          setTimeout(() => k === 'invite' ? Cloud.shareInvite(false) : Imports.open(k, () => setTimeout(importStep, 300)), 200);
+        });
+      },
+      actions: [{ label: 'Plus tard' }] });
+  }
+  function importStep() {
+    modal({ title: '📥 Les données du club', noFocus: true,
+      body: `<p>Importe tes <b>joueurs</b>, tes <b>matchs</b> et tes <b>éducateurs</b> : une photo ou une capture d'écran d'une liste, un PDF (${Sport.isFoot() ? 'Footclubs, calendrier du district' : 'liste de la fédération, calendrier'}), un fichier Excel ou CSV, ou un texte copié.</p>
+        <div class="chips"><button class="btn primary" data-ob="players">👥<span>Mes joueurs</span></button><button class="btn" data-ob="matches">${Sport.cur().icon}<span>Mes matchs</span></button><button class="btn" data-ob="staff">🧢<span>Mes éducateurs</span></button></div>
+        <p class="muted small">Ensuite : Réglages → Inviter les éducateurs, et Codes personnels pour les joueurs et les parents.</p>`,
+      onOpen: r => $$('[data-ob]', r).forEach(b => b.onclick = () => { const k = b.dataset.ob; document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); setTimeout(() => Imports.open(k, () => setTimeout(importStep, 300)), 150); }),
+      actions: [{ label: 'Terminer' }] });
+  }
+  // Réglages: the club's card
+  function card() {
+    const c = S().club;
+    return `<section class="card ob-card"><h2>🏟️ Le club</h2>
+      <div class="ob-sum"><img src="${esc(Supporters.crest())}" alt=""><div><b>${esc(c.name || 'Mon club')}</b><span class="muted small">${[Sport.cur().icon + ' ' + Sport.cur().label, c.city, c.slogan].filter(Boolean).map(esc).join(' · ') || 'Blason, couleurs, ville, catégories…'}</span></div></div>
+      <div class="chips"><button class="btn primary" data-ob="edit">${I.edit}<span>Modifier le club</span></button><button class="btn" data-ob="import">📥<span>Importer des données</span></button></div></section>`;
+  }
+  function onClick(e, redraw) {
+    const b = e.target.closest('[data-ob]'); if (!b) return false;
+    if (b.dataset.ob === 'edit') edit(redraw);
+    if (b.dataset.ob === 'import') Imports.open('players', redraw);
+    return true;
+  }
+  /* (1.26) the free version goes up to 3 teams; above, the « Club » plan (15 € a month). A card for the responsables: nothing is blocked. */
+  let planAsked = false;
+  function planCard() {
+    if (AppCfg.fixed || !Auth.isAdmin() || S().club.demo || !Cloud.ready()) return '';
+    if (!planAsked) { planAsked = true; Cloud.info().then(i => { const p = (i && i.plan) || 'free'; if (S().ui.plan !== p) { S().ui.plan = p; Store.persistNow(); App.route(true); } }).catch(() => {}); }
+    const n = S().teams.length;
+    if ((S().ui.plan || 'free') !== 'free' || n <= 3) return '';
+    return `<section class="card plan-card"><h2>⭐ Ton club a ${n} équipes</h2><p class="muted">La version gratuite de Clubbo va jusqu'à 3 équipes. La <b>formule Club</b> (15 € par mois) compte toutes les équipes du club. Rien n'est bloqué en attendant.</p>
+      <a class="btn primary" href="decouvrir.html#tarifs">Voir la formule Club</a></section>`;
+  }
+  return { start, edit, card, onClick, importStep, setSport, planCard };
+})();
+
+;
+/* ===== owner.js ===== */
+/* Owner: the space of the owner of Clubbo (#/proprietaire), reached with the owner key (never kept after the tab is closed).
+   Activation codes for the new clubs, the list of the clubs (players, dirigeants, matches, last activity), suspend / reactivate a club,
+   the phone notifications of the platform. */
+var Owner = (() => {
+  const { esc, $, $$, toast, modal, confirmBox } = UI;
+  const K = 'ea-owner-key';
+  const key = () => { try { return sessionStorage.getItem(K) || ''; } catch (e) { return ''; } };
+  const setKey = v => { try { if (v) sessionStorage.setItem(K, v); else sessionStorage.removeItem(K); } catch (e) {} };
+  const FREE_TEAMS = 3; // the free version: up to 3 teams (then the « Club » plan, 15 € a month)
+  const fmt = d => d ? new Date(d).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+  const ago = d => { if (!d) return 'jamais'; const n = Math.round((Date.now() - new Date(d)) / 864e5); return n <= 0 ? 'aujourd\'hui' : n === 1 ? 'hier' : `il y a ${n} jours`; };
+
+  async function page(root) {
+    const head = `<header class="page-head"><div><h1>👑 Propriétaire</h1><p class="sub">Clubbo · les clubs et leurs codes d'activation</p></div>
+      ${key() ? '<div class="head-actions"><button class="btn" data-ow="out">Fermer l\'espace</button></div>' : ''}</header>`;
+    if (!Cloud.canLogin()) { root.innerHTML = head + '<p class="tip">Le serveur Clubbo n\'est pas encore renseigné dans l\'appli (js/config.js).</p>'; return; }
+    if (!key()) {
+      root.innerHTML = head + `<section class="card"><h2>🔑 Clé du propriétaire</h2>
+        <label class="fld"><span>Ta clé (au moins 12 caractères)</span><input id="owKey" type="password" autocomplete="off"></label>
+        <div class="chips"><button class="btn primary" data-ow="in">Ouvrir</button><button class="btn" data-ow="init">Première fois : choisir ma clé</button></div>
+        <p class="muted small">La clé se choisit une seule fois, dans les 24 heures après l'installation du serveur. Garde-la en lieu sûr : elle donne la main sur tous les clubs.</p></section>`;
+      bind(root); return;
+    }
+    root.innerHTML = head + '<p class="muted">Chargement…</p>';
+    let clubs, codes, votes;
+    try { [clubs, codes, reqs, votes] = await Promise.all([Cloud.ownerClubs(key()), Cloud.ownerCodes(key(), 0), Cloud.ownerRequests(key()).catch(() => []), Cloud.ownerVotes(key()).catch(() => [])]); }
+    catch (e) { if (e.code === 'PROPRIETAIRE') setKey(''); root.innerHTML = head + `<p class="tip">${esc(e.message)}</p>`; bind(root); return; }
+    const free = codes.filter(c => !c.used), tot = k => clubs.reduce((a, c) => a + (+c[k] || 0), 0);
+    root.innerHTML = head + `
+      <div class="tiles"><div class="tile"><b>${clubs.length}</b><span>Clubs</span></div><div class="tile"><b>${clubs.filter(c => c.status === 'active').length}</b><span>Actifs</span></div>
+        <div class="tile"><b>${tot('players')}</b><span>Joueurs</span></div><div class="tile"><b>${tot('accounts')}</b><span>Comptes</span></div><div class="tile"><b>${free.length}</b><span>Codes libres</span></div>
+        <div class="tile"><b>${clubs.filter(c => c.plan === 'club').length}</b><span>Formule Club</span></div><div class="tile"><b>${clubs.filter(c => +c.week > 0).length}</b><span>Actifs cette semaine</span></div><div class="tile"><b>${tot('families')}</b><span>Familles prévenues</span></div></div>
+      ${requestsCard()}
+      <section class="card"><div class="row-head"><h2>🎟️ Codes d'activation</h2><button class="btn primary" data-ow="new">${I.plus}<span>Nouveaux codes</span></button></div>
+        <p class="muted small">Remets un code à chaque club que tu inscris : il crée son espace avec « Créer mon club ». Un code ne sert qu'une fois.</p>
+        <div class="ow-codes">${codes.map(c => `<div class="ow-code ${c.used ? 'used' : ''}"><code>${esc(c.code)}</code><span class="muted small">${c.used ? `utilisé par <b>${esc(c.club || '?')}</b> le ${fmt(c.used)}` : `libre${c.note ? ' · ' + esc(c.note) : ''}`}</span>${c.used ? '' : `<button class="btn soft small" data-owcopy="${esc(c.code)}">${I.copy}<span>Copier</span></button>`}</div>`).join('') || '<p class="muted">Aucun code pour l\'instant.</p>'}</div></section>
+      <section class="card"><h2>🏟️ Les clubs</h2>
+        <div class="ow-clubs">${clubs.map(c => `<div class="ow-club ${c.status}"><div><b>${esc(c.name)}</b> <span class="muted small">code : ${esc(c.slug)}</span>
+          <span class="muted small">créé le ${fmt(c.created)} · dernière activité ${ago(c.seen)} · ${c.players} joueurs · ${c.staff} dirigeants (${c.accounts} comptes) · ${c.matches} matchs</span>
+          <span class="small"><span class="ow-plan ${c.plan === 'club' ? 'club' : ''}">${c.plan === 'club' ? '⭐ Formule Club' : 'Gratuit'}</span> ${c.teams != null ? `· <b class="${c.plan !== 'club' && +c.teams > FREE_TEAMS ? 'ow-over' : ''}">${c.teams} équipe${c.teams > 1 ? 's' : ''}</b>${c.plan !== 'club' && +c.teams > FREE_TEAMS ? ' (au-delà de la version gratuite)' : ''}` : ''}
+            ${c.week != null ? ` · ${c.week} changement${c.week > 1 ? 's' : ''} en 7 jours · ${c.families || 0} famille${c.families > 1 ? 's' : ''} prévenue${c.families > 1 ? 's' : ''} · 👍 ${c.up || 0} 👎 ${c.down || 0}` : ''}</span></div>
+          <div class="chips"><button class="btn small" data-owplan="${esc(c.id)}" data-plan="${c.plan === 'club' ? 'free' : 'club'}">${c.plan === 'club' ? 'Repasser en gratuit' : '⭐ Formule Club'}</button>
+          <button class="btn ${c.status === 'active' ? 'danger' : 'primary'} small" data-owset="${esc(c.id)}" data-st="${c.status === 'active' ? 'suspended' : 'active'}">${c.status === 'active' ? 'Suspendre' : 'Réactiver'}</button></div></div>`).join('') || '<p class="muted">Aucun club inscrit.</p>'}</div></section>
+      ${(votes || []).length ? `<section class="card"><h2>📊 Avis sur les pages (tous les clubs)</h2><p class="muted small">« Cette page t'aide ? » : les pages les moins aimées d'abord. Ce sont elles à simplifier.</p>
+        <div class="vote-list">${votes.slice(0, 20).map(v => `<div><span>${esc(v.page || '?')}</span><b class="v-up">👍 ${+v.up || 0}</b><b class="v-down">👎 ${+v.down || 0}</b></div>`).join('')}</div></section>` : ''}
+      <section class="card"><h2>🔔 Notifications des téléphones</h2>
+        <p class="muted small">Adresse de la fonction « raincy-push » déployée sur le serveur EA (Supabase → Edge Functions). Tous les clubs en profitent.</p>
+        <label class="fld"><span>Adresse de la fonction</span><input id="owPush" placeholder="https://xxxx.supabase.co/functions/v1/raincy-push"></label>
+        <button class="btn" data-ow="push">Enregistrer</button></section>`;
+    bind(root); mountAlert(root);
+  }
+  /* ---------- (1.22) the requests sent from « Découvrir Clubbo » ---------- */
+  let reqs = [];
+  const isMail = c => /@/.test(c);
+  const phone = c => { const d = String(c).replace(/[^\d+]/g, ''); return d.startsWith('+') ? d.slice(1) : d.startsWith('00') ? d.slice(2) : d.startsWith('0') ? '33' + d.slice(1) : d; };
+  const contactLink = c => isMail(c) ? `<a href="mailto:${esc(c)}">${esc(c)}</a>` : `<a href="tel:${esc(String(c).replace(/[^\d+]/g, ''))}">${esc(c)}</a>`;
+  function requestsCard() {
+    const open = reqs.filter(r => r.status === 'new');
+    return `<section class="card"><h2>📨 Demandes de code${open.length ? ` <span class="ow-new">${open.length} nouvelle${open.length > 1 ? 's' : ''}</span>` : ''}</h2>
+      <p class="muted small">Envoyées depuis la page « Découvrir Clubbo ». « Donner un code » crée le code et prépare le message à envoyer.</p>
+      <div id="owAlert" class="ow-alert"></div>
+      <div class="ow-reqs">${reqs.slice(0, 40).map(r => `<div class="ow-req ${esc(r.status)}"><div><b>${esc(r.club)}</b> <span class="muted small">${[r.sport, r.town, fmt(r.at)].filter(Boolean).map(esc).join(' · ')}</span>
+          <span class="small">${esc(r.name)} · ${contactLink(r.contact)}</span>${r.message ? `<span class="muted small">« ${esc(r.message)} »</span>` : ''}
+          ${r.code ? `<span class="small">Code donné : <code>${esc(r.code)}</code></span>` : ''}</div>
+        <div class="chips">${r.status === 'new' ? `<button class="btn primary small" data-owreq="${esc(r.id)}" data-act="give">Donner un code</button><button class="btn small" data-owreq="${esc(r.id)}" data-act="drop">Écarter</button>`
+          : r.code ? `<button class="btn small" data-owreq="${esc(r.id)}" data-act="send">Renvoyer le message</button>` : '<span class="muted small">Écartée</span>'}</div></div>`).join('') || '<p class="muted">Aucune demande pour l\'instant.</p>'}</div></section>`;
+  }
+  /* a notification on this phone at each new request (the platform's push, the phone then reads ea_owner_news) */
+  const pushOk = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+  const b64 = s => { const p = '='.repeat((4 - s.length % 4) % 4), raw = atob((s + p).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(raw, c => c.charCodeAt(0)); };
+  async function mySub() { try { const reg = await navigator.serviceWorker.ready; return await reg.pushManager.getSubscription(); } catch (e) { return null; } }
+  async function mountAlert(root) {
+    const box = $('#owAlert', root); if (!box) return;
+    if (!pushOk()) { box.innerHTML = '<p class="muted small">🔔 Ce navigateur ne reçoit pas de notifications. Sur iPhone : ajoute d\'abord Clubbo à l\'écran d\'accueil, puis ouvre-le depuis là.</p>'; return; }
+    const sub = await mySub(); let on = false;
+    try { on = sub ? (await Cloud.ownerSub(key(), sub.endpoint)).on : false; } catch (e) {}
+    box.innerHTML = on ? '<p class="small">🔔 Ce téléphone est prévenu à chaque nouvelle demande. <button class="btn small" data-owalert="off">Ne plus me prévenir</button></p>'
+      : '<button class="btn primary small" data-owalert="on">🔔 Me prévenir sur ce téléphone</button>';
+  }
+  async function setAlert(on, root) {
+    try {
+      if (!on) { const sub = await mySub(); if (sub) await Cloud.ownerSub(key(), sub.endpoint, false); toast('Tu ne seras plus prévenu sur ce téléphone'); return mountAlert(root); }
+      if (await Notification.requestPermission() !== 'granted') return toast('Autorise les notifications pour Clubbo dans les réglages du téléphone', 'err');
+      const k = (await Cloud.ownerSub(key())).key; if (!k) return toast('Les notifications ne sont pas encore prêtes sur le serveur', 'err');
+      const reg = await navigator.serviceWorker.ready; let sub = await reg.pushManager.getSubscription();
+      if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64(k) });
+      await Cloud.ownerSub(key(), sub.endpoint, true); toast('C\'est fait : ce téléphone sera prévenu 🔔'); mountAlert(root);
+    } catch (e) { toast(e.message || 'Notifications impossibles sur ce téléphone', 'err'); }
+  }
+  // the code and the way to use it, ready to send by e-mail or WhatsApp
+  function sendCode(r, code) {
+    const first = String(r.name || '').trim().split(/\s+/)[0] || '';
+    const text = `Bonjour ${first}, merci pour ta demande ! Voici le code d'activation Clubbo pour ${r.club} : ${code}\nCrée ton club ici : ${Cloud.appUrl()}#creer (touche « Créer mon club » et colle le code).\nÀ bientôt sur Clubbo !`;
+    modal({ title: 'Envoyer le code', noFocus: true, body: `<p class="muted small">À ${esc(r.name)} (${esc(r.contact)}).</p><textarea id="owMsg" rows="7">${esc(text)}</textarea>`,
+      actions: [
+        isMail(r.contact) ? { label: 'E-mail', kind: 'primary', onClick: (c, x) => { location.href = `mailto:${encodeURIComponent(r.contact)}?subject=${encodeURIComponent('Ton code Clubbo')}&body=${encodeURIComponent($('#owMsg', x).value)}`; return false; } }
+          : { label: 'WhatsApp', kind: 'primary', onClick: (c, x) => { window.open(`https://wa.me/${phone(r.contact)}?text=${encodeURIComponent($('#owMsg', x).value)}`, '_blank'); return false; } },
+        { label: 'Copier', onClick: (c, x) => { navigator.clipboard.writeText($('#owMsg', x).value).then(() => toast('Message copié')).catch(() => toast('Sélectionne le texte et copie-le')); return false; } }] });
+  }
+  async function onRequest(b, redraw) {
+    const r = reqs.find(x => x.id === b.dataset.owreq); if (!r) return;
+    try {
+      if (b.dataset.act === 'drop') { reqs = await Cloud.ownerRequests(key(), r.id, 'dropped'); return redraw(); }
+      if (b.dataset.act === 'send') return sendCode(r, r.code);
+      const codes = await Cloud.ownerCodes(key(), 1, 'Demande : ' + r.club), code = (codes[0] || {}).code;
+      if (!code) return toast('Code non créé', 'err');
+      reqs = await Cloud.ownerRequests(key(), r.id, 'done', code); redraw(); setTimeout(() => sendCode(r, code), 400);
+    } catch (x) { toast(x.message, 'err'); }
+  }
+  function bind(root) {
+    root.onclick = async e => {
+      const b = e.target.closest('[data-ow], [data-owcopy], [data-owset], [data-owreq], [data-owalert], [data-owplan]'); if (!b) return;
+      const redraw = () => page(root);
+      if (b.dataset.owreq) return onRequest(b, redraw);
+      if (b.dataset.owplan) { try { await Cloud.ownerClubPlan(key(), b.dataset.owplan, b.dataset.plan); toast(b.dataset.plan === 'club' ? 'Club passé en formule Club ⭐' : 'Club repassé en gratuit'); redraw(); } catch (x) { toast(x.message, 'err'); } return; }
+      if (b.dataset.owalert) return setAlert(b.dataset.owalert === 'on', root);
+      if (b.dataset.ow === 'in') { const v = $('#owKey', root).value.trim(); if (!v) return toast('Écris ta clé', 'err'); setKey(v); return redraw(); }
+      if (b.dataset.ow === 'init') {
+        const v = $('#owKey', root).value.trim(); if (v.length < 12) return toast('La clé doit faire au moins 12 caractères', 'err');
+        if (!(await confirmBox('Cette clé sera la clé du propriétaire, pour toujours. Tu l\'as bien notée en lieu sûr ?', 'Oui, c\'est ma clé'))) return;
+        try { await Cloud.ownerInit(v); setKey(v); toast('Clé enregistrée'); redraw(); } catch (x) { toast(x.code === 'PROPRIETAIRE' ? 'La clé du propriétaire est déjà choisie (ou le délai de 24 h est passé).' : x.message, 'err'); }
+        return;
+      }
+      if (b.dataset.ow === 'out') { setKey(''); return redraw(); }
+      if (b.dataset.ow === 'new') {
+        return modal({ title: 'Nouveaux codes d\'activation', body: `<label class="fld"><span>Combien ?</span><input id="owN" type="number" min="1" max="50" value="1"></label><label class="fld"><span>Pour qui (note, facultatif)</span><input id="owNote" placeholder="ex : FC Exemple, contact M. Dupont"></label>`,
+          actions: [{ label: 'Annuler' }, { label: 'Créer', kind: 'primary', onClick: (c, r) => { const n = +$('#owN', r).value || 1, note = $('#owNote', r).value.trim(); Cloud.ownerCodes(key(), n, note).then(() => { toast(`${n} code${n > 1 ? 's' : ''} créé${n > 1 ? 's' : ''}`); redraw(); }).catch(x => toast(x.message, 'err')); } }] });
+      }
+      if (b.dataset.owcopy) return navigator.clipboard.writeText(b.dataset.owcopy).then(() => toast('Code copié')).catch(() => toast(b.dataset.owcopy));
+      if (b.dataset.owset) {
+        if (b.dataset.st === 'suspended' && !(await confirmBox('Suspendre ce club ? Plus personne du club (éducateurs, joueurs, parents) ne pourra entrer, jusqu\'à ce que tu le réactives. Ses données sont gardées.', 'Suspendre'))) return;
+        try { await Cloud.ownerClubSet(key(), b.dataset.owset, b.dataset.st); toast(b.dataset.st === 'active' ? 'Club réactivé' : 'Club suspendu'); redraw(); } catch (x) { toast(x.message, 'err'); }
+      }
+      if (b.dataset.ow === 'push') { try { await Cloud.ownerPush(key(), $('#owPush', root).value.trim()); toast('Enregistré'); } catch (x) { toast(x.message, 'err'); } }
+    };
+  }
+  return { page };
+})();
+
+;
 /* ===== president.js ===== */
 /* President: the club at a glance for the responsables (numbers of the season, each category, what needs attention),
    and the club's backups (automatic every Monday on the server, or downloaded by hand). */
@@ -11344,7 +12472,7 @@ var President = (() => {
       <div class="tiles">
         ${tile(S().players.length, 'Licenciés')}${tile(S().staff.length, 'Dirigeants')}${tile(f.rows.length, 'Équipes actives')}
         ${tile(f.played.length, 'Matchs joués')}${tile(V, 'Gagnés', 'v')}${tile(N, 'Nuls', 'n')}${tile(D, 'Perdus', 'd')}
-        ${tile(`${bp}–${bc}`, 'Buts pour – contre')}${tile(avgRate == null ? '–' : avgRate + ' %', 'Présence moyenne')}${tile(f.trs.length, 'Séances passées')}
+        ${tile(`${bp}–${bc}`, Sport.W().Units + ' pour – contre')}${tile(avgRate == null ? '–' : avgRate + ' %', 'Présence moyenne')}${tile(f.trs.length, 'Séances passées')}
       </div>
       <div class="cards2">
         <section class="card"><h2>${I.calendar}Les 7 prochains jours</h2>
@@ -11687,14 +12815,101 @@ var Quick = (() => {
 })();
 
 ;
+/* ===== demo.js ===== */
+/* Demo: a made-up club, filled in, to understand Clubbo in 30 seconds without creating anything.
+   It lives only on this device (no server, nothing is sent), with invented names. The bar at the top says it is a demo,
+   « Créer mon club » leaves it for the real thing, « Quitter » empties it. Offered on the login screen (and #demo). */
+var Demo = (() => {
+  const { esc, $, toast, modal } = UI;
+  const S = () => Store.state;
+  const FIRST = ['Lucas', 'Léa', 'Nathan', 'Inès', 'Hugo', 'Emma', 'Adam', 'Jade', 'Rayan', 'Chloé', 'Yanis', 'Lina', 'Noah', 'Sarah', 'Enzo', 'Manon', 'Ilyes', 'Camille', 'Sacha', 'Zoé', 'Malik', 'Louise', 'Théo', 'Maëlys', 'Ethan', 'Nora'];
+  const LAST = ['Martin', 'Bernard', 'Diallo', 'Petit', 'Moreau', 'Laurent', 'Benali', 'Traoré', 'Garcia', 'Roux', 'Fontaine', 'Cissé', 'Morel', 'Haddad', 'Blanc', 'Kone', 'Mercier', 'Lefèvre', 'Barbier', 'Perrin', 'Rousseau', 'Faure'];
+  const OPP = ['AS Les Lilas', 'US Villemomble', 'ES Gagny', 'FC Neuilly', 'Olympique Rosny', 'AC Bondy', 'Stade Montfermeil', 'CS Livry', 'RC Pavillons', 'JS Noisy'];
+  const SCORE = { foot: [0, 5], basket: [38, 78], hand: [18, 34], rugby: [3, 38], volley: [0, 3] };
+  const is = () => !!(S() && S().club && S().club.demo);
+
+  // the same club each time for the same sport (a seeded draw), so the screenshots and the explanations match
+  function rnd(seed) { let x = seed; return () => { x = (x * 1103515245 + 12345) % 2147483648; return x / 2147483648; }; }
+  function build(sport) {
+    const R = rnd(sport.length * 7919 + 17), pick = a => a[Math.floor(R() * a.length)], int = (a, b) => a + Math.floor(R() * (b - a + 1));
+    const day = n => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+    const SP = Sport.SPORTS[sport], cats = SP.cats, now = Date.now();
+    const chosen = sport === 'foot' ? ['U11', 'U13', 'Seniors'] : [cats[Math.min(3, cats.length - 1)], cats[Math.min(5, cats.length - 1)], 'Seniors'].filter((c, i, a) => cats.includes(c) && a.indexOf(c) === i);
+    const teams = chosen.map(c => ({ id: 'demo-' + c.toLowerCase().replace(/[^a-z0-9]/g, ''), name: c, category: c, format: SP.formatOfCat(c), demo: true }));
+    const posts = SP.posts.filter(p => p[0] !== p[3] || SP.posts.filter(q => q[3] === p[3]).length === 1);
+    const used = new Set(), name = () => { let n; do n = [pick(FIRST), pick(LAST)]; while (used.has(n.join())); used.add(n.join()); return n; };
+    const players = [];
+    teams.forEach((t, ti) => { for (let i = 0; i < 12; i++) { const [fn, ln] = name(); const age = t.name === 'Seniors' ? 24 : +(t.name.match(/\d+/) || [12])[0] - 1;
+      players.push({ id: `demo-p${ti}-${i}`, firstName: fn, lastName: ln.toUpperCase(), teamIds: [t.id], number: i + 1, post: posts[i % posts.length][0], birth: `${new Date().getFullYear() - age}-0${1 + (i % 9)}-1${i % 9}`, updatedAt: now }); } });
+    const me = { id: 'demo-me', lastName: 'DÉMO', firstName: 'Alex', role: 'Responsable du club', teamIds: teams.map(t => t.id), phone: '', email: '', notes: '' };
+    const staff = [me, ...teams.map((t, i) => { const [fn, ln] = name(); return { id: 'demo-s' + i, lastName: ln.toUpperCase(), firstName: fn, role: 'Éducateur', teamIds: [t.id], phone: '', email: '', notes: '' }; })];
+    const [lo, hi] = SCORE[sport] || SCORE.foot, matches = [], trainings = [];
+    const sc = () => sport === 'volley' ? (R() < .55 ? [3, int(0, 2)] : [int(0, 2), 3]) : [int(lo, hi), int(lo, hi)];
+    const exos = (() => { try { return Exos.all().filter(e => !e.club); } catch (e) { return []; } })();
+    teams.forEach((t, ti) => {
+      const roster = players.filter(p => p.teamIds.includes(t.id)), ids = roster.map(p => p.id);
+      [-20, -13, -6].forEach((d, k) => {
+        const [gf, ga] = sc(), conv = ids.slice(0, 10 + (k % 3)), stats = {};
+        if (sport === 'foot' || sport === 'hand') for (let g = 0; g < gf; g++) { const p = pick(conv.slice(1)); (stats[p] = stats[p] || {}).g = ((stats[p] || {}).g || 0) + 1; }
+        const minutes = sport === 'foot' ? Object.fromEntries(conv.map((id, i) => [id, i < 8 ? 60 : int(15, 45)])) : undefined;
+        matches.push({ id: `demo-m${ti}-${k}`, teamId: t.id, date: day(d - ti), time: '15:00', home: k % 2 === 0, opponent: OPP[(ti * 3 + k) % OPP.length], competition: 'Championnat', place: '', rdv: '14:15', played: true, gf, ga, convoked: conv, stats, minutes, notes: '', updatedAt: now });
+      });
+      matches.push({ id: `demo-m${ti}-next`, teamId: t.id, date: day(ti ? 5 + ti : 1), time: ti ? '10:30' : '15:00', home: ti % 2 === 0, opponent: OPP[(ti * 3 + 5) % OPP.length], competition: 'Championnat', place: '', rdv: '', played: false, gf: 0, ga: 0, convoked: ti ? [] : ids.slice(0, 11), stats: {}, notes: '', updatedAt: now });
+      [-9, -2, 1].forEach((d, k) => {
+        const ex = exos.length ? [0, 1, 2, 3].map(i => exos[(ti * 7 + k * 4 + i * 5) % exos.length]) : [];
+        trainings.push({ id: `demo-t${ti}-${k}`, teamId: t.id, date: day(d + ti), time: '18:30', title: ex[1] ? ex[1].title : 'Entraînement', presents: d < 0 ? ids.filter(() => R() < .82) : [],
+          exercises: ex.map((e, i) => ({ id: `demo-e${ti}${k}${i}`, title: e.title, duration: e.duration, org: e.org, consignes: e.consignes, materiel: e.materiel, theme: e.theme || '' })), updatedAt: now });
+      });
+    });
+    return { version: 2, club: { name: 'Club Démo', short: 'Le Club', sport, demo: true, color1: '#1d4ed8', color2: '#0e1d45', slogan: 'Un club, une famille', setupDone: 1, catSeason: People.seasonLabel(), matchTeamsV1: 1, matchTeamsV2: 1, homeBib: 'bleu', awayBib: 'blanc' },
+      ui: { tourSeen: 1 }, teams, players, staff, schemas: [], trainings, matches, reports: [],
+      auth: { users: {}, session: { token: 'demo', staff_id: me.id, admin: true, teams_set: true, demo: true } } };
+  }
+  // the club is replaced by the demo (only on a device without a real club: see Auth's login screen)
+  function start() {
+    document.body.classList.add('modal-top'); // above the login screen
+    modal({ title: '👀 Essayer Clubbo', noFocus: true,
+      body: `<p>Un club inventé, déjà rempli (équipes, joueurs, séances, matchs), pour tout essayer. Il reste sur ce téléphone : <b>rien n'est envoyé</b>, et tu le quittes quand tu veux.</p>
+        <div class="lbl">Quel sport ?</div><div class="quick-menu">${Sport.KEYS.map(k => `<button class="quick-item" data-demo="${k}"><b>${Sport.SPORTS[k].icon}</b><span>${esc(Sport.SPORTS[k].label)}</span></button>`).join('')}</div>`,
+      onOpen: r => r.querySelectorAll('[data-demo]').forEach(b => b.onclick = async () => {
+        const bz = UI.busy('Préparation du club de démonstration…');
+        try {
+          S().club.sport = b.dataset.demo; Sport.apply();
+          const st = build(b.dataset.demo);
+          Object.keys(S()).forEach(k => delete S()[k]); Object.assign(S(), st);
+          Store.save(); await new Promise(res => setTimeout(res, 500));
+          location.hash = '#/'; location.reload();
+        } catch (e) { bz.done(); toast(e.message || 'Démonstration impossible', 'err'); }
+      }) });
+  }
+  async function quit(then) {
+    const bz = UI.busy('Fermeture de la démonstration…');
+    Store.reset(); await new Promise(res => setTimeout(res, 500));
+    location.hash = then || ''; location.reload(); bz.done();
+  }
+  // the bar at the top of every page while the demo is open
+  function bar() {
+    let b = document.getElementById('demoBar');
+    if (!is() || AppCfg.fixed) { if (b) { b.remove(); document.body.classList.remove('demoing'); } return; } // never in the app of one club
+    if (!b) {
+      b = document.createElement('div'); b.id = 'demoBar'; document.body.appendChild(b);
+      b.innerHTML = `<span>👀 <b>Club de démonstration</b><span class="lg"> · inventé, rien n'est envoyé</span></span><span class="chips"><button class="btn primary" data-demo-act="create">Créer mon club</button><button class="btn" data-demo-act="quit">Quitter</button></span>`;
+      b.onclick = e => { const x = e.target.closest('[data-demo-act]'); if (!x) return; quit(x.dataset.demoAct === 'create' ? '#creer' : ''); };
+    }
+    document.body.classList.add('demoing'); document.body.style.setProperty('--dmh', b.offsetHeight + 'px');
+  }
+  return { is, start, quit, bar, build };
+})();
+
+;
 /* ===== views.js ===== */
 /* Views: every screen of the app except the board editor. */
 var Views = (() => {
   const { esc, $, $$, toast, modal, confirmBox, fmtDate, today } = UI;
   const S = () => Store.state;
   const teamOf = id => Store.get('teams', id);
-  const fmtLabel = f => ({ '8': 'Foot à 8', '5': 'Foot à 5', zone: 'Zone libre' }[f] || 'Foot à 11');
-  const FORMATS = [['11', 'Foot à 11'], ['8', 'Foot à 8'], ['5', 'Foot à 5']];
+  const fmtLabel = f => Sport.formatLabel(f || Sport.defFormat());
+  const formats = () => Sport.cur().formats.map(x => [x[0], x[1]]);
   const pName = Store.fullName;
   const pLabel = p => `${p.number ? p.number + ' · ' : ''}${pName(p)}`;
   // name on a roster chip, with the positions in short (« DC/LD »)
@@ -11757,13 +12972,13 @@ var Views = (() => {
       <button class="btn primary" data-connect>${I.check}<span>Me connecter au serveur</span></button></section>`;
   }
   function setupCard() {
-    if (!Auth.isAdmin()) return '';
+    if (!Auth.isAdmin() || S().club.demo) return ''; // the demo club is already set up
     const st = S(), steps = [
-      [st.players.length > 0, 'Charger les licenciés', 'Réglages → Recevoir un fichier (fichier des licenciés)', '#/reglages'],
-      [st.staff.length > 1, 'Ajouter les éducateurs et dirigeants', 'Équipes → Dirigeants → Coller une liste ou Nouveau dirigeant', '#/dirigeants'],
-      [Cloud.ready(), 'Connecter le serveur du club', 'Touche ici, puis « Je suis le responsable du club »', '#/connexion'],
-      [!!st.club.reportEmail, 'Indiquer ton e-mail pour les signalements', 'Réglages → Aide et signalements', '#/reglages'],
-      [!!(st.ui.invited || st.ui.clubFileSent), 'Inviter les éducateurs', 'Réglages → Serveur du club → Inviter les éducateurs (lien à envoyer par WhatsApp)', '#/reglages'],
+      [!!(st.club.crest || st.club.city), 'Personnaliser le club', 'Réglages → Le club : blason, couleurs, ville, catégories', '#/reglages'],
+      [st.players.length > 0, 'Importer les joueurs', 'Réglages → Le club → Importer des données (photo, PDF, Excel…)', '#/reglages'],
+      [st.matches.length > 0, 'Importer les matchs', 'Réglages → Le club → Importer des données → Mes matchs', '#/reglages'],
+      [st.staff.length > 1, 'Ajouter les éducateurs et dirigeants', 'Importer une liste, ou Équipes → Dirigeants → Nouveau dirigeant', '#/dirigeants'],
+      [!!st.ui.invited, 'Inviter les éducateurs', 'Réglages → Inviter les éducateurs (lien à envoyer par WhatsApp)', '#/reglages'],
     ];
     if (steps.every(s => s[0])) return '';
     return `<section class="card setup-card"><h2>${I.check}Mise en route du club</h2><ol class="setup-steps">${steps.map(([ok, t, how, href]) =>
@@ -11792,11 +13007,11 @@ var Views = (() => {
     const tomorrowM = matchesOn(addDays(now, 1));
     // The greeting follows the coach's day: match, session, eve of a match, or an ordinary day
     let title = `${hello} ${esc(coach)} 👋`, box = '';
-    const items = [...todayM.map(m => `⚽ ${esc(matchLabel(m))}${m.time ? ' à ' + esc(m.time) : ''}`), ...todayT.map(t => `🏃 Séance${esc(tName(t.teamId))}${t.time ? ' à ' + esc(t.time) : ''}`)].slice(0, 2);
+    const items = [...todayM.map(m => `${Sport.W().icon} ${esc(matchLabel(m))}${m.time ? ' à ' + esc(m.time) : ''}`), ...todayT.map(t => `🏃 Séance${esc(tName(t.teamId))}${t.time ? ' à ' + esc(t.time) : ''}`)].slice(0, 2);
     const firstTime = (todayM[0] || todayT[0] || {}).time || '';
-    if (todayM.length) { title = `Bon match, ${esc(coach)} ⚽`; box = `<b>Aujourd'hui</b> · ${items.join(' · ')}<span class="hero-wx" id="heroWx"></span><i class="hero-wish">Tout le club est derrière vous. Allez Raincy !</i>`; }
+    if (todayM.length) { title = `Bon match, ${esc(coach)} ${Sport.W().icon}`; box = `<b>Aujourd'hui</b> · ${items.join(' · ')}<span class="hero-wx" id="heroWx"></span><i class="hero-wish">Tout le club est derrière vous. Allez ${esc(S().club.short || 'le club')} !</i>`; }
     else if (todayT.length) { title = `Bonne séance, ${esc(coach)} 💪`; box = `<b>Aujourd'hui</b> · ${items.join(' · ')}<span class="hero-wx" id="heroWx"></span><i class="hero-wish">En espérant un entraînement bénéfique pour tes joueurs !</i>`; }
-    else if (tomorrowM.length) box = `<b>Demain</b> · ⚽ ${esc(matchLabel(tomorrowM[0]))}${tomorrowM[0].time ? ' à ' + esc(tomorrowM[0].time) : ''}<i class="hero-wish">Bonne préparation, et repose bien tes troupes !</i>`;
+    else if (tomorrowM.length) box = `<b>Demain</b> · ${Sport.W().icon} ${esc(matchLabel(tomorrowM[0]))}${tomorrowM[0].time ? ' à ' + esc(tomorrowM[0].time) : ''}<i class="hero-wish">Bonne préparation, et repose bien tes troupes !</i>`;
     // the next match of the day or of tomorrow: straight to its preparation
     const refW = Refs.waiting(); if (refW) box += `<a class="hero-prep hero-vol" href="#/arbitres">🟨 ${refW} match${refW > 1 ? 's' : ''} à domicile attend${refW > 1 ? 'ent' : ''} ta réponse (arbitre)</a> `;
     const duty = Vol.mine(2); if (duty.length) box += `<a class="hero-prep hero-vol" href="#/benevoles">🙋 ${duty.map(({ m, t }) => `${t.icon} ${esc(t.label)} ${m.date === now ? 'aujourd\'hui' : 'demain'}`).join(' · ')}</a> `;
@@ -11838,6 +13053,7 @@ var Views = (() => {
       ${serverBanner()}
       ${teamSwitch()}
       ${setupCard()}
+      ${Onboard.planCard()}
       ${Quick.matchDayCard()}
       ${Quick.tomorrowCard()}
       ${Quick.backupCard()}
@@ -11909,7 +13125,7 @@ var Views = (() => {
     modal({ title: 'Nouvelle catégorie', body: `
       <label class="fld"><span>Nom</span><input id="tName" placeholder="ex : U11 A" maxlength="40"></label>
       <label class="fld"><span>Catégorie</span><input id="tCat" placeholder="ex : U11, Seniors" maxlength="20"></label>
-      <div class="lbl">Format</div><div class="chips" id="tFmt">${FORMATS.map(([v, l], i) => `<button class="chip ${i ? '' : 'on'}" data-v="${v}">${l}</button>`).join('')}</div>`,
+      <div class="lbl">Format</div><div class="chips" id="tFmt">${formats().map(([v, l], i) => `<button class="chip ${i ? '' : 'on'}" data-v="${v}">${l}</button>`).join('')}</div>`,
       onOpen: r => $$('#tFmt .chip', r).forEach(b => b.onclick = () => { $$('#tFmt .chip', r).forEach(x => x.classList.remove('on')); b.classList.add('on'); }),
       actions: [{ label: 'Annuler' }, { label: 'Créer', kind: 'primary', onClick: (c, r) => {
         const name = $('#tName', r).value.trim(); if (!name) { toast('Donne un nom à la catégorie', 'err'); return false; }
@@ -11925,7 +13141,7 @@ var Views = (() => {
         `<a class="btn" href="#/equipes">${I.back}<span>Équipes</span></a>`)}
         <section class="card">
           <div class="row-head"><label class="fld inline"><span>Catégorie</span><input id="tCat" value="${esc(t.category || '')}" maxlength="20"></label>
-          <div class="chips">${FORMATS.map(([v, l]) => `<button class="chip ${t.format === v ? 'on' : ''}" data-fmt="${v}">${l}</button>`).join('')}</div></div>
+          <div class="chips">${formats().map(([v, l]) => `<button class="chip ${t.format === v ? 'on' : ''}" data-fmt="${v}">${l}</button>`).join('')}</div></div>
           ${Auth.isAdmin() && Importer.letterNo(t) ? `<label class="fld" style="margin-top:12px"><span>Nom au District (pour ranger les matchs importés)</span><select id="tDistrict">${[1, 2, 3, 4].map(n => `<option value="${n}" ${Importer.districtNo(t) === n ? 'selected' : ''}>${esc(S().club.name)}${n > 1 ? ' ' + n : ''}</option>`).join('')}</select></label>` : ''}
         </section>
         <div id="teamPeople"></div>
@@ -11966,7 +13182,7 @@ var Views = (() => {
     const filt = S().ui.schemaFilter || '';
     const list = S().schemas.filter(s => Auth.sees(s.teamId) && (!filt || s.field.format === filt)).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
     root.innerHTML = `${header('Schémas', 'Exercices et tactiques animés', `<a class="btn" href="#/bibliotheque">${I.video}<span>Bibliothèque</span></a><button class="btn" data-act="import">${I.upload}<span>Recevoir</span></button><button class="btn" data-act="fromFile">${I.pdf}<span>Depuis un fichier (PDF, image, vidéo)</span></button><button class="btn" data-act="board">${I.edit}<span>Tableau blanc</span></button><button class="btn" data-act="models">${I.layers}<span>Modèles</span></button><button class="btn primary" data-act="new">${I.plus}<span>Nouveau schéma</span></button>`)}
-      <div class="chips filter">${[['', 'Tous'], ['11', 'Foot à 11'], ['8', 'Foot à 8'], ['5', 'Foot à 5'], ['zone', 'Zones libres']].map(([v, l]) => `<button class="chip ${v === filt ? 'on' : ''}" data-f="${v}">${l}</button>`).join('')}</div>
+      <div class="chips filter">${[['', 'Tous'], ...formats(), ['zone', 'Zones libres']].map(([v, l]) => `<button class="chip ${v === filt ? 'on' : ''}" data-f="${v}">${l}</button>`).join('')}</div>
       ${list.length ? `<div class="grid">${list.map(s => `<article class="card schema-card">
           <a href="#/schema/${s.id}" class="thumb"><img alt="" src="${UI.thumb(s)}"></a>
           <div class="sc-meta"><a href="#/schema/${s.id}"><b>${esc(s.name)}</b></a><span class="muted">${s.field.format === 'zone' ? `Zone ${s.field.w}×${s.field.h} m` : fmtLabel(s.field.format)} · ${s.steps.length} étape${s.steps.length > 1 ? 's' : ''}</span></div>
@@ -11990,6 +13206,14 @@ var Views = (() => {
   // Ready-made exercises: the coach picks one, it becomes his own schema (animated, with notes) that he adapts
   let tplThumbs = null;
   function pickTemplate(opts = {}) {
+    // the other sports: their base exercises, already animated by the app
+    if (!Sport.isFoot()) {
+      const list = Exos.all().filter(e => e.base);
+      const close = modal({ title: `Modèles · ${Sport.cur().icon} ${Sport.cur().label}`, noFocus: true,
+        body: `<p class="muted small">Chaque modèle est animé : touche-le pour en faire ton schéma, puis change ce que tu veux.</p><div class="pick-grid">${list.map(e => `<button class="pick" data-atpl="${esc(e.id)}"><img alt="" src="${UI.thumb(AutoSchema.preview(e), 320, 208)}"><span><b>${esc(e.title)}</b><span class="muted small">${e.duration} min</span></span></button>`).join('')}</div>`,
+        onOpen: r => $$('[data-atpl]', r).forEach(b => b.onclick = () => { const e = list.find(x => x.id === b.dataset.atpl); const sc = AutoSchema.save(e, opts.teamId || activeTeam()); close(); if (opts.onCreate) opts.onCreate(sc); location.hash = '#/schema/' + sc.id; }) });
+      return;
+    }
     const t = teamOf(opts.teamId || activeTeam());
     if (!tplThumbs) tplThumbs = Object.fromEntries(Templates.LIST.map(x => [x.key, UI.thumb(x.build(), 320, 208)]));
     const close = modal({ title: 'Partir d\'un modèle', noFocus: true,
@@ -12003,10 +13227,10 @@ var Views = (() => {
   }
   // Whiteboard: a blank pitch, full screen, nothing saved (to explain something at half-time or in the changing room)
   function whiteboard() {
-    const t = teamOf(activeTeam()), fmt = t ? t.format : '11';
+    const t = teamOf(activeTeam()), fmt = t ? t.format : Sport.defFormat();
     const close = modal({ title: 'Tableau blanc', noFocus: true,
       body: `<p>Un terrain vierge en plein écran pour expliquer une idée tout de suite (mi-temps, vestiaire, causerie). <b>Rien n'est enregistré</b> : en quittant, le dessin disparaît, sauf si tu touches « Garder ».</p>
-        <div class="lbl">Terrain</div><div class="chips">${[...FORMATS, ['zone', 'Zone libre']].map(([v, l]) => `<button class="chip ${v === fmt ? 'on' : ''}" data-wb="${v}">${l}</button>`).join('')}</div>`,
+        <div class="lbl">Terrain</div><div class="chips">${[...formats(), ['zone', 'Zone libre']].map(([v, l]) => `<button class="chip ${v === fmt ? 'on' : ''}" data-wb="${v}">${l}</button>`).join('')}</div>`,
       onOpen: r => $$('[data-wb]', r).forEach(b => b.onclick = () => {
         close();
         // the tap itself asks for full screen (browsers only allow it right after a touch)
@@ -12021,7 +13245,7 @@ var Views = (() => {
       <button class="btn soft wide" id="sTpl" type="button">${I.layers}<span>Partir d'un modèle (rondo, 3 contre 2, conservation…)</span></button>
       <label class="fld"><span>Nom</span><input id="sName" value="${esc(opts.name || '')}" placeholder="ex : Conservation 5 contre 5" maxlength="80"></label>
       <div class="lbl">Terrain</div>
-      <div class="chips" id="sFmt">${[...FORMATS, ['zone', 'Zone libre']].map(([v, l]) => `<button class="chip ${v === (t ? t.format : '11') ? 'on' : ''}" data-v="${v}">${l}</button>`).join('')}</div>
+      <div class="chips" id="sFmt">${[...formats(), ['zone', 'Zone libre']].map(([v, l]) => `<button class="chip ${v === (t ? t.format : Sport.defFormat()) ? 'on' : ''}" data-v="${v}">${l}</button>`).join('')}</div>
       <div class="chips" id="sView"><button class="chip on" data-v="full">Terrain entier</button><button class="chip" data-v="half">Demi-terrain</button></div>
       <div class="row2" id="sDims" hidden><label class="fld"><span>Longueur (m)</span><input type="number" id="sW" value="30" min="5" max="110"></label><label class="fld"><span>Largeur (m)</span><input type="number" id="sH" value="20" min="5" max="75"></label></div>`,
       onOpen: (r, close) => {
@@ -12224,7 +13448,7 @@ var Views = (() => {
       return `<a class="list-item ${side(m)}" href="#/match/${m.id}"><div class="date-box"><b>${new Date(m.date + 'T12:00').getDate()}</b><span>${esc(fmtDate(m.date, { month: 'short' }))}</span></div>
       <div class="li-main"><b>${matchTitle(m)}</b><span class="muted">${tm ? `<i class="li-cat" style="background:${Planning.teamColor(tm.id)}">${esc(tm.name)}</i> ` : ''}${m.exempt ? '' : sideTag(m) + (m.time ? ' · ' + esc(m.time) : '')}</span></div>
       ${m.played ? `<span class="score">${scoreTxt(m)}</span>${resPill(m)}` : ''}${I.next}</a>`; };
-    root.innerHTML = `${header('Matchs', 'Agenda et résultats de tout le club', `<button class="btn" data-act="imp">${I.upload}<span>Importer (FFF, agenda…)</span></button><button class="btn primary" data-act="new">${I.plus}<span>Nouveau match</span></button>`)}
+    root.innerHTML = `${header('Matchs', 'Agenda et résultats de tout le club', `<button class="btn" data-act="imp">${I.upload}<span>Importer (${esc(Sport.fed()[0])}, agenda…)</span></button><button class="btn primary" data-act="new">${I.plus}<span>Nouveau match</span></button>`)}
       ${coach && !t ? `<div class="seg"><button class="seg-b ${scope === 'club' ? 'on' : ''}" data-scope="club">🏟️ Tout le club</button><button class="seg-b ${scope === 'mine' ? 'on' : ''}" data-scope="mine">⭐ Mes équipes</button></div>` : ''}
       <label class="team-select all-sizes"><span>Catégorie</span><select data-mteam aria-label="Catégorie"><option value="">Toutes les catégories</option>
         ${S().teams.map(x => `<option value="${x.id}" ${x.id === t ? 'selected' : ''}>${esc(Store.teamLabel(x))}</option>`).join('')}</select></label>
@@ -12254,9 +13478,9 @@ var Views = (() => {
   }
   /* ---------- convocation to send on WhatsApp (to the parents' group) ---------- */
   function convocationText(m) {
-    const t = teamOf(m.teamId), conv = (t ? Store.rosterOf(t.id) : []).filter(p => (m.convoked || []).includes(p.id)), club = S().club.name || 'FA Le Raincy';
+    const t = teamOf(m.teamId), conv = (t ? Store.rosterOf(t.id) : []).filter(p => (m.convoked || []).includes(p.id)), club = S().club.name || 'Le club';
     const hh = x => String(x || '').replace(':', 'h'), me = Auth.current();
-    return [`⚽ *${club}${t ? ' · ' + t.name : ''}*`, `*Convocation – ${fmtDate(m.date, { weekday: 'long', day: 'numeric', month: 'long' })}*`, '',
+    return [`${Sport.W().icon} *${club}${t ? ' · ' + t.name : ''}*`, `*Convocation – ${fmtDate(m.date, { weekday: 'long', day: 'numeric', month: 'long' })}*`, '',
       `Match ${m.home ? 'à domicile' : 'à l\'extérieur'} contre *${m.opponent || '?'}*${m.competition ? ' (' + m.competition + ')' : ''}`,
       m.place || m.home ? `📍 ${m.place || S().club.fieldName || 'Stade du club'}` : '',
       m.rdv || m.time ? `🕘 ${m.rdv ? 'Rendez-vous ' + hh(m.rdv) : ''}${m.rdv && m.time ? ' · ' : ''}${m.time ? 'coup d\'envoi ' + hh(m.time) : ''}` : '🕘 Horaire à confirmer', '',
@@ -12332,12 +13556,12 @@ var Views = (() => {
         <section class="card">
           <label class="switch"><input type="checkbox" id="mPlayed" ${m.played ? 'checked' : ''}><span>Le match est joué</span></label>
           ${Ratings.smileyPicker(m)}
-          ${m.played ? `<div class="score-board">${stepper('gf', m.gf, esc(S().club.name))}${stepper('ga', m.ga, esc(m.opponent))}</div>
+          ${m.played ? `<div class="score-board">${stepper('gf', m.gf, esc(S().club.name))}${stepper('ga', m.ga, esc(m.opponent))}</div>${Sport.cur().sets ? `<p class="muted small" style="text-align:center">Sets gagnés${(m.sets || []).length ? ' · ' + m.sets.map(s => s.join('-')).join(', ') : ''}</p>` : ''}
             ${ClubLife.cheerBar(m)}
-            ${conv.length ? `<div class="lbl">Buteurs et passeurs</div><div class="scorers">${conv.map(p => { const st = (m.stats || {})[p.id] || {};
+            ${conv.length ? `<div class="lbl">${Sport.W().Scorers} et passeurs${Sport.isFoot() || Sport.id() === 'hand' ? '' : ' (' + Sport.W().units + ' de chaque joueur)'}</div><div class="scorers">${conv.map(p => { const st = (m.stats || {})[p.id] || {};
               return `<div class="scorer"><span class="nm">${esc(pLabel(p))}</span>
-                <span class="mini-step" title="Buts">${I.ball}<button data-pl="${p.id}" data-k="g" data-d="-1" aria-label="Moins de buts">−</button><b>${st.g || 0}</b><button data-pl="${p.id}" data-k="g" data-d="1" aria-label="Plus de buts">+</button></span>
-                <span class="mini-step" title="Passes décisives"><em>P</em><button data-pl="${p.id}" data-k="a" data-d="-1" aria-label="Moins de passes">−</button><b>${st.a || 0}</b><button data-pl="${p.id}" data-k="a" data-d="1" aria-label="Plus de passes">+</button></span></div>`; }).join('')}</div>` : '<p class="tip">Coche les convoqués pour noter les buteurs.</p>'}` : ''}
+                <span class="mini-step" title="${Sport.W().Units}">${Sport.isFoot() ? I.ball : Sport.W().icon}<button data-pl="${p.id}" data-k="g" data-d="-1" aria-label="Moins de ${Sport.W().units}">−</button><b>${st.g || 0}</b><button data-pl="${p.id}" data-k="g" data-d="1" aria-label="Plus de ${Sport.W().units}">+</button></span>
+                <span class="mini-step" title="Passes décisives"><em>P</em><button data-pl="${p.id}" data-k="a" data-d="-1" aria-label="Moins de passes">−</button><b>${st.a || 0}</b><button data-pl="${p.id}" data-k="a" data-d="1" aria-label="Plus de passes">+</button></span></div>`; }).join('')}</div>` : `<p class="tip">Coche les convoqués pour noter les ${Sport.W().scorers}.</p>`}` : ''}
           <label class="fld"><span>Notes</span><textarea data-f="notes" rows="3" placeholder="Ce qui a marché, ce qu'on travaille la semaine prochaine">${esc(m.notes || '')}</textarea></label>
         </section>
         ${m.played && conv.length ? minutesCard(m, conv) + Season.detailCard(m) + Health.rpeBox(m, conv.map(p => p.id), 'match') : ''}
@@ -12414,7 +13638,7 @@ var Views = (() => {
   }
   function makeLineup(m) {
     const t = teamOf(m.teamId); if (!t) return toast('Choisis une équipe', 'err');
-    const fmt = Formations[t.format] ? t.format : '11', forms = Object.keys(Formations[fmt]); // a team without a known format plays at 11
+    const fmt = Formations[t.format] ? t.format : Sport.defFormat(), forms = Object.keys(Formations[fmt] || Formations['11']); // a team without a known format plays at 11
     const nConv = Store.rosterOf(t.id).filter(p => (m.convoked || []).includes(p.id)).length;
     modal({ title: 'Composition', body: `<label class="fld"><span>Système</span><select id="lf">${formationOptions(Formations[t.format] ? t.format : fmt)}</select></label>
       ${nConv ? `<p class="tip">Les ${nConv} convoqués sont placés selon leur poste (le DC dans l'axe, le LD à droite, l'AG à gauche…). Les autres sont notés comme remplaçants. Tu pourras tout déplacer.</p>`
@@ -12466,14 +13690,14 @@ var Views = (() => {
         <div class="tile v"><b>${V}</b><span>Gagnés</span></div>
         <div class="tile n"><b>${N}</b><span>Nuls</span></div>
         <div class="tile d"><b>${D}</b><span>Perdus</span></div>
-        <div class="tile"><b>${bp}</b><span>Buts marqués</span></div>
-        <div class="tile"><b>${bc}</b><span>Buts encaissés</span></div>
-        <div class="tile"><b>${V * 3 + N}</b><span>Points</span></div>
+        <div class="tile"><b>${bp}</b><span>${Sport.W().Units} marqués</span></div>
+        <div class="tile"><b>${bc}</b><span>${Sport.W().Units} encaissés</span></div>
+        <div class="tile"><b>${Sport.leaguePts(V, N, D)}</b><span>Points au classement</span></div>
       </div>
       ${(() => { const low = People.lowPlaytime(t.id); return low.length ? `<section class="card playtime-card"><h2>⏱️ Temps de jeu à surveiller</h2><p class="muted small">Joueurs qui ont joué moins de la moitié de la moyenne de l'équipe (${low[0].avg} min) sur les matchs où le temps de jeu est noté.</p><ul class="alerts">${low.map(x => `<li><a href="#/joueur/${x.p.id}"><b>${esc(pName(x.p))}</b></a> : ${x.min} min${x.conv ? ` · ${x.conv} convocation${x.conv > 1 ? 's' : ''}` : ' · jamais convoqué'}</li>`).join('')}</ul></section>` : ''; })()}
       <h2 class="section">Joueurs</h2>
       <div class="table-wrap"><table class="tbl">
-        <thead><tr>${th('num', 'N°')}${th('name', 'Joueur')}${th('post', 'Poste')}${th('played', 'Matchs')}${th('min', 'Minutes')}${th('g', 'Buts')}${th('a', 'Passes déc.')}${th('pr', 'Entraînements')}${th('nm', 'Note matchs')}${th('nt', 'Note entr.')}</tr></thead>
+        <thead><tr>${th('num', 'N°')}${th('name', 'Joueur')}${th('post', 'Poste')}${th('played', 'Matchs')}${th('min', 'Minutes')}${th('g', Sport.W().Units)}${th('a', Sport.W().Assists)}${th('pr', 'Entraînements')}${th('nm', 'Note matchs')}${th('nt', 'Note entr.')}</tr></thead>
         <tbody>${rows.map(r => `<tr><td class="num">${esc(r.p.number)}</td><td><a href="#/joueur/${r.p.id}">${esc(pName(r.p))}</a></td><td class="muted">${esc(r.post) || '–'}</td><td>${r.played}</td><td>${r.min ? r.min + "'" : '–'}</td><td><b>${r.g}</b></td><td>${r.a}</td><td>${r.rate === null ? '–' : `${r.pr} <span class="muted">(${r.rate} %)</span>`}</td><td>${r.nm ? '⭐ ' + Ratings.fr(r.nm) : '–'}</td><td>${r.nt ? '⭐ ' + Ratings.fr(r.nt) : '–'}</td></tr>`).join('')}</tbody>
       </table></div>
       <h2 class="section">Résultats</h2>
@@ -12492,14 +13716,11 @@ var Views = (() => {
       ${Auth.settingsSection()}
       ${Cloud.settingsSection()}
       ${Help.settingsSection()}
+      ${Auth.isAdmin() ? Onboard.card() : ''}
       ${Auth.isAdmin() ? `<section class="card">
-        <h2>${I.team}Club</h2>
-        <label class="fld"><span>Nom du club</span><input id="clubName" value="${esc(c.name)}" maxlength="40"></label>
+        <h2>${I.team}Tableau tactique</h2>
         <div class="lbl">Couleur de nos maillots</div>${bibs('home', c.homeBib)}
         <div class="lbl">Couleur des adversaires</div>${bibs('away', c.awayBib)}
-        <div class="lbl">Importer des données</div>
-        <p class="muted small">Joueurs, matchs ou dirigeants depuis une photo, une capture d'écran, un PDF, un fichier Excel / CSV ou un texte copié. Tu vérifies le tableau avant d'importer : rien n'est créé en double.</p>
-        <div class="chips"><button class="btn primary" data-imp="players">👥<span>Joueurs</span></button><button class="btn" data-imp="matches">⚽<span>Matchs</span></button><button class="btn" data-imp="staff">🧢<span>Dirigeants</span></button></div>
       </section>` : ''}
       <section class="card">
         <h2>${I.share}Fichiers du club</h2>
@@ -12522,16 +13743,15 @@ var Views = (() => {
         <p class="muted">${Cloud.ready() ? 'Efface les données de cet appareil seulement (elles restent sur le serveur du club et reviennent à la prochaine connexion).' : 'Les données sont enregistrées sur cet appareil uniquement. Pense à envoyer une copie avant d\'effacer.'}</p>
         <button class="btn danger" data-act="reset">${I.trash}<span>Effacer les données de cet appareil</span></button>
       </section>` : ''}
-      <p class="muted small">Raincy Coach · appli créée par <b>Coach Enzo</b> · version ${Help.VERSION} · <button class="linkish" onclick="App.checkUpdate(true)">Mettre à jour l'appli</button> · <a href="confidentialite.html">Confidentialité</a></p>`;
+      <p class="muted small">${esc(AppCfg.name)} · créée par <b>Coach Enzo</b> · version ${Help.VERSION} · <button class="linkish" onclick="App.checkUpdate(true)">Mettre à jour l'appli</button> · <a href="confidentialite.html">Confidentialité</a></p>`;
     Help.onSettings(root, () => settings(root));
     Auth.mountSettings(root); Notify.mountAccount(root); Notify.mountAdmin(root);
     root.onchange = e => { if (e.target.dataset.notifpref) return Notify.onChange(e.target); Auth.onSettingsChange(e.target); };
-    const cn = $('#clubName', root); if (cn) cn.oninput = e => { c.name = e.target.value || 'Mon club'; Store.save(); App.refreshChrome(); };
     root.onclick = async e => {
+      if (Onboard.onClick(e, () => settings(root))) return;
       const b = e.target.closest('button'); if (!b) return;
       if (b.dataset.home) { c.homeBib = b.dataset.home; Store.save(); App.refreshChrome(); return settings(root); }
       if (b.dataset.away) { c.awayBib = b.dataset.away; Store.save(); return settings(root); }
-      if (b.dataset.imp) return Imports.open(b.dataset.imp, () => settings(root));
       if (b.dataset.act === 'exportAll') return runExport('Préparation du fichier…', async () => { S().ui.clubFileSent = true; Store.save(); return Exporter.json(await Library.withBackgrounds(Store.exportAll()), `${c.name}-${today()}`); });
       if (b.dataset.notif) return Notify.onClick(b, () => settings(root));
       if (b.dataset.auth || b.dataset.reset || b.dataset.revoke) return Auth.onSettingsClick(b, () => settings(root));
@@ -12682,8 +13902,10 @@ var App = (() => {
       document.body.classList.add('previewing');
       document.body.style.setProperty('--pvh', bar.offsetHeight + 'px');
     } else if (bar) { bar.remove(); document.body.classList.remove('previewing'); }
+    Demo.bar();
     document.documentElement.style.setProperty('--accent', UI.accentFor(c.homeBib));
-    document.getElementById('clubName').textContent = c.name;
+    document.getElementById('clubName').textContent = c.name || AppCfg.name;
+    Supporters.refresh();
     const u = Auth.current(), ru = document.getElementById('railUser');
     // The connected coach: his initials with his favourite club's crest, and « Coach Prénom » (opens Mon compte)
     const coach = u ? Messages.coachName(u) : '', first = coach.replace(/^Coach /, '');
@@ -12692,7 +13914,7 @@ var App = (() => {
         <span class="ru-name">${UI.esc(coach)}</span></a>${Auth.realAdmin() ? '<button class="ru-out" id="rolesBtn" title="Mes rôles">🔀 Rôles</button>' : ''}<button class="ru-out" id="logoutBtn">Sortir</button>` : '';
     const rb = document.getElementById('rolesBtn'); if (rb) rb.onclick = () => Roles.open();
     const lo = document.getElementById('logoutBtn'); if (lo) lo.onclick = () => Auth.logout();
-    document.title = (u ? coach + ' · ' : '') + c.name;
+    document.title = (u ? coach + ' · ' : '') + (c.name || AppCfg.name);
   }
   function renderNav(active) {
     // the responsables also have the club's dashboard (before Réglages)
@@ -12742,7 +13964,7 @@ var App = (() => {
       planning: r => Planning.page(r), resultats: r => Results.page(r), club: (r, x) => ClubLife.page(r, x), messages: (r, x) => Messages.page(r, x),
       bibliotheque: r => Library.page(r), joueurs: r => People.listPage(r, 'player'), dirigeants: r => People.listPage(r, 'staff'),
       joueur: (r, x) => People.playerPage(r, x), president: r => President.page(r), licences: r => ClubAdmin.licencesPage(r), encadrement: r => ClubAdmin.staffingPage(r), vestiaires: r => Rooms.page(r),
-      tests: (r, x) => Tests.page(r, x), bilan: (r, x) => Season.page(r, x), benevoles: r => Vol.page(r), arbitres: r => Refs.page(r), systemes: r => SesLib.page(r), gestion: r => Gestion.page(r), exercices: r => Exos.page(r), infirmerie: r => Health.page(r), progression: (r, x) => Progress.page(r, x), prepa: (r, x) => Prepa.page(r, x, sub), direct: (r, x) => Live.page(r, x), jourj: (r, x) => Quick.matchDay(r, x), analyse: (r, x) => Analyse.page(r, x), briefing: (r, x) => Analyse.briefingPage(r, x), codes: (r, x) => Codes.page(r, x) }[name] || Views.home;
+      tests: (r, x) => Tests.page(r, x), bilan: (r, x) => Season.page(r, x), benevoles: r => Vol.page(r), arbitres: r => Refs.page(r), systemes: r => SesLib.page(r), gestion: r => Gestion.page(r), exercices: r => Exos.page(r), infirmerie: r => Health.page(r), progression: (r, x) => Progress.page(r, x), prepa: (r, x) => Prepa.page(r, x, sub), direct: (r, x) => Live.page(r, x), jourj: (r, x) => Quick.matchDay(r, x), analyse: (r, x) => Analyse.page(r, x), briefing: (r, x) => Analyse.briefingPage(r, x), codes: (r, x) => Codes.page(r, x), proprietaire: r => Owner.page(r) }[name] || Views.home;
     if (!keep) Help.visit();
     fn(root, id);
     Help.guideInto(root);
@@ -12779,7 +14001,7 @@ var App = (() => {
   })();
   /* Updates: version.json on the site says which build is online. When it is newer than this one,
      the app empties its offline copy and reloads (an iPhone can keep an old copy open for days). */
-  const BUILD = 116, UPD = 'raincy-update-tried';
+  const BUILD = 117, UPD = AppCfg.key('update-tried');
   async function onlineBuild() {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
     return (await r.json()).build || 0;
@@ -12811,6 +14033,14 @@ var App = (() => {
     }
     if (manual) { UI.busy('Rechargement de l\'appli…'); forceUpdate(); }
   }
+  // (fusion) the app of one club: the club's settings (name, slogan, town, FFF page…) given by js/config.js when they are missing
+  function fillDefaults() {
+    if (!AppCfg.fixed || !Auth.isAdmin()) return false;
+    const c = Store.state.club, d = AppCfg.defaults; let n = 0;
+    Object.keys(d).forEach(k => { if (c[k] == null || c[k] === '') { c[k] = d[k]; n++; } });
+    if (n) { Store.save(); refreshChrome(); }
+    return n > 0;
+  }
   async function start() {
     if ('serviceWorker' in navigator && location.protocol !== 'file:') {
       navigator.serviceWorker.register('sw.js').catch(() => {});
@@ -12821,6 +14051,9 @@ var App = (() => {
     try { await Store.load(); }
     catch (e) { document.getElementById('app-stuck') || document.body.insertAdjacentHTML('beforeend', `<div id="app-stuck" style="position:fixed;inset:0;z-index:300;display:flex;align-items:center;justify-content:center;padding:16px;background:#f2f0ee"><div style="max-width:380px;text-align:center;font:16px system-ui;color:#14172b"><p><b>L'appli n'a pas pu s'ouvrir.</b><br>Tes données sont toujours sur le téléphone.</p><button style="font:inherit;padding:12px 18px;border-radius:12px;border:0;background:#8c1024;color:#fff" onclick="location.reload()">Recharger</button></div></div>`); return; }
     window.__appStarted = true; // the data are read: the safety net of index.html is not needed
+    Sport.apply();
+    // the owner's space of Clubbo: no club account needed (the owner key is asked on the page)
+    if (!AppCfg.fixed && /^#\/proprietaire/.test(location.hash)) { refreshChrome(); window.addEventListener('hashchange', route); route(); return; }
     // Invitation link sent by the responsable: …#rejoindre=CODE
     const join = (location.hash.match(/^#rejoindre=([A-Za-z0-9]+)/) || [])[1];
     // (3.74) a session received as a link: …#/recevoir/CODE
@@ -12839,7 +14072,7 @@ var App = (() => {
     Sync.start();
     // After the first exchange with the server: categories U6 … Vétérans for the new season
     Promise.resolve(Sync.run()).catch(() => {}).then(() => {
-      let redraw = People.autoCategories();
+      let redraw = fillDefaults() || People.autoCategories();
       // once, on a responsable's device: imported matches go to team A / B from the District team number
       const c = Store.state.club;
       if (Auth.isAdmin() && !c.matchTeamsV1) { if (Importer.reassignImported()) redraw = true; c.matchTeamsV1 = 1; Store.save(); }

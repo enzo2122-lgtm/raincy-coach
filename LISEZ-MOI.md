@@ -66,14 +66,19 @@ Pour envoyer une séance à un autre coach : **Envoyer → Envoyer le lien** sur
 1. **Les fichiers et le serveur** : `node tools/verifier.js`. Il contrôle la syntaxe, le fichier `js/app.bundle.js` (sinon : `node build.js`), les appels entre modules, les fichiers de l'appli hors ligne, le numéro de version partout, et chaque fonction du serveur appelée par l'appli (avec de faux codes : le serveur refuse tout, rien n'est écrit). Il doit afficher « ✅ Aucun problème trouvé ».
 2. **Les pages et les boutons** : `node tools/serveur.js`, puis ouvre http://localhost:8790/tools/verif.html et touche **Lancer la vérification** (garde l'onglet au premier plan). Un club inventé est chargé, chaque page est ouverte et ses boutons touchés (sauf supprimer, importer, se déconnecter…), en responsable et en coach, sur ordinateur et sur téléphone. Rien n'est envoyé au serveur. Cette page ne marche qu'en local : elle remplace les données de l'appli du navigateur.
 
-## Mettre à jour l'appli
+## Mettre à jour l'appli (depuis la version 4.0)
 
-Augmente le même numéro partout, puis relance `node build.js` et `node tools/verifier.js` (il signale un numéro oublié) :
+**Raincy Coach est fabriqué à partir de Clubbo** : même code, réglé pour FA Le Raincy. Une correction se fait une seule fois, dans Clubbo.
+Ne modifie donc pas `js/*.js`, les pages, `app.css` ni `sw.js` ici : ils seraient remplacés à la prochaine fabrication.
 
-- `sw.js` : `raincy-coach-v115` devient `raincy-coach-v116` ;
-- les pages `.html` : `?v=115` devient `?v=116` ;
-- `js/app.js` : `BUILD = 115` devient `BUILD = 116` ;
-- `version.json` : `"build": 115` devient `"build": 116`, avec la nouvelle version ;
-- `js/help.js` : le numéro affiché (`VERSION = '3.75'`).
+Ce qui est propre à Raincy et reste ici :
+- `js/config.js` : le club (`fa-le-raincy`), le nom de l'appli, les noms de la mémoire du téléphone (ne jamais les changer), les réglages du club par défaut ;
+- `club/fabrication.json` : la version de Raincy et ses mots dans les pages ;
+- `icons/` (blason avec 1914, icônes), `manifest.webmanifest`, `famille.webmanifest`, `confidentialite.html`, ce LISEZ-MOI.
+
+Pour une nouvelle version :
+1. Dans le dossier de **Clubbo** : `node tools/fabriquer.js ../raincy-coach 4.1` (le numéro de build augmente tout seul). Le script copie le code, change les mots, pose la version partout, refait `js/app.bundle.js` et lance `node tools/verifier.js`.
+2. Essaie l'appli ici (`node tools/serveur.js`, voir « Vérifier avant de publier »).
+3. Publie ce dossier avec git, comme d'habitude.
 
 Au retour sur l'appli, elle compare son numéro à `version.json`. Si le site est plus récent, elle installe la nouvelle version puis se recharge toute seule. Sinon, touche **Mettre à jour l'appli** en bas de l'écran de connexion ou des Réglages.

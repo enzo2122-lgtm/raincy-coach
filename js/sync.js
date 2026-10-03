@@ -37,7 +37,7 @@ const Sync = (() => {
         if (r.del || !r.data) continue;
         const loc = clubData();
         if (H[k] && fp(loc) !== H[k]) continue; // changed here too: ours will be sent
-        if (fp(loc) !== fp(r.data)) { Object.assign(S().club, r.data); changed = true; }
+        if (fp(loc) !== fp(r.data)) { Object.assign(S().club, r.data); changed = true; if (typeof Sport !== 'undefined') Sport.apply(); }
         H[k] = fp(clubData()); continue;
       }
       if (!COLS.includes(r.col)) continue;
@@ -118,7 +118,6 @@ const Sync = (() => {
     running = (async () => {
       let changed = false;
       try {
-        const srv = (Cloud.cfg() || {}).url || ''; if (meta().server !== srv) { meta().rev = 0; meta().server = srv; } // (3.70) moved to another server
         const fresh = !meta().rev && !Object.keys(meta().h).length;
         changed = await pull();
         if (fresh && meta().rev > 0) adoptStale();

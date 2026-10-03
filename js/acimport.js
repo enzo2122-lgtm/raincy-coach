@@ -46,7 +46,7 @@ const ACImport = (() => {
       let p = ours.find(x => x.acId === a.id) || (lic && ours.find(x => digits(x.licence) === lic))
         || ours.find(x => norm(`${x.firstName} ${x.lastName}`) === n1 && (!a.dob || !x.birth || x.birth === a.dob))
         || ours.find(x => norm(x.lastName) === norm(a.nom) && x.birth && x.birth === a.dob);
-      // « D'HONT » = « DHONT »; the same first and last name, only one such player: the same person even if one date of birth is wrong
+      // « D'ARTOIS » = « DARTOIS »; the same first and last name, only one such player: the same person even if one date of birth is wrong
       const sq = s => norm(s).replace(/ /g, ''), same = ours.filter(x => !x.acId && sq(`${x.firstName}${x.lastName}`) === sq(`${a.prenom}${a.nom}`));
       if (!p && same.length === 1) p = same[0];
       const posts = POST[a.poste] || null;

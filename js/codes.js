@@ -127,7 +127,7 @@ const Codes = (() => {
     Promise.all([...area.querySelectorAll('img')].map(im => im.decode ? im.decode().catch(() => {}) : null)).then(() => setTimeout(() => window.print(), 150));
   }
   function printPoster(title, url, kind) {
-    print(`<div class="qr-poster"><img src="icons/crest.png" alt=""><h1>${esc(title)}</h1>
+    print(`<div class="qr-poster"><img src="${esc(Supporters.crest())}" alt=""><h1>${esc(title)}</h1>
       <p class="qp-sub">${kind === 'app' ? 'Scanne pour ouvrir l\'appli des coachs' : 'Joueurs et parents : scanne, puis tape ton code personnel'}</p>
       <div class="qp-qr">${svg(url, 10)}</div><p class="qp-url">${esc(url)}</p>
       ${kind === 'app' ? '' : '<p class="qp-note">Ton code personnel t\'est remis par le coach. Il n\'ouvre que tes informations : ne le donne à personne.</p>'}</div>`, 'pa-poster');
@@ -135,7 +135,7 @@ const Codes = (() => {
   async function printCards(t, rows, map) {
     try { await loadQr(); } catch (e) { return toast(e.message, 'err'); }
     const club = S().club.name, url = catUrl(t.name), q = svg(url, 3), host = base().replace(/^https?:\/\//, '') + 'moi.html';
-    const card = p => `<div class="pc"><div class="pc-top"><img src="icons/crest.png" alt=""><span>${esc(club)}<br><b>Espace joueur · parents</b></span></div>
+    const card = p => `<div class="pc"><div class="pc-top"><img src="${esc(Supporters.crest())}" alt=""><span>${esc(club)}<br><b>Espace joueur · parents</b></span></div>
       <div class="pc-name">${esc(full(p))}</div><div class="pc-team">${esc(t.name)}</div>
       <div class="pc-mid"><div class="pc-qr">${q}</div><div><div class="pc-lbl">Code personnel</div><div class="pc-code">${esc(pretty((map[p.id] || {}).code || ''))}</div>
       <div class="pc-how">1. Scanne le QR code (ou ouvre ${esc(host)})<br>2. Tape ton code</div></div></div>

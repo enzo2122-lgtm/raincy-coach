@@ -3,7 +3,7 @@
    parents see only his own information and his category's (matches, sessions, results, coaches): never the other players'.
    A parent with several children keeps the codes of each one on his phone and switches from one to the other. */
 const Member = (() => {
-  const LIST = 'raincy-codes', CUR = 'raincy-code';
+  const LIST = AppCfg.key('codes'), CUR = AppCfg.key('code');
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const clean = c => String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
   const pretty = c => clean(c).replace(/^(.{4})(.+)$/, '$1-$2');
@@ -140,6 +140,8 @@ const Member = (() => {
     const f = e.target.closest('[data-forget]'); if (f) { if (confirm('Retirer ce code de ce téléphone ? Il faudra le retaper pour revenir.')) { forget(f.dataset.forget); location.replace('moi.html'); } return true; }
     return false;
   }
+  // the club's crest on top of the family pages
+  function crest(d) { const c = d && d.club && d.club.crest, im = document.getElementById('clubCrest'); if (c && im && /^data:image\//.test(c)) im.src = c; }
 
   /* ---------- (3.65) absent: the reason (ill, injured, holidays…), and the answers to matches and sessions ---------- */
   const REASONS = [['🤒', 'Malade'], ['🤕', 'Blessure'], ['🏖️', 'Vacances'], ['💼', 'Travail'], ['📚', 'École / examens'], ['👪', 'Famille'], ['🙋', 'Perso'], ['✏️', 'Autre']];
@@ -195,5 +197,5 @@ const Member = (() => {
     } catch (e) {}
     return data;
   }
-  return { notifyCard, privacy, askReason, reply, replies, current, remember, forget, rpc, form, bar, onBar, pretty, clean, pageFor, list };
+  return { notifyCard, privacy, askReason, reply, replies, current, remember, forget, rpc, form, bar, onBar, pretty, clean, pageFor, list, crest };
 })();

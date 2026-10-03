@@ -1,7 +1,7 @@
 /* Store: the whole club lives in one object, saved in IndexedDB on the device.
    Sharing between coaches goes through export/import of a .json file (AirDrop, WhatsApp, mail). */
 const Store = (() => {
-  const DB = 'raincy-coach', OS = 'kv', KEY = 'state';
+  const DB = AppCfg.db, OS = 'kv', KEY = 'state';
   const COLS = ['teams', 'players', 'staff', 'schemas', 'trainings', 'matches', 'reports'];
   let state = null, saveTimer = null;
   const listeners = new Set();
@@ -42,7 +42,8 @@ const Store = (() => {
   }
 
   function blank() {
-    return { version: 2, club: { name: 'FA Le Raincy', homeBib: 'bordeaux', awayBib: 'blanc', brand: 1 }, ui: {}, teams: [], players: [], staff: [], schemas: [], trainings: [], matches: [] };
+    return { version: 2, club: Object.assign({ name: '', homeBib: 'bleu', awayBib: 'blanc', brand: 1 }, AppCfg.defaults), // the app of one club starts with its name, slogan, town…
+      ui: {}, teams: [], players: [], staff: [], schemas: [], trainings: [], matches: [], reports: [] };
   }
   // v1 kept players inside each team; v2 keeps one club-wide list where a player can belong to several categories.
   function migrate() {
@@ -142,8 +143,8 @@ const Store = (() => {
   }
   function exportSchema(s) { return pack({ schemas: [s] }); }
   function importText(txt) {
-    let obj; try { obj = JSON.parse(txt); } catch (e) { throw new Error("Ce fichier n'est pas un fichier Raincy Coach."); }
-    if (!obj || obj.app !== 'raincy-coach' || !obj.data) throw new Error("Ce fichier n'est pas un fichier Raincy Coach.");
+    let obj; try { obj = JSON.parse(txt); } catch (e) { throw new Error("Ce fichier n'est pas un fichier de l'appli."); }
+    if (!obj || obj.app !== 'raincy-coach' || !obj.data) throw new Error("Ce fichier n'est pas un fichier de l'appli.");
     const res = { added: 0, updated: 0, kept: 0, byCol: {} };
     const count = c => res.byCol[c] = (res.byCol[c] || 0) + 1;
     COLS.forEach(c => (obj.data[c] || []).forEach(it => {
@@ -234,6 +235,23 @@ const Formations = {
     '2-3-2': [['G', .03, .5, 1], ['4', .16, .33], ['5', .16, .67], ['3', .3, .15], ['6', .28, .5], ['2', .3, .85], ['9', .45, .35], ['10', .45, .65]],
     '3-1-3': [['G', .03, .5, 1], ['3', .18, .2], ['4', .15, .5], ['2', .18, .8], ['6', .28, .5], ['7', .42, .15], ['9', .46, .5], ['11', .42, .85]],
   },
+  b5: {
+    '1-2-2': [['1', .62, .5, 0, ['MEN']], ['2', .72, .18, 0, ['ARR']], ['3', .72, .82, 0, ['AIL']], ['4', .86, .3, 0, ['AF']], ['5', .88, .66, 0, ['PIV']]],
+    '2-1-2': [['1', .64, .35, 0, ['MEN']], ['2', .64, .65, 0, ['ARR']], ['3', .78, .5, 0, ['AF', 'PIV']], ['4', .88, .2, 0, ['AIL']], ['5', .88, .8, 0, ['PIV', 'AF']]],
+    '1-3-1': [['1', .6, .5, 0, ['MEN']], ['2', .74, .12, 0, ['ARR', 'AIL']], ['3', .74, .5, 0, ['AF']], ['4', .74, .88, 0, ['AIL', 'ARR']], ['5', .9, .5, 0, ['PIV']]],
+  },
+  b3: { '3 ouverts': [['1', .25, .5, 0, ['MEN']], ['2', .6, .15, 0, ['ARR', 'AIL']], ['3', .7, .8, 0, ['AF', 'PIV']]] },
+  h7: {
+    '3-3 (attaque)': [['G', .03, .5, 1, ['GB']], ['AG', .9, .04, 0, ['AIG', 'AIL']], ['ArG', .72, .22, 0, ['ARG', 'ARR']], ['DC', .7, .5, 0, ['DC', 'ARR']], ['ArD', .72, .78, 0, ['ARD', 'ARR']], ['AD', .9, .96, 0, ['AID', 'AIL']], ['PIV', .88, .5, 0, ['PIV']]],
+    '0-6 (défense)': [['G', .03, .5, 1, ['GB']], ['1', .18, .08, 0, ['AIL']], ['2', .17, .27, 0, ['ARR']], ['3', .16, .44, 0, ['PIV']], ['4', .16, .56, 0, ['PIV', 'ARR']], ['5', .17, .73, 0, ['ARR']], ['6', .18, .92, 0, ['AIL']]],
+  },
+  r15: { 'Lancement de jeu': [['1', .47, .44, 0, ['PIL']], ['2', .47, .5, 0, ['TAL']], ['3', .47, .56, 0, ['PIL']], ['4', .45, .47, 0, ['DL']], ['5', .45, .53, 0, ['DL']], ['6', .45, .4, 0, ['FL']], ['7', .45, .6, 0, ['FL']], ['8', .43, .5, 0, ['N8']],
+    ['9', .41, .44, 0, ['DM']], ['10', .36, .36, 0, ['DO']], ['12', .33, .28, 0, ['CEN']], ['13', .3, .2, 0, ['CEN']], ['14', .28, .1, 0, ['AIL']], ['11', .4, .9, 0, ['AIL']], ['15', .15, .5, 0, ['ARR']]] },
+  r10: { 'Lancement de jeu': [['1', .47, .44, 0, ['PIL']], ['2', .47, .5, 0, ['TAL']], ['3', .47, .56, 0, ['PIL']], ['8', .44, .5, 0, ['N8', 'FL']], ['9', .41, .42, 0, ['DM']], ['10', .36, .34, 0, ['DO']], ['12', .32, .25, 0, ['CEN']], ['13', .29, .16, 0, ['CEN']], ['11', .4, .88, 0, ['AIL']], ['15', .16, .5, 0, ['ARR']]] },
+  r7: { 'Lancement de jeu': [['1', .47, .45, 0, ['PIL']], ['2', .47, .5, 0, ['TAL']], ['3', .47, .55, 0, ['PIL']], ['9', .43, .42, 0, ['DM']], ['10', .38, .32, 0, ['DO']], ['12', .33, .2, 0, ['CEN']], ['11', .28, .08, 0, ['AIL']]] },
+  v6: { 'Rotation 1 (passeur en 1)': [['4', .44, .3, 0, ['OPP']], ['3', .44, .5, 0, ['CEN']], ['2', .44, .7, 0, ['R4']], ['5', .25, .3, 0, ['R4']], ['6', .25, .5, 0, ['CEN', 'LIB']], ['1', .25, .7, 0, ['PAS']]],
+    'Rotation 2 (passeur en 6)': [['4', .44, .3, 0, ['R4']], ['3', .44, .5, 0, ['OPP']], ['2', .44, .7, 0, ['CEN']], ['5', .25, .3, 0, ['CEN', 'LIB']], ['6', .25, .5, 0, ['PAS']], ['1', .25, .7, 0, ['R4']]] },
+  v4: { 'Carré': [['A', .42, .32, 0, ['PAS']], ['B', .42, .68, 0, ['R4']], ['C', .25, .32, 0, ['CEN']], ['D', .25, .68, 0, ['OPP', 'LIB']]] },
   '5': {
     '2-2': [['G', .04, .5, 1], ['2', .2, .28], ['3', .2, .72], ['4', .4, .28], ['5', .4, .72]],
     '1-2-1': [['G', .04, .5, 1], ['2', .17, .5], ['3', .3, .2], ['4', .3, .8], ['5', .43, .5]],
@@ -350,7 +368,7 @@ const Seed = {
     state.trainings.push({ id: uid(), teamId: u11.id, date: iso(d), time: '18:00', title: 'Passes et déplacements (exemple)', updatedAt: now, presents: [],
       exercises: [{ id: uid(), title: 'Passe et suis', duration: 15, org: 'Carré de 24 × 16 m, 4 plots, 3 joueurs par carré, 1 ballon.', consignes: 'Passe au sol\nJe suis mon ballon\nJe parle à mon partenaire', materiel: '4 plots, 1 ballon par carré', schemaId: s1.id }] });
     state.matches.push(
-      { id: uid(), teamId: u11.id, date: iso(prev), time: '10:00', opponent: 'US Exemple', home: true, competition: 'Plateau', place: 'Stade du Raincy', rdv: '09:15', played: true, gf: 3, ga: 1, convoked: u11.players.map(p => p.id), stats: { [u11.players[8].id]: { g: 2, a: 0 }, [u11.players[9].id]: { g: 1, a: 1 } }, notes: '', updatedAt: now },
+      { id: uid(), teamId: u11.id, date: iso(prev), time: '10:00', opponent: 'US Exemple', home: true, competition: 'Plateau', place: 'Stade municipal', rdv: '09:15', played: true, gf: 3, ga: 1, convoked: u11.players.map(p => p.id), stats: { [u11.players[8].id]: { g: 2, a: 0 }, [u11.players[9].id]: { g: 1, a: 1 } }, notes: '', updatedAt: now },
       { id: uid(), teamId: u11.id, date: iso(next), time: '10:30', opponent: 'AS Exemple', home: false, competition: 'Championnat', place: '', rdv: '09:30', played: false, gf: 0, ga: 0, convoked: [], stats: {}, notes: '', updatedAt: now });
     state.ui.teamId = u11.id;
   },

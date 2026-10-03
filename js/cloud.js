@@ -1,12 +1,10 @@
-/* Cloud: the club's shared server (Supabase) for the accounts, the data, the messaging and the pitch planning.
-   Since 3.70, FA Le Raincy is a club of the Clubbo server (js/config.js : « club »). Tables are closed (row level security,
-   no policy): everything goes through SQL functions (supabase/ea-schema.sql in the Clubbo app) that check the dirigeant's login.
-   The tools of the old Raincy server (setup script, « Mettre à jour le serveur », responsable code) were removed in 3.76. */
+/* Cloud: the Clubbo server, shared by every club (Supabase). Each club only reaches its own data:
+   every SQL function finds the club from the dirigeant's login (or the club's invitation code) — see supabase/ea-schema.sql.
+   The clubs never set up anything: the server is run by the owner of the platform, who gives each new club an activation code. */
 const Cloud = (() => {
   const builtIn = () => (typeof CLUB_SERVER !== 'undefined' && CLUB_SERVER.url && CLUB_SERVER.key ? CLUB_SERVER : null);
   const session = () => (Store.state.auth && Store.state.auth.session) || null;
-  const token = () => { const s = session(); return (s && s.token) || ''; };
-  const platform = () => !!(builtIn() || {}).club;
+  const token = () => { const s = session(); return (s && !s.demo && s.token) || ''; }; // the demo club stays on the device
   // Server address (built into the app); the invitation code of the club while a dirigeant joins it
   function cfg() {
     const c = Store.state.club.cloud || {}, b = builtIn() || {};
@@ -18,7 +16,12 @@ const Cloud = (() => {
   // A responsable's login is his « responsable code »
   const adminKey = () => (session() && session().admin ? token() : '');
   const ERRORS = {
-    COMPTE_INCONNU: 'Aucun compte à ce nom sur le serveur du club.',
+    COMPTE_INCONNU: 'Aucun compte à ce nom dans ce club.',
+    CLUB_INCONNU: 'Aucun club avec ce code. Vérifie le code du club (demande-le à ton responsable).',
+    CLUB_SUSPENDU: 'L\'accès de ce club est suspendu : contacte Clubbo.',
+    ACTIVATION: 'Ce code d\'activation n\'est pas valable (ou a déjà servi).',
+    SLUG_PRIS: 'Ce code de club est déjà pris : choisis-en un autre.',
+    PROPRIETAIRE: 'Clé du propriétaire incorrecte.',
     MOT_DE_PASSE: 'Mot de passe incorrect.',
     BLOQUE: 'Trop d\'essais : attends 5 minutes avant de réessayer.',
     DEJA_INSCRIT: 'Ce dirigeant a déjà un mot de passe : connecte-toi, ou demande au responsable de le réinitialiser.',
@@ -27,10 +30,9 @@ const Cloud = (() => {
     DONNEES: 'Informations incomplètes.',
     CRENEAU_PRIS: 'Ce créneau est déjà pris sur cette partie du terrain. Choisis un autre horaire ou l\'autre moitié.',
     HORS_CRENEAU: 'Cet horaire est en dehors des créneaux disponibles du terrain.',
-    CLE_CLUB: 'Ce lien d\'invitation n\'est plus valable : demande le nouveau lien au responsable du club.',
+    CLE_CLUB: 'Accès au club refusé : reconnecte-toi (ou demande un nouveau lien d\'invitation au responsable).',
     ADMIN: 'Réservé à un responsable du club.',
     HORAIRE: 'L\'heure de fin doit être après l\'heure de début.',
-    LIEN_PARENTS: 'Ce lien n\'est plus valable : demande le nouveau lien au coach.',
     MATCH_PASSE: 'Ce match est passé : les réponses sont fermées.',
     PHOTOS_MAX: '12 photos au plus par match pour les parents.',
     DONNEES_PUSH: 'Abonnement aux notifications refusé par le serveur.',
@@ -56,15 +58,18 @@ const Cloud = (() => {
     }
     return txt ? JSON.parse(txt) : null;
   }
-  // Functions that identify the dirigeant by his login instead of the club code
-  const NO_K = { club_login: 1, club_me: 1, club_teams_done: 1, club_change_pw: 1, club_logout: 1 };
+  // Functions that identify the person otherwise than by the club access (login, club creation, owner of the platform)
+  const NO_K = { club_login: 1, club_me: 1, club_teams_done: 1, club_change_pw: 1, club_logout: 1, ea_create_club: 1,
+    ea_owner_init: 1, ea_owner_codes: 1, ea_owner_clubs: 1, ea_owner_club_set: 1, ea_owner_push: 1,
+    // (1.34) the owner's space: no club login sent (the server refused these four calls)
+    ea_owner_sub: 1, ea_owner_votes: 1, ea_owner_club_plan: 1, ea_owner_requests: 1 };
   function genKey(n = 24) {
     const a = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789', r = crypto.getRandomValues(new Uint8Array(n));
     return Array.from(r, x => a[x % a.length]).join('');
   }
+
   // Dates always as YYYY-MM-DD, whatever the server sends
   const normDate = b => (b && b.date ? Object.assign(b, { date: String(b.date).slice(0, 10) }) : b);
-
 
   /* ---------- API ---------- */
   const api = {
@@ -80,7 +85,8 @@ const Cloud = (() => {
     unbook: id => rpc('club_unbook', { p_id: id, p_author: Auth.current().id, admin_k: adminKey() || null }),
     unbookSeries: series => rpc('club_unbook_series', { p_series: series, p_author: Auth.current().id, admin_k: adminKey() || null }),
     // accounts
-    login: (last, first, h) => rpc('club_login', { p_club: (builtIn() || {}).club || null, p_last: last, p_first: first, p_h: h }),
+    login: (club, last, first, h) => rpc('club_login', { p_club: club, p_last: last, p_first: first, p_h: h }),
+    createClub: (code, name, slug, p) => rpc('ea_create_club', { p_code: code, p_name: name, p_slug: slug, p }),
     register: (p, admK) => rpc('club_register', { admin_k: admK || adminKey() || null, p }),
     accounts: () => rpc('club_accounts'),
     accountSet: p => rpc('club_account_set', { admin_k: adminKey(), p }),
@@ -89,14 +95,16 @@ const Cloud = (() => {
     changePw: (oldH, newH) => rpc('club_change_pw', { t: token(), p_old: oldH, p_new: newH }),
     logout: t => rpc('club_logout', { t }),
     invite: renew => rpc('club_invite', { admin_k: adminKey(), p_new: !!renew }),
+    info: () => rpc('club_info'),
     // shared club data
     pull: since => rpc('club_pull', { p_since: since || 0 }),
     push: list => rpc('club_push', { p: list }),
-    // parents (3.8)
+    // personal codes of the licensees, answers to convocations
     memberCodes: (ids, renew) => rpc('club_member_codes', { admin_k: adminKey() || null, p_players: ids, p_renew: renew || [] }),
     memberGiven: (id, given) => rpc('club_member_given', { admin_k: adminKey() || null, p_player: id, p_given: !!given }),
     answers: matchIds => rpc('club_answers', { p_matches: matchIds }),
-    // notifications and read receipts (3.15)
+    setAnswer: (matchId, playerId, status) => rpc('club_set_answer', { p_match: matchId, p_player: playerId, p_status: status || '' }),
+    // notifications and read receipts
     pushKey: () => rpc('club_push_key'),
     pushSub: (endpoint, prefs) => rpc('club_push_sub', { k: token(), p_endpoint: endpoint, p_prefs: prefs }),
     pushUnsub: endpoint => rpc('club_push_unsub', { k: token(), p_endpoint: endpoint }),
@@ -107,14 +115,26 @@ const Cloud = (() => {
     photos: matchId => rpc('club_photos', { p_match: matchId }),
     photoGet: id => rpc('club_photo_get', { p_id: id }),
     photoDel: id => rpc('club_photo_del', { p_id: id }),
-    setAnswer: (matchId, playerId, status) => rpc('club_set_answer', { p_match: matchId, p_player: playerId, p_status: status || '' }),
-    // backups (3.8)
+    // backups
     backups: () => rpc('club_backups', { admin_k: adminKey() }),
     backupNow: () => rpc('club_backup_now', { admin_k: adminKey() }),
     backupGet: id => rpc('club_backup_get', { admin_k: adminKey(), p_id: id }),
     backupAuto: () => rpc('club_backup_auto'),
+    // the owner of the platform
+    ownerInit: key => rpc('ea_owner_init', { p_key: key }),
+    ownerCodes: (key, n, note) => rpc('ea_owner_codes', { p_key: key, p_new: n || 0, p_note: note || null }),
+    ownerClubs: key => rpc('ea_owner_clubs', { p_key: key }),
+    ownerSub: (key, endpoint, on) => rpc('ea_owner_sub', { p_key: key, p_endpoint: endpoint || null, p_on: on == null ? null : !!on }),
+    ownerVotes: key => rpc('ea_owner_votes', { p_key: key }),
+    ownerClubPlan: (key, club, plan) => rpc('ea_owner_club_plan', { p_key: key, p_club: club, p_plan: plan }),
+    ownerRequests: (key, id, status, code) => rpc('ea_owner_requests', { p_key: key, p_id: id || null, p_status: status || null, p_code: code || null }),
+    ownerClubSet: (key, club, status) => rpc('ea_owner_club_set', { p_key: key, p_club: club, p_status: status }),
+    ownerPush: (key, url) => rpc('ea_owner_push', { p_key: key, p_url: url }),
   };
-  const inviteLink = code => `${location.origin}${location.pathname.replace(/index\.html$/, '')}#rejoindre=${encodeURIComponent(code)}`;
+  // the club of this device (its code, shown to the dirigeants to log in)
+  const clubSlug = () => AppCfg.club || (session() && session().club && session().club.slug) || (Store.state.club.cloud || {}).slug || '';
+  const appUrl = () => `${location.origin}${location.pathname.replace(/index\.html$/, '')}`;
+  const inviteLink = code => `${appUrl()}#rejoindre=${encodeURIComponent(code)}`;
   // (3.69) the link of one person: his name is already chosen when he opens it
   async function invitePerson(p) {
     let code;
@@ -131,40 +151,34 @@ const Cloud = (() => {
   async function shareInvite(renew) {
     let code;
     try { code = await api.invite(renew); } catch (e) { return toast(e.message, 'err'); }
-    const link = inviteLink(code), text = `Raincy Coach : ouvre ce lien pour créer ton mot de passe (première connexion), puis ajoute l'appli à ton écran d'accueil.\n${link}`;
+    const link = inviteLink(code), club = Store.state.club.name || 'le club';
+    const text = `${club} · ${AppCfg.name} : ouvre ce lien pour créer ton mot de passe (première connexion), puis ajoute l'appli à ton écran d'accueil.\nCode du club : ${clubSlug()}\n${link}`;
     Store.state.ui.invited = true; Store.save();
-    modal({ title: 'Inviter les éducateurs', body: `<p>Envoie ce lien aux dirigeants (WhatsApp, SMS, e-mail). En l'ouvrant, chacun choisit son nom et crée son mot de passe. Ensuite, ils se connectent partout avec <b>nom, prénom et mot de passe</b>.</p>
+    modal({ title: 'Inviter les éducateurs', body: `<p>Envoie ce lien aux dirigeants (WhatsApp, SMS, e-mail). En l'ouvrant, chacun choisit son nom et crée son mot de passe. Ensuite, ils se connectent partout avec le <b>code du club</b> (<b>${esc(clubSlug())}</b>), leur <b>nom, prénom et mot de passe</b>.</p>
       <label class="fld"><span>Lien d'invitation</span><input id="invLink" value="${esc(link)}" readonly></label>
       <p class="muted small">Garde ce lien dans le groupe des éducateurs : il donne accès aux données du club. « Nouveau lien » annule l'ancien.</p>`,
       onOpen: r => { const i = $('#invLink', r); i.onclick = () => i.select(); },
       actions: [{ label: 'Nouveau lien', onClick: () => { setTimeout(() => shareInvite(true), 60); } },
-        { label: 'Copier', icon: I.copy, onClick: () => { navigator.clipboard.writeText(link).then(() => toast('Lien copié')).catch(() => toast('Sélectionne le lien et copie-le')); return false; } },
-        ...(navigator.share ? [{ label: 'Envoyer', kind: 'primary', icon: I.share, onClick: () => { navigator.share({ title: 'Raincy Coach', text }).catch(() => {}); return false; } }] : [])] });
+        { label: 'Copier', icon: I.copy, onClick: () => { navigator.clipboard.writeText(text).then(() => toast('Invitation copiée')).catch(() => toast('Sélectionne le lien et copie-le')); return false; } },
+        ...(navigator.share ? [{ label: 'Envoyer', kind: 'primary', icon: I.share, onClick: () => { navigator.share({ title: AppCfg.name, text }).catch(() => {}); return false; } }] : [])] });
   }
 
-  /* ---------- Réglages → Serveur du club (responsable) ---------- */
+  /* ---------- Réglages ---------- */
   const { esc, $, toast, modal } = UI;
   function settingsSection() {
-    const c = cfg(), admin = Auth.isAdmin(), sync = typeof Sync !== 'undefined' ? Sync.status() : '';
-    return `<section class="card"><h2>${I.share}Serveur du club (comptes, données, messagerie, planning)</h2>
-      <p>${ready() ? `<span class="res res-V">Connecté</span> ${esc(c.url.replace(/^https?:\/\//, ''))}` : '<span class="res res-D">Non connecté</span> Les comptes, le partage des données, la messagerie et le planning ont besoin du serveur du club.'}</p>
+    const admin = Auth.isAdmin(), sync = typeof Sync !== 'undefined' ? Sync.status() : '';
+    return `<section class="card"><h2>${I.share}${AppCfg.fixed ? 'Serveur du club' : 'Le club sur Clubbo'}</h2>
+      <p>${ready() ? `<span class="res res-V">Connecté</span> Code du club : <b>${esc(clubSlug() || '—')}</b>` : '<span class="res res-D">Non connecté</span>'}</p>
       ${sync ? `<p class="muted small">${esc(sync)}</p>` : ''}
-      ${admin ? `<div class="chips">${ready() ? `<button class="btn primary" data-cloud="invite">${I.share}<span>Inviter les éducateurs</span></button>` : ''}
-        ${!ready() && builtIn() ? `<button class="btn primary" data-cloud="connect">${I.check}<span>Me connecter au serveur du club</span></button>` : ''}
-        ${ready() ? `<button class="btn" data-cloud="test">${I.check}<span>Tester</span></button>` : ''}</div>
-        ${ready() ? Notify.adminCard() : ''}
-        <p class="muted small">Les éducateurs rejoignent le club avec le lien d'invitation, puis se connectent sur n'importe quel appareil avec leur nom et leur mot de passe.</p>`
-      : !ready() && builtIn() ? `<div class="chips"><button class="btn primary" data-cloud="connect">${I.check}<span>Me connecter au serveur du club</span></button></div>`
-      : `<p class="muted small">${ready() ? 'Tes données sont enregistrées sur le serveur du club : tu les retrouves en te connectant sur un autre appareil.' : 'Demande au responsable le lien d\'invitation du club.'}</p>`}
+      ${admin && ready() ? `<div class="chips"><button class="btn primary" data-cloud="invite">${I.share}<span>Inviter les éducateurs</span></button><button class="btn" data-cloud="test">${I.check}<span>Tester la connexion</span></button></div>
+        <p class="muted small">Les éducateurs rejoignent le club avec le lien d'invitation, puis se connectent sur n'importe quel appareil avec le code du club, leur nom et leur mot de passe.</p>`
+      : `<p class="muted small">Tes données sont enregistrées sur le serveur : tu les retrouves en te connectant sur un autre appareil.</p>`}
     </section>`;
   }
-  async function onSettingsClick(b, rerender) {
-    if (b.dataset.cloud === 'connect') return Auth.connectServer();
+  async function onSettingsClick(b) {
     if (b.dataset.cloud === 'invite') return shareInvite(false);
-    if (b.dataset.cloud === 'test') {
-      try { await api.ping(); toast('Connexion au serveur du club : OK'); } catch (e) { toast(e.message, 'err'); }
-    }
+    if (b.dataset.cloud === 'test') { try { await api.ping(); toast('Connexion OK'); } catch (e) { toast(e.message, 'err'); } }
   }
 
-  return Object.assign(api, { platform, ready, invitePerson, canLogin, cfg, adminKey, token, genKey, settingsSection, onSettingsClick, shareInvite });
+  return Object.assign(api, { ready, invitePerson, canLogin, cfg, adminKey, token, genKey, settingsSection, onSettingsClick, shareInvite, clubSlug, appUrl });
 })();

@@ -1700,7 +1700,7 @@ body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 
 .kind-seg { margin: 10px 0 14px; max-width: 520px; }
 .kind-seg .seg-b { white-space: normal; }
 
-/* ---------- 3.46 : import universel (photo, PDF, Excel, CSV) ---------- */
+/* ---------- EA Club Manager : import, club, propriétaire ---------- */
 .imp-kinds { margin-bottom: 8px; }
 .imp-src { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
 .imp-src label.btn { cursor: pointer; }
@@ -1714,6 +1714,16 @@ body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 
 .imp-table td[contenteditable]:focus { outline: 2px solid var(--gold); background: color-mix(in srgb, var(--gold) 12%, var(--surface)); }
 .imp-sum { margin: 8px 0 12px; font-size: 14px; }
 .icon-btn.small { width: 30px; height: 30px; border-radius: 8px; }
+.ob-crest { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.ob-crest img { width: 72px; height: 72px; object-fit: contain; border-radius: 14px; background: var(--bg); padding: 4px; }
+.ob-crest label.btn { cursor: pointer; }
+input[type=color] { width: 100%; min-height: 44px; padding: 2px; border-radius: 10px; }
+#obCats .chip[disabled] { opacity: .55; }
+.ob-sum { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; } .ob-sum img { width: 56px; height: 56px; object-fit: contain; } .ob-sum div { display: flex; flex-direction: column; }
+.ow-codes, .ow-clubs { display: flex; flex-direction: column; }
+.ow-code, .ow-club { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 9px 0; border-top: 1px solid var(--line); }
+.ow-code code { font: 800 15px/1 ui-monospace, Consolas, monospace; letter-spacing: .06em; }
+.ow-code.used { opacity: .6; } .ow-club > div { flex: 1 1 220px; display: flex; flex-direction: column; gap: 2px; } .ow-club.suspended { opacity: .6; }
 
 /* ---------- 3.63 : « + » button, search, match day, « saved » light, shorter menu ---------- */
 @media (min-width: 761px) {
@@ -1767,11 +1777,42 @@ body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 
 body.editing .save-pill { display: none; }
 @media (max-width: 760px) { .save-pill { bottom: calc(env(safe-area-inset-bottom) + 84px); font-size: 12px; } }
 @media (pointer: coarse) { .linkish { padding-top: 8px; padding-bottom: 8px; } }
+
+/* ---------- 1.20 : demo club, new club in 3 steps ---------- */
+#demoBar { position: fixed; top: 0; left: 0; right: 0; z-index: 45; display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 14px; padding: calc(env(safe-area-inset-top) + 6px) 12px 6px; background: #1d4ed8; color: #fff; box-shadow: 0 4px 14px rgba(0,0,0,.25); }
+#demoBar > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#demoBar .chips { flex-wrap: nowrap; gap: 6px; flex: none; }
+#demoBar .btn { min-height: 36px; padding: 0 12px; border: 0; background: rgba(255,255,255,.18); color: #fff; }
+#demoBar .btn.primary { background: #fff; color: #1d4ed8; }
+@media (max-width: 760px) { #demoBar .lg { display: none; } }
+body.demoing .shell { padding-top: var(--dmh, 50px); }
+body.demoing .rail { top: var(--dmh, 50px); height: calc(100dvh - var(--dmh, 50px)); }
+@media (max-width: 760px) { body.demoing .rail { top: auto; height: auto; } }
+.ob-prog { display: flex; gap: 6px; margin-bottom: 12px; }
+.ob-prog span { flex: 1; text-align: center; padding: 7px 4px; border-radius: 10px; background: var(--surface2); color: var(--muted); font-weight: 700; font-size: 13px; }
+.ob-prog span.on { background: var(--navy); color: #fff; }
+.ob-prog span.done { background: #dcfce7; color: #15803d; }
+.ob-nav { display: flex; justify-content: space-between; gap: 10px; margin-top: 16px; }
+.ob-nav .btn[hidden] { display: none; }
+.ob-nav #obNext { margin-left: auto; }
+.ob-three { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.ob-s[hidden] { display: none; }
+body.modal-top #modal { z-index: 90; }
 .lv-ctl .btn:not(.primary) { color: var(--navy); background: #fff; } /* « Mi-temps » was white on white on the dark scoreboard */
 .ans-why { margin: 6px 0 10px; line-height: 1.6; }
+.ow-reqs { display: flex; flex-direction: column; }
+.ow-req { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 0; border-top: 1px solid var(--line); }
+.ow-req > div:first-child { flex: 1 1 240px; display: flex; flex-direction: column; gap: 2px; }
+.ow-req.done, .ow-req.dropped { opacity: .65; }
+.ow-new { display: inline-block; margin-left: 6px; padding: 2px 9px; border-radius: 999px; background: #e11d48; color: #fff; font-size: 13px; vertical-align: middle; }
+.ow-alert { margin: 4px 0 10px; }
 .pg-vote { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-weight: 700; font-size: 14px; }
 .pg-vote .btn { min-height: 38px; padding: 0 12px; font-size: 18px; }
 .pg-vote .btn.on { outline: 2px solid var(--gold); }
 .vote-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
 .vote-list div { display: flex; gap: 10px; align-items: center; padding: 6px 0; border-top: 1px solid var(--line); }
 .vote-list span { flex: 1; } .vote-list .v-down { color: var(--bad); } .vote-list .v-up { color: var(--good); }
+.ow-plan { display: inline-block; padding: 1px 8px; border-radius: 999px; background: var(--surface2); font-weight: 700; }
+.ow-plan.club { background: #fef3c7; color: #92400e; }
+.ow-over { color: var(--bad); }
+.plan-card { border-left: 5px solid #f59e0b; }

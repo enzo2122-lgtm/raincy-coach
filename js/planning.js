@@ -68,7 +68,7 @@ const Planning = (() => {
   function notReady(root) {
     root.innerHTML = `<header class="page-head"><div><h1>Planning du terrain</h1><p class="sub">Entraînements et matchs de toutes les catégories</p></div></header>
       <div class="empty"><p>Le planning est partagé par tous les éducateurs grâce au serveur du club, qui n'est pas encore connecté sur cet appareil.</p>
-      ${Auth.isAdmin() ? `<a class="btn primary" href="#/reglages">${I.settings}<span>Configurer le serveur</span></a>` : '<p class="muted">Déconnecte-toi puis reconnecte-toi avec ton nom et ton mot de passe. Si ça ne marche pas, préviens le responsable.</p>'}</div>`;
+      ${Auth.isAdmin() ? `<a class="btn primary" href="#/reglages">${I.settings}<span>Se reconnecter</span></a>` : '<p class="muted">Déconnecte-toi puis reconnecte-toi avec ton nom et ton mot de passe. Si ça ne marche pas, préviens le responsable.</p>'}</div>`;
   }
 
   async function load(from, to) {
@@ -324,7 +324,7 @@ const Planning = (() => {
         <select data-f="start_min">${timeOptions(s.start_min)}</select><span>→</span><select data-f="end_min">${timeOptions(s.end_min)}</select>
         <button class="icon-btn danger" data-del="${i}" aria-label="Supprimer">${I.trash}</button></div>`).join('') || '<p class="muted">Aucun créneau : le terrain est réservable à toute heure.</p>';
     };
-    if (!Cloud.adminKey()) return toast('Code responsable absent sur cet appareil (Réglages → Serveur du club → Code responsable)', 'err');
+    if (!Cloud.adminKey()) return toast('Réservé à un responsable du club', 'err');
     modal({ title: 'Créneaux disponibles', body: `
       <label class="fld"><span>Nom du terrain</span><input id="fName" value="${esc(fieldName())}" maxlength="40"></label>
       <p class="muted small">Les éducateurs ne peuvent réserver qu'à l'intérieur de ces créneaux, chaque semaine.</p>

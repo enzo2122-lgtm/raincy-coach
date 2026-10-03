@@ -1,9 +1,9 @@
-/* Weather: the week in Le Raincy and the weather of the next away match (city and date of the trip).
+/* Weather: the week in the club's town (Réglages → Le club) and the weather of the next away match (city and date of the trip).
    Forecasts come from Open-Meteo (free, no account); asked by the device itself and kept 2 hours. */
 const Weather = (() => {
   const { esc } = UI;
-  const HOME = { name: 'Le Raincy', lat: 48.8993, lon: 2.5183 };
-  const TTL = 2 * 3600e3, KEY = 'raincy-weather', GEO = 'raincy-geo';
+  const HOMEOF = () => { const c = Store.state.club; return c.lat != null && c.lon != null ? { name: c.city || 'le club', lat: +c.lat, lon: +c.lon } : null; };
+  const TTL = 2 * 3600e3, KEY = AppCfg.key('weather'), GEO = AppCfg.key('geo');
   const load = k => { try { return JSON.parse(localStorage.getItem(k)) || {}; } catch (e) { return {}; } };
   const store = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
 
@@ -64,7 +64,8 @@ const Weather = (() => {
     const o = String(m.opponent || '').replace(/\b(F\.?C\.?|A\.?S\.?|U\.?S\.?|C\.?S\.?|E\.?S\.?|S\.?C\.?|R\.?C\.?|J\.?S\.?|A\.?C\.?|C\.?O\.?|F\.?A\.?|U\.?S\.?M\.?|A\.?F\.?C\.?|Football|Club|Olympique|Stade|Entente|Sporting|Racing|Association|Sportive|Union|Jeunesse|Espoir|Red Star|U\d+|\d+)\b/gi, ' ')
       .replace(/[^A-Za-zÀ-ÿ' -]/g, ' ').replace(/\s+/g, ' ').trim();
     if (o.length >= 3) out.push(o);
-    return [...new Set(out)].filter(s => !/raincy/i.test(s));
+    const own = String((HOMEOF() || {}).name || '').toLowerCase();
+    return [...new Set(out)].filter(s => !own || s.toLowerCase() !== own);
   }
   const dist = (a, b) => Math.hypot((a.lat - b.lat) * 111, (a.lon - b.lon) * 73);
   async function geocode(name) {
@@ -72,8 +73,8 @@ const Weather = (() => {
     if (k in cache) return cache[k];
     const r = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=10&language=fr&countryCode=FR`);
     if (!r.ok) throw new Error('lieu introuvable');
-    const res = ((await r.json()).results || []).map(x => ({ name: x.name, lat: x.latitude, lon: x.longitude })).filter(x => dist(x, HOME) < 250);
-    res.sort((a, b) => dist(a, HOME) - dist(b, HOME)); // the closest one: a district 93 club plays around Paris
+    const res = ((await r.json()).results || []).map(x => ({ name: x.name, lat: x.latitude, lon: x.longitude })).filter(x => !HOMEOF() || dist(x, HOMEOF()) < 250);
+    if (HOMEOF()) res.sort((a, b) => dist(a, HOMEOF()) - dist(b, HOMEOF())); // the closest one: a club plays near home
     cache[k] = res[0] || null; store(GEO, cache);
     return cache[k];
   }
@@ -83,13 +84,13 @@ const Weather = (() => {
   const DAYS = ['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.'];
   const wd = date => DAYS[new Date(date + 'T12:00').getDay()];
   const longDay = date => new Date(date + 'T12:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
-  const placeholder = () => `<section class="card wx-card" id="wxCard"><h2>🌤️ Météo au Raincy · 7 jours</h2><p class="muted small">Chargement de la météo…</p></section>`;
+  const placeholder = () => !HOMEOF() ? '' : `<section class="card wx-card" id="wxCard"><h2>🌤️ Météo · ${esc((HOMEOF() || {}).name || '')} · 7 jours</h2><p class="muted small">Chargement de la météo…</p></section>`;
   // events: [{ date, time, kind: 'match'|'training', label, match? }], trip: next away match of the coach
   async function mount(root, events, trip) {
-    const box = root.querySelector('#wxCard'); if (!box) return;
-    if (!navigator.onLine) { box.innerHTML = '<h2>🌤️ Météo au Raincy</h2><p class="muted small">Pas de connexion internet : la météo s\'affichera au retour du réseau.</p>'; return; }
+    const box = root.querySelector('#wxCard'); if (!box || !HOMEOF()) return; const HOME = HOMEOF();
+    if (!navigator.onLine) { box.innerHTML = '<h2>🌤️ Météo</h2><p class="muted small">Pas de connexion internet : la météo s\'affichera au retour du réseau.</p>'; return; }
     let f;
-    try { f = await forecast(HOME.lat, HOME.lon); } catch (e) { box.innerHTML = '<h2>🌤️ Météo au Raincy</h2><p class="muted small">La météo n\'a pas pu être chargée. Réessaie plus tard.</p>'; return; }
+    try { f = await forecast(HOME.lat, HOME.lon); } catch (e) { box.innerHTML = '<h2>🌤️ Météo</h2><p class="muted small">La météo n\'a pas pu être chargée. Réessaie plus tard.</p>'; return; }
     const days = f.daily.time.slice(0, 7).map(d => day(f, d));
     const evOf = date => events.filter(e => e.date === date);
     const alerts = [];
@@ -97,7 +98,7 @@ const Weather = (() => {
       const w = warnings(day(f, e.date), hour(f, e.date, e.time));
       if (w.length) alerts.push(`<li><b>${esc(longDay(e.date))}</b> · ${esc(e.label)}${e.time ? ' à ' + esc(e.time) : ''} : ${esc(w.join(', '))}</li>`);
     });
-    box.innerHTML = `<h2>🌤️ Météo au Raincy · 7 jours</h2>
+    box.innerHTML = `<h2>🌤️ Météo · ${esc((HOMEOF() || {}).name || '')} · 7 jours</h2>
       <div class="wx-week">${days.map(d => { const ev = evOf(d.date), [ic, lab] = look(d.code);
         return `<div class="wx-day ${ev.length ? 'has-ev' : ''}" title="${esc(lab)}"><span class="wx-d">${wd(d.date)}</span><span class="wx-ic">${ic}</span>
           <span class="wx-t"><b>${d.max}°</b><i>${d.min}°</i></span>${d.rain >= 0.5 ? `<span class="wx-r">${Math.round(d.rain)} mm</span>` : '<span class="wx-r"></span>'}
@@ -123,6 +124,7 @@ const Weather = (() => {
   }
   // Short weather of today's event for the top of the home page (« ☀️ 21° »)
   async function todayShort(time) {
+    const HOME = HOMEOF(); if (!HOME) return '';
     try { const f = await forecast(HOME.lat, HOME.lon), date = UI.today(), d = day(f, date), h = hour(f, date, time); if (!d) return '';
       const [ic] = look(h ? h.code : d.code), w = warnings(d, h);
       return `${ic} ${h ? h.temp : d.max}°${w.length ? ' · ' + w[0] : ''}`; } catch (e) { return ''; }

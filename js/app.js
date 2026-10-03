@@ -20,8 +20,10 @@ const App = (() => {
       document.body.classList.add('previewing');
       document.body.style.setProperty('--pvh', bar.offsetHeight + 'px');
     } else if (bar) { bar.remove(); document.body.classList.remove('previewing'); }
+    Demo.bar();
     document.documentElement.style.setProperty('--accent', UI.accentFor(c.homeBib));
-    document.getElementById('clubName').textContent = c.name;
+    document.getElementById('clubName').textContent = c.name || AppCfg.name;
+    Supporters.refresh();
     const u = Auth.current(), ru = document.getElementById('railUser');
     // The connected coach: his initials with his favourite club's crest, and « Coach Prénom » (opens Mon compte)
     const coach = u ? Messages.coachName(u) : '', first = coach.replace(/^Coach /, '');
@@ -30,7 +32,7 @@ const App = (() => {
         <span class="ru-name">${UI.esc(coach)}</span></a>${Auth.realAdmin() ? '<button class="ru-out" id="rolesBtn" title="Mes rôles">🔀 Rôles</button>' : ''}<button class="ru-out" id="logoutBtn">Sortir</button>` : '';
     const rb = document.getElementById('rolesBtn'); if (rb) rb.onclick = () => Roles.open();
     const lo = document.getElementById('logoutBtn'); if (lo) lo.onclick = () => Auth.logout();
-    document.title = (u ? coach + ' · ' : '') + c.name;
+    document.title = (u ? coach + ' · ' : '') + (c.name || AppCfg.name);
   }
   function renderNav(active) {
     // the responsables also have the club's dashboard (before Réglages)
@@ -80,7 +82,7 @@ const App = (() => {
       planning: r => Planning.page(r), resultats: r => Results.page(r), club: (r, x) => ClubLife.page(r, x), messages: (r, x) => Messages.page(r, x),
       bibliotheque: r => Library.page(r), joueurs: r => People.listPage(r, 'player'), dirigeants: r => People.listPage(r, 'staff'),
       joueur: (r, x) => People.playerPage(r, x), president: r => President.page(r), licences: r => ClubAdmin.licencesPage(r), encadrement: r => ClubAdmin.staffingPage(r), vestiaires: r => Rooms.page(r),
-      tests: (r, x) => Tests.page(r, x), bilan: (r, x) => Season.page(r, x), benevoles: r => Vol.page(r), arbitres: r => Refs.page(r), systemes: r => SesLib.page(r), gestion: r => Gestion.page(r), exercices: r => Exos.page(r), infirmerie: r => Health.page(r), progression: (r, x) => Progress.page(r, x), prepa: (r, x) => Prepa.page(r, x, sub), direct: (r, x) => Live.page(r, x), jourj: (r, x) => Quick.matchDay(r, x), analyse: (r, x) => Analyse.page(r, x), briefing: (r, x) => Analyse.briefingPage(r, x), codes: (r, x) => Codes.page(r, x) }[name] || Views.home;
+      tests: (r, x) => Tests.page(r, x), bilan: (r, x) => Season.page(r, x), benevoles: r => Vol.page(r), arbitres: r => Refs.page(r), systemes: r => SesLib.page(r), gestion: r => Gestion.page(r), exercices: r => Exos.page(r), infirmerie: r => Health.page(r), progression: (r, x) => Progress.page(r, x), prepa: (r, x) => Prepa.page(r, x, sub), direct: (r, x) => Live.page(r, x), jourj: (r, x) => Quick.matchDay(r, x), analyse: (r, x) => Analyse.page(r, x), briefing: (r, x) => Analyse.briefingPage(r, x), codes: (r, x) => Codes.page(r, x), proprietaire: r => Owner.page(r) }[name] || Views.home;
     if (!keep) Help.visit();
     fn(root, id);
     Help.guideInto(root);
@@ -117,7 +119,7 @@ const App = (() => {
   })();
   /* Updates: version.json on the site says which build is online. When it is newer than this one,
      the app empties its offline copy and reloads (an iPhone can keep an old copy open for days). */
-  const BUILD = 116, UPD = 'raincy-update-tried';
+  const BUILD = 117, UPD = AppCfg.key('update-tried');
   async function onlineBuild() {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
     return (await r.json()).build || 0;
@@ -149,6 +151,14 @@ const App = (() => {
     }
     if (manual) { UI.busy('Rechargement de l\'appli…'); forceUpdate(); }
   }
+  // (fusion) the app of one club: the club's settings (name, slogan, town, FFF page…) given by js/config.js when they are missing
+  function fillDefaults() {
+    if (!AppCfg.fixed || !Auth.isAdmin()) return false;
+    const c = Store.state.club, d = AppCfg.defaults; let n = 0;
+    Object.keys(d).forEach(k => { if (c[k] == null || c[k] === '') { c[k] = d[k]; n++; } });
+    if (n) { Store.save(); refreshChrome(); }
+    return n > 0;
+  }
   async function start() {
     if ('serviceWorker' in navigator && location.protocol !== 'file:') {
       navigator.serviceWorker.register('sw.js').catch(() => {});
@@ -159,6 +169,9 @@ const App = (() => {
     try { await Store.load(); }
     catch (e) { document.getElementById('app-stuck') || document.body.insertAdjacentHTML('beforeend', `<div id="app-stuck" style="position:fixed;inset:0;z-index:300;display:flex;align-items:center;justify-content:center;padding:16px;background:#f2f0ee"><div style="max-width:380px;text-align:center;font:16px system-ui;color:#14172b"><p><b>L'appli n'a pas pu s'ouvrir.</b><br>Tes données sont toujours sur le téléphone.</p><button style="font:inherit;padding:12px 18px;border-radius:12px;border:0;background:#8c1024;color:#fff" onclick="location.reload()">Recharger</button></div></div>`); return; }
     window.__appStarted = true; // the data are read: the safety net of index.html is not needed
+    Sport.apply();
+    // the owner's space of Clubbo: no club account needed (the owner key is asked on the page)
+    if (!AppCfg.fixed && /^#\/proprietaire/.test(location.hash)) { refreshChrome(); window.addEventListener('hashchange', route); route(); return; }
     // Invitation link sent by the responsable: …#rejoindre=CODE
     const join = (location.hash.match(/^#rejoindre=([A-Za-z0-9]+)/) || [])[1];
     // (3.74) a session received as a link: …#/recevoir/CODE
@@ -177,7 +190,7 @@ const App = (() => {
     Sync.start();
     // After the first exchange with the server: categories U6 … Vétérans for the new season
     Promise.resolve(Sync.run()).catch(() => {}).then(() => {
-      let redraw = People.autoCategories();
+      let redraw = fillDefaults() || People.autoCategories();
       // once, on a responsable's device: imported matches go to team A / B from the District team number
       const c = Store.state.club;
       if (Auth.isAdmin() && !c.matchTeamsV1) { if (Importer.reassignImported()) redraw = true; c.matchTeamsV1 = 1; Store.save(); }

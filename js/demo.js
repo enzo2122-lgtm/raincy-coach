@@ -1,12 +1,3 @@
-/* Tests seulement (tools/verif.html) : le club inventé de Clubbo (js/demo.js de Clubbo), avec le peu du module Sport dont il a besoin
-   (gardé à part, sous le nom TestSport : l'appli Raincy ne doit pas croire qu'elle a le module Sport de Clubbo).
-   Raincy n'a pas de club de démonstration : ce fichier n'est chargé que par tools/serveur.js (page /verif-app.html), jamais par l'appli. */
-// test only: the minimal Sport object that Clubbo's demo builder needs, for football
-window.TestSport = { SPORTS: { foot: { cats: ['U6','U7','U8','U9','U10','U11','U12','U13','U14','U15','U16','U17','U18','U19','Seniors','Vétérans'],
-  formatOfCat: c => /^U(6|7|8|9)$/.test(c) ? '5' : /^U(10|11|12|13)$/.test(c) ? '8' : '11',
-  posts: [['GB','Gardien','G','GB'],['DC','Défenseur central','DC','DEF'],['LD','Latéral droit','LD','DEF'],['LG','Latéral gauche','LG','DEF'],['MDC','Milieu défensif','MDC','MIL'],['MC','Milieu','MC','MIL'],['MOC','Milieu offensif','MOC','MIL'],['AD','Ailier droit','AD','ATT'],['AG','Ailier gauche','AG','ATT'],['BU','Avant-centre','BU','ATT']] } },
-  apply() {}, KEYS: ['foot'], id: () => 'foot', cur() { return this.SPORTS.foot; } };
-
 /* Demo: a made-up club, filled in, to understand Clubbo in 30 seconds without creating anything.
    It lives only on this device (no server, nothing is sent), with invented names. The bar at the top says it is a demo,
    « Créer mon club » leaves it for the real thing, « Quitter » empties it. Offered on the login screen (and #demo). */
@@ -24,7 +15,7 @@ const Demo = (() => {
   function build(sport) {
     const R = rnd(sport.length * 7919 + 17), pick = a => a[Math.floor(R() * a.length)], int = (a, b) => a + Math.floor(R() * (b - a + 1));
     const day = n => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
-    const SP = TestSport.SPORTS[sport], cats = SP.cats, now = Date.now();
+    const SP = Sport.SPORTS[sport], cats = SP.cats, now = Date.now();
     const chosen = sport === 'foot' ? ['U11', 'U13', 'Seniors'] : [cats[Math.min(3, cats.length - 1)], cats[Math.min(5, cats.length - 1)], 'Seniors'].filter((c, i, a) => cats.includes(c) && a.indexOf(c) === i);
     const teams = chosen.map(c => ({ id: 'demo-' + c.toLowerCase().replace(/[^a-z0-9]/g, ''), name: c, category: c, format: SP.formatOfCat(c), demo: true }));
     const posts = SP.posts.filter(p => p[0] !== p[3] || SP.posts.filter(q => q[3] === p[3]).length === 1);
@@ -61,11 +52,11 @@ const Demo = (() => {
     document.body.classList.add('modal-top'); // above the login screen
     modal({ title: '👀 Essayer Clubbo', noFocus: true,
       body: `<p>Un club inventé, déjà rempli (équipes, joueurs, séances, matchs), pour tout essayer. Il reste sur ce téléphone : <b>rien n'est envoyé</b>, et tu le quittes quand tu veux.</p>
-        <div class="lbl">Quel sport ?</div><div class="quick-menu">${TestSport.KEYS.map(k => `<button class="quick-item" data-demo="${k}"><b>${TestSport.SPORTS[k].icon}</b><span>${esc(TestSport.SPORTS[k].label)}</span></button>`).join('')}</div>`,
+        <div class="lbl">Quel sport ?</div><div class="quick-menu">${Sport.KEYS.map(k => `<button class="quick-item" data-demo="${k}"><b>${Sport.SPORTS[k].icon}</b><span>${esc(Sport.SPORTS[k].label)}</span></button>`).join('')}</div>`,
       onOpen: r => r.querySelectorAll('[data-demo]').forEach(b => b.onclick = async () => {
         const bz = UI.busy('Préparation du club de démonstration…');
         try {
-          S().club.sport = b.dataset.demo; TestSport.apply();
+          S().club.sport = b.dataset.demo; Sport.apply();
           const st = build(b.dataset.demo);
           Object.keys(S()).forEach(k => delete S()[k]); Object.assign(S(), st);
           Store.save(); await new Promise(res => setTimeout(res, 500));
@@ -81,7 +72,7 @@ const Demo = (() => {
   // the bar at the top of every page while the demo is open
   function bar() {
     let b = document.getElementById('demoBar');
-    if (!is()) { if (b) { b.remove(); document.body.classList.remove('demoing'); } return; }
+    if (!is() || AppCfg.fixed) { if (b) { b.remove(); document.body.classList.remove('demoing'); } return; } // never in the app of one club
     if (!b) {
       b = document.createElement('div'); b.id = 'demoBar'; document.body.appendChild(b);
       b.innerHTML = `<span>👀 <b>Club de démonstration</b><span class="lg"> · inventé, rien n'est envoyé</span></span><span class="chips"><button class="btn primary" data-demo-act="create">Créer mon club</button><button class="btn" data-demo-act="quit">Quitter</button></span>`;

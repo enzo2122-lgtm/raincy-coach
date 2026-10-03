@@ -6,7 +6,10 @@
 const Importer = (() => {
   const { esc, $, $$, toast, modal } = UI;
   const S = () => Store.state;
-  const CLUB_RE = /RAINCY/i;
+  // the main word of the club's name: « FA Le Raincy » → RAINCY, « Olympique de Paris FC » → PARIS (or the FFF name typed in Réglages → Le club)
+  const STOP = /^(FC|F|C|AS|A|S|US|U|ES|E|FA|SC|RC|JS|AC|CS|CO|OL|OLYMPIQUE|UNION|ENTENTE|ETOILE|STADE|SPORTING|SPORTIVE|SPORTIF|SPORT|SPORTS|FOOTBALL|FOOT|CLUB|ASSOCIATION|ATHLETIC|RACING|LE|LA|LES|L|DE|DU|DES|D|ET|EN|SUR|SOUS)$/;
+  const clubWord = () => { const c = S().club || {}; if (c.fffName) return norm(c.fffName).trim(); const w = norm(c.name || '').split(/[^A-Z0-9]+/).filter(x => x.length > 1 && !STOP.test(x)).sort((a, b) => b.length - a.length); return w[0] || '§'; };
+  const CLUB_RE = { test: s => { const w = clubWord(); return !!w && norm(s).includes(w); } };
   const MONTHS = { JAN: 1, FEV: 2, FÉV: 2, MAR: 3, AVR: 4, MAI: 5, JUN: 6, JUIN: 6, JUI: 7, JUIL: 7, JUL: 7, AOU: 8, AOÛ: 8, AOUT: 8, AOÛT: 8, SEP: 9, SEPT: 9, OCT: 10, NOV: 11, DEC: 12, DÉC: 12 };
   const pad = n => String(n).padStart(2, '0');
   const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
@@ -64,7 +67,7 @@ const Importer = (() => {
      Team 1 is « U14 A », team 2 « U14 B »… unless the responsable set another number on the team (Équipes → the team). */
   // « RAINCY F.A. » → 1, « RAINCY F.A. 2 » → 2, « F. ASSOCIATION LE RAINCY 1 » → 1, « FA LE RAINCY B » → 2
   const teamNo = ourName => {
-    const s = norm(ourName).replace(/^.*RAINCY/, '').replace(/^\s*F\.?\s*A\.?(?=\s|$)/, '').trim(), m = s.match(/^(\d)\b/) || s.match(/^([A-E])$/);
+    const s = norm(ourName).split(clubWord()).slice(1).join(clubWord()).replace(/^\s*F\.?\s*A\.?(?=\s|$)/, '').trim(), m = s.match(/^(\d)\b/) || s.match(/^([A-E])$/);
     return !m ? 1 : /\d/.test(m[1]) ? +m[1] : m[1].charCodeAt(0) - 64;
   };
   const letterNo = t => { const m = String(t.name || '').trim().match(/\s([A-E])$/i); return m ? m[1].toUpperCase().charCodeAt(0) - 64 : 0; };
@@ -143,15 +146,23 @@ const Importer = (() => {
   }
 
   /* ---------- import screen for matches ---------- */
+  // (1.30) the official calendar of the club's federation (basket, hand, rugby, volley): opened on its site, then imported as a file
+  function fedSteps() {
+    const [short, name, url, host] = Sport.fed();
+    return `<ol class="wizard small"><li>Ouvre le calendrier de ton équipe sur le site de la <b>${esc(name)}</b> : <a href="${esc(S().club.fffUrl || url)}" target="_blank" rel="noopener">${esc(S().club.fffUrl ? 'page du club' : host)}</a> (championnat, poule, puis ton équipe).</li>
+      <li>S'il propose « Ajouter à mon agenda » ou « Exporter (.ics) », télécharge le fichier puis touche l'onglet <b>Fichier calendrier (.ics)</b>.</li>
+      <li>Sinon, recopie les matchs dans un tableur (Date, Heure, Adversaire, Domicile) et touche l'onglet <b>Tableur (.csv)</b>.</li></ol>
+      <p class="muted small">Astuce : enregistre l'adresse de la page de ton club (Réglages → Le club → « Page du club sur le site de la ${esc(short)} ») pour l'ouvrir directement d'ici.</p>`;
+  }
   function matchesDialog(done) {
     let found = [];
     const teams = S().teams;
     modal({ title: 'Importer des matchs', body: `
-      <div class="chips" id="srcTabs"><button class="chip on" data-v="fff">Site FFF / District</button><button class="chip" data-v="ics">Fichier calendrier (.ics)</button><button class="chip" data-v="csv">Tableur (.csv)</button></div>
+      <div class="chips" id="srcTabs"><button class="chip on" data-v="fff">${Sport.isFoot() ? 'Site FFF / District' : 'Site ' + esc(Sport.fed()[0])}</button><button class="chip" data-v="ics">Fichier calendrier (.ics)</button><button class="chip" data-v="csv">Tableur (.csv)</button></div>
       <div id="srcFff" class="src">
-        <ol class="wizard small"><li>Ouvre la page de l'équipe sur <a href="https://epreuves.fff.fr/competition/club/552176-f-association-le-raincy/equipes.html" target="_blank" rel="noopener">epreuves.fff.fr</a> (ou le site du District 93), onglet <b>Résultats / Calendrier</b>.</li>
-        <li>Sélectionne tout le texte des matchs du mois (ou de la page du club), copie-le, puis colle-le ici. Recommence mois par mois, les doublons sont ignorés.</li></ol>
-        <textarea id="fffText" rows="6" placeholder="DIM 04 OCT 2026 - 15H30&#10;Seniors D3 - Senior Journée 1&#10;BFC 2&#10;15:30&#10;RAINCY F.A."></textarea>
+        ${Sport.isFoot() ? `<ol class="wizard small"><li>Ouvre la page de l'équipe sur <a href="${esc(S().club.fffUrl || Sport.fed()[2])}" target="_blank" rel="noopener">epreuves.fff.fr</a> (ou le site de ton district), onglet <b>Résultats / Calendrier</b>.</li>
+        <li>Sélectionne tout le texte des matchs du mois (ou de la page du club), copie-le, puis colle-le ici. Recommence mois par mois, les doublons sont ignorés.</li></ol>` : fedSteps()}
+        <textarea id="fffText" ${Sport.isFoot() ? '' : 'hidden'} rows="6" placeholder="DIM 04 OCT 2026 - 15H30&#10;Seniors D3 - Senior Journée 1&#10;BFC 2&#10;15:30&#10;FC EXEMPLE"></textarea>
       </div>
       <div id="srcFile" class="src" hidden><p class="muted" id="fileHint"></p><button class="btn" id="pickFile">${I.upload}<span>Choisir le fichier</span></button></div>
       <label class="fld" style="margin-top:10px"><span>Catégorie</span><select id="impTeam"><option value="auto">Automatique (d'après la compétition)</option>${teams.map(t => `<option value="${t.id}">${esc(Store.teamLabel(t))}</option>`).join('')}</select></label>
@@ -168,7 +179,7 @@ const Importer = (() => {
         $$('#srcTabs .chip', r).forEach(b => b.onclick = () => {
           $$('#srcTabs .chip', r).forEach(x => x.classList.remove('on')); b.classList.add('on'); src = b.dataset.v; found = [];
           $('#srcFff', r).hidden = src !== 'fff'; $('#srcFile', r).hidden = src === 'fff';
-          $('#fileHint', r).textContent = src === 'ics' ? 'Exporte ton agenda (Google Agenda, Calendrier iPhone, appli du club…) en fichier .ics, puis choisis-le. Chaque événement devient un match : « Raincy - Bondy » donne l\'adversaire et le domicile.' : 'Un tableau avec au moins les colonnes Date, Heure, Adversaire, et si possible Domicile (oui/non) et Compétition.';
+          $('#fileHint', r).textContent = src === 'ics' ? 'Exporte ton agenda (Google Agenda, Calendrier iPhone, appli du club…) en fichier .ics, puis choisis-le. Chaque événement devient un match : « Mon club - Bondy » donne l\'adversaire et le domicile.' : 'Un tableau avec au moins les colonnes Date, Heure, Adversaire, et si possible Domicile (oui/non) et Compétition.';
           preview();
         });
         $('#fffText', r).oninput = e => { found = parseFFF(e.target.value); preview(); };

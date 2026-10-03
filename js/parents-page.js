@@ -19,7 +19,7 @@
   const VOL = [{ key: 'buvette', icon: '🥤', label: 'Buvette', need: 2, when: 'home' }, { key: 'touche', icon: '🚩', label: 'Arbitre de touche', need: 1, when: 'all' },
     { key: 'delegue', icon: '📋', label: 'Délégué', need: 1, when: 'home' }, { key: 'table', icon: '🧾', label: 'Table de marque / FMI', need: 1, when: 'home' },
     { key: 'lavage', icon: '🧺', label: 'Lavage des maillots', need: 1, when: 'all' }];
-  const NAME = 'raincy-parent-name';
+  const NAME = AppCfg.key('parent-name');
   const myName = () => { try { return localStorage.getItem(NAME) || ''; } catch (e) { return ''; } };
   const volTasks = m => ((data.volTasks && data.volTasks.length) ? data.volTasks : VOL).filter(t => t.on !== false && (t.when === 'all' || (t.when === 'home' && m.home) || (t.when === 'away' && !m.home)));
   function volBox(m) {
@@ -44,14 +44,14 @@
   // A calendar file (.ics) for one match or all of them: the phone offers to add it to its agenda
   const icsDate = (d, t) => d.replace(/-/g, '') + 'T' + (t || '10:00').replace(':', '') + '00';
   function ics(list) {
-    const club = (data.club && data.club.name) || 'FA Le Raincy', esc2 = s => String(s || '').replace(/([,;\\])/g, '\\$1').replace(/\n/g, '\\n');
+    const club = (data.club && data.club.name) || 'Le club', esc2 = s => String(s || '').replace(/([,;\\])/g, '\\$1').replace(/\n/g, '\\n');
     const ev = m => { const start = m.rdv || m.time || '10:00', [h, mi] = (m.time || start).split(':').map(Number), end = String(Math.min(23, h + 2)).padStart(2, '0') + ':' + String(mi || 0).padStart(2, '0');
       return ['BEGIN:VEVENT', 'UID:raincy-' + m.id + '@raincy-coach', 'DTSTAMP:' + new Date().toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z', 'DTSTART:' + icsDate(m.date, start), 'DTEND:' + icsDate(m.date, end),
         'SUMMARY:' + esc2(`⚽ ${kid()} · ${m.home ? club + ' – ' + (m.opponent || '?') : (m.opponent || '?') + ' – ' + club}`),
         'LOCATION:' + esc2(m.place || (m.home ? (data.club && data.club.fieldName) || '' : '')),
         'DESCRIPTION:' + esc2(`${m.home ? 'À domicile' : 'À l\'extérieur'}${m.rdv ? ' · rendez-vous ' + hh(m.rdv) : ''}${m.time ? ' · coup d\'envoi ' + hh(m.time) : ''}`),
         'BEGIN:VALARM', 'TRIGGER:-PT2H', 'ACTION:DISPLAY', 'DESCRIPTION:Match', 'END:VALARM', 'END:VEVENT'].join('\r\n'); };
-    return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Raincy Coach//Parents//FR', 'CALSCALE:GREGORIAN', ...list.map(ev), 'END:VCALENDAR'].join('\r\n');
+    return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//' + AppCfg.name + '//Parents//FR', 'CALSCALE:GREGORIAN', ...list.map(ev), 'END:VCALENDAR'].join('\r\n');
   }
   function download(text, name) {
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'text/calendar;charset=utf-8' })); a.download = name;
@@ -68,7 +68,7 @@
   }
 
   function matchCard(m) {
-    const club = (data.club && data.club.name) || 'FA Le Raincy', us = `<b>${esc(club)}</b>`, them = esc(m.opponent || '?');
+    const club = (data.club && data.club.name) || 'Le club', us = `<b>${esc(club)}</b>`, them = esc(m.opponent || '?');
     if (m.exempt) return `<article class="card"><div class="m-date">${esc(fmt(m.date))}</div><div class="m-title">Exempt · pas de match</div></article>`;
     const place = m.place || (m.home ? (data.club && data.club.fieldName) || '' : ''), r = result(m);
     const seatSel = m.home ? '' : `<select class="seats" data-seats aria-label="Places libres dans ma voiture">${[0, 1, 2, 3, 4, 5, 6].map(n => `<option value="${n}" ${+m.seats === n ? 'selected' : ''}>${n ? `🚗 ${n} place${n > 1 ? 's' : ''} libre${n > 1 ? 's' : ''}` : '🚗 pas de place'}</option>`).join('')}</select>`;
@@ -101,7 +101,7 @@
   }
   function render() {
     const d = new Date(), now = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    const club = (data.club && data.club.name) || 'FA Le Raincy';
+    const club = (data.club && data.club.name) || 'Le club';
     document.title = `${kid()} · ${club} · Parents`;
     $('#club').textContent = `${club} · Espace parents`; $('#team').textContent = data.team || 'Équipe';
     const ms = data.matches || [], up = ms.filter(m => !m.played && m.date >= now), past = ms.filter(m => m.played || m.date < now).reverse().slice(0, 8);
@@ -120,7 +120,7 @@
 
   async function load(quiet) {
     code = Member.current();
-    try { data = await rpc('member_view', { p_code: code }); Member.remember(code, data); render(); loadPhotos(); await Member.replies(code, data); render(); loadPhotos(); }
+    try { data = await rpc('member_view', { p_code: code }); window.CLUB_SPORT = (data.club || {}).sport; Member.remember(code, data); Member.crest(data); render(); loadPhotos(); await Member.replies(code, data); render(); loadPhotos(); }
     catch (e) {
       if (e.code === 'CODE') { Member.forget(code); location.replace('moi.html'); return; }
       if (quiet && data) return;

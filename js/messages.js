@@ -3,13 +3,13 @@
 const Messages = (() => {
   const { esc, $, $$, toast, confirmBox } = UI;
   const S = () => Store.state;
-  const CACHE = 'raincy-msgs', READ = 'raincy-msg-read';
+  const CACHE = AppCfg.key('msgs'), READ = AppCfg.key('msg-read');
   let msgs = [], last = '1970-01-01T00:00:00Z', timer = null, fast = false, busy = false;
 
-  try { msgs = JSON.parse(localStorage.getItem(CACHE)) || []; if (msgs.length) last = msgs[msgs.length - 1].created_at; } catch (e) {}
+  try { msgs = JSON.parse(localStorage.getItem(CACHE)) || []; if (!Array.isArray(msgs)) msgs = []; if (msgs.length) last = msgs[msgs.length - 1].created_at; } catch (e) { msgs = []; } // a damaged copy: read again from the server
   const reads = () => { try { return JSON.parse(localStorage.getItem(READ)) || {}; } catch (e) { return {}; } };
   // categories whose teams A / B are shown in the list of conversations (this device)
-  const FAMS = 'raincy-msg-fams';
+  const FAMS = AppCfg.key('msg-fams');
   const openFams = () => { try { return JSON.parse(localStorage.getItem(FAMS)) || []; } catch (e) { return []; } };
   const saveFams = l => { try { localStorage.setItem(FAMS, JSON.stringify(l)); } catch (e) {} };
   const markRead = ch => { const r = reads(); r[ch] = new Date().toISOString(); try { localStorage.setItem(READ, JSON.stringify(r)); } catch (e) {} };
@@ -113,7 +113,7 @@ const Messages = (() => {
       for (const m of due) {
         const ch = 'team:' + m.teamId;
         if (msgs.some(x => x.channel === ch && (x.body || '').includes(TAG(m.id)))) { m.reminded = m.date; Store.upsert('matches', m); continue; }
-        const t = Store.get('teams', m.teamId) || {}, club = S().club.name || 'FA Le Raincy', d = new Date(m.date + 'T12:00');
+        const t = Store.get('teams', m.teamId) || {}, club = S().club.name || 'Le club', d = new Date(m.date + 'T12:00');
         const when = m.date === today ? 'aujourd\'hui' : 'demain ' + d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
         const body = [`📣 Rappel : match ${when}`, `⚽ ${t.name || ''} · ${m.home ? club + ' – ' + (m.opponent || '?') : (m.opponent || '?') + ' – ' + club}`,
           m.rdv || m.time ? `🕘 ${m.rdv ? 'Rendez-vous ' + m.rdv : ''}${m.rdv && m.time ? ' · ' : ''}${m.time ? 'coup d\'envoi ' + m.time : ''}` : '🕘 Heure à confirmer',
@@ -136,7 +136,7 @@ const Messages = (() => {
     if (!Cloud.ready()) {
       root.innerHTML = `<header class="page-head"><div><h1>Messages</h1><p class="sub">La messagerie des éducateurs du club</p></div></header>
         <div class="empty"><p>La messagerie passe par le serveur du club, qui n'est pas encore connecté sur cet appareil.</p>
-        ${Auth.isAdmin() ? `<a class="btn primary" href="#/reglages">${I.settings}<span>Configurer le serveur</span></a>` : '<p class="muted">Déconnecte-toi puis reconnecte-toi avec ton nom et ton mot de passe. Si ça ne marche pas, préviens le responsable.</p>'}</div>`;
+        ${Auth.isAdmin() ? `<a class="btn primary" href="#/reglages">${I.settings}<span>Se reconnecter</span></a>` : '<p class="muted">Déconnecte-toi puis reconnecte-toi avec ton nom et ton mot de passe. Si ça ne marche pas, préviens le responsable.</p>'}</div>`;
       return;
     }
     const ch = chParam && visible(decodeURIComponent(chParam)) ? decodeURIComponent(chParam) : '';

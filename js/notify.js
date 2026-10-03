@@ -19,7 +19,7 @@ const Notify = (() => {
     if (Notification.permission !== 'granted') {
       if (!ask) return null;
       const p = await Notification.requestPermission();
-      if (p !== 'granted') throw new Error('Notifications refusées. Pour les autoriser : réglages du téléphone → Notifications → Raincy Coach.');
+      if (p !== 'granted') throw new Error('Notifications refusées. Pour les autoriser : réglages du téléphone → Notifications → ' + AppCfg.name + '.');
     }
     const key = await Cloud.pushKey();
     if (!key) throw new Error('Les notifications du club ne sont pas encore activées : le responsable doit le faire une fois (Réglages → Serveur du club → Notifications).');
@@ -58,7 +58,7 @@ const Notify = (() => {
     const swOk = supported() && !!(await ready());
     if (supported() && !swOk) text = 'L\'appli n\'est pas encore prête pour les notifications : ferme-la, rouvre-la depuis son icône, puis reviens ici.';
     else if (!supported()) text = ios() && !standalone() ? '📱 Sur iPhone : ajoute d\'abord l\'appli à l\'écran d\'accueil (Partager → « Sur l\'écran d\'accueil »), ouvre-la depuis son icône, puis reviens ici.' : 'Ce navigateur ne reçoit pas de notifications.';
-    else if (perm === 'denied') text = '🚫 Notifications bloquées sur ce téléphone : autorise-les dans les réglages du téléphone (Notifications → Raincy Coach), puis reviens ici.';
+    else if (perm === 'denied') text = '🚫 Notifications bloquées sur ce téléphone : autorise-les dans les réglages du téléphone (Notifications → ' + AppCfg.name + '), puis reviens ici.';
     else if (sub && S().ui.notifOn) { text = '✅ Activées : tu es prévenu tout de suite, même appli fermée.'; b = `<button class="btn soft" data-notif="test">${I.check}<span>M'envoyer un test</span></button><button class="btn soft" data-notif="off">${I.x}<span>Désactiver</span></button>`; }
     else { text = 'Pas encore activées sur ce téléphone.'; b = `<button class="btn primary" data-notif="on">🔔<span>Activer les notifications</span></button>`; }
     if (!box.isConnected) return;
@@ -78,6 +78,7 @@ const Notify = (() => {
   }
 
   /* ---------- responsable: once for the club ---------- */
+  // (1.28) on Clubbo the notifications are set up once for every club (the platform): nothing to do for a club
   function adminCard() {
     return `<div class="notif-admin"><b>🔔 Notifications des coachs</b> <span class="muted small" id="notifSrv"></span>
       <span class="muted small">Chaque coach les active sur son téléphone : Réglages → Mon compte.</span></div>`;

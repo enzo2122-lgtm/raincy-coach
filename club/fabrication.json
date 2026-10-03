@@ -1,0 +1,84 @@
+{
+  "_lisez-moi": "Raincy Coach est fabriqué à partir de Clubbo : dans le dossier de Clubbo, node tools/fabriquer.js ../raincy-coach [nouvelle version]. Ce fichier donne la version de Raincy et ses mots dans les pages.",
+  "version": "4.0",
+  "build": 117,
+  "cache": "raincy-coach-v",
+  "remplacer": {
+    "*.html": [
+      [
+        "icons/ea-logo.png",
+        "icons/crest.png"
+      ],
+      [
+        "<p class=\"credit\">Clubbo · créée par",
+        "<p class=\"credit\">Appli du club créée par"
+      ]
+    ],
+    "index.html": [
+      [
+        "<title>Clubbo</title>",
+        "<title>FA Le Raincy · Coach</title>"
+      ],
+      [
+        "content=\"Clubbo : l'appli des éducateurs du club (équipes, séances, matchs, parents, statistiques)\"",
+        "content=\"Tableau tactique et gestion d'équipe des éducateurs du FA Le Raincy\""
+      ],
+      [
+        "<meta name=\"apple-mobile-web-app-title\" content=\"Clubbo\">",
+        "<meta name=\"apple-mobile-web-app-title\" content=\"Raincy Coach\">"
+      ]
+    ],
+    "moi.html": [
+      [
+        "<title>Clubbo · Mon espace</title>",
+        "<title>FA Le Raincy · Mon espace</title>"
+      ],
+      [
+        "<meta name=\"apple-mobile-web-app-title\" content=\"Clubbo\">",
+        "<meta name=\"apple-mobile-web-app-title\" content=\"Raincy\">"
+      ],
+      [
+        "<p id=\"club\">Clubbo</p>",
+        "<p id=\"club\">FA Le Raincy</p>"
+      ]
+    ],
+    "joueurs.html": [
+      [
+        "<title>Clubbo · Joueurs</title>",
+        "<title>FA Le Raincy · Joueurs</title>"
+      ],
+      [
+        "<meta name=\"apple-mobile-web-app-title\" content=\"EA Joueurs\">",
+        "<meta name=\"apple-mobile-web-app-title\" content=\"Raincy Joueurs\">"
+      ],
+      [
+        "<p id=\"club\">Espace joueurs</p>",
+        "<p id=\"club\">FA Le Raincy · Espace joueurs</p>"
+      ]
+    ],
+    "parents.html": [
+      [
+        "<title>Clubbo · Parents</title>",
+        "<title>FA Le Raincy · Parents</title>"
+      ],
+      [
+        "<meta name=\"apple-mobile-web-app-title\" content=\"EA Parents\">",
+        "<meta name=\"apple-mobile-web-app-title\" content=\"Raincy Parents\">"
+      ],
+      [
+        "<p id=\"club\">Espace parents</p>",
+        "<p id=\"club\">FA Le Raincy · Espace parents</p>"
+      ]
+    ],
+    "sw.js": [
+      [
+        "'icons/ea-logo.png', 'icons/ea-logo.svg', ",
+        "'icons/crest.png', "
+      ],
+      [
+        "'js/parents-page.js', 'decouvrir.html',",
+        "'js/parents-page.js',"
+      ]
+    ]
+  }
+}

@@ -2,7 +2,7 @@
    Photos are resized to keep the iPad storage light; videos are kept as they are. */
 const Media = (() => {
   const { esc, toast, modal, confirmBox } = UI;
-  const DB = 'raincy-media', OS = 'media', MAX_VIDEO = 300 * 1024 * 1024;
+  const DB = AppCfg.key('media'), OS = 'media', MAX_VIDEO = 300 * 1024 * 1024;
   let dbp = null;
   function db() {
     return dbp || (dbp = new Promise((res, rej) => {
@@ -89,7 +89,7 @@ const Media = (() => {
       actions: [
         ...(m.kind === 'video' ? [{ label: 'Analyser', icon: I.video, onClick: () => { location.hash = '#/analyse/' + m.id; } }] : []),
         ...(canDelete(m) ? [{ label: 'Supprimer', kind: 'danger', icon: I.trash, onClick: () => { setTimeout(async () => { if (await confirmBox('Supprimer ce fichier ?')) { await del(m.id); toast('Supprimé'); after && after(); } }, 60); } }] : []),
-        { label: 'Enregistrer / partager', icon: I.share, onClick: () => { Exporter.deliver(m.blob, `raincy-${m.id}.${m.kind === 'video' ? (m.mime.includes('quicktime') ? 'mov' : 'mp4') : 'jpg'}`); return false; } },
+        { label: 'Enregistrer / partager', icon: I.share, onClick: () => { Exporter.deliver(m.blob, `club-${m.id}.${m.kind === 'video' ? (m.mime.includes('quicktime') ? 'mov' : 'mp4') : 'jpg'}`); return false; } },
         { label: 'Fermer', kind: 'primary' },
       ],
     });
