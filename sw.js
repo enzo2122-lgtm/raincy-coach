@@ -1,5 +1,5 @@
 /* Service worker: keeps the app working without internet. Bump VERSION after each update. */
-const VERSION = 'raincy-coach-v121';
+const VERSION = 'raincy-coach-v122';
 const JSPDF = 'https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js';
 const FILES = [
   './', 'index.html', 'app.css', 'manifest.webmanifest',
