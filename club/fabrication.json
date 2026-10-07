@@ -76,8 +76,8 @@
         "'icons/crest.png', "
       ],
       [
-        "'js/parents-page.js', 'decouvrir.html',",
-        "'js/parents-page.js',"
+        "'js/injury.js', 'decouvrir.html',",
+        "'js/injury.js',"
       ]
     ]
   }

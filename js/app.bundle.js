@@ -3529,7 +3529,7 @@ var Importer = (() => {
    Errors are caught and kept so a coach can attach them to a report. */
 var Help = (() => {
   const { esc, $, $$, toast, modal } = UI;
-  const VERSION = '4.44';
+  const VERSION = '4.45';
   const TOUR_KEY = AppCfg.key('tour-seen'), ERR_KEY = AppCfg.key('errors');
 
   /* ---------- error log ---------- */
@@ -5545,7 +5545,7 @@ var People = (() => {
     const tile = (v, l, cls = '') => `<div class="tile ${cls}"><b>${v}</b><span>${l}</span></div>`;
     const recentTr = s.att.list.slice().sort((a, b) => b.date.localeCompare(a.date)).slice(0, 12);
     root.innerHTML = `<header class="page-head"><div><h1>${p.number ? `<span class="pnum big">${esc(p.number)}</span> ` : ''}${esc(name(p))}</h1>
-        <p class="sub">${[postsLabel(p), p.birth ? `${age(p.birth)} ans (${fmtBirth(p.birth)})` : '', p.foot ? 'pied ' + String(p.foot).toLowerCase() : '', p.height ? p.height + ' cm' : '', p.weight ? p.weight + ' kg' : '', p.mute ? 'muté' : '', p.licence ? 'licence ' + p.licence : '', p.subcat, teamNames(p.teamIds)].filter((x, i, a) => x && a.indexOf(x) === i).map(esc).join(' · ')}</p></div>
+        <p class="sub">${[postsLabel(p), p.birth ? `${age(p.birth)} ans (${fmtBirth(p.birth)})` : '', p.foot ? 'pied ' + String(p.foot).toLowerCase() : '', p.height ? p.height + ' cm' : '', p.weight ? p.weight + ' kg' : '', +p.weight && +p.height ? 'IMC ' + String(Math.round(p.weight / Math.pow(p.height / 100, 2) * 10) / 10).replace('.', ',') : '', p.mute ? 'muté' : '', p.licence ? 'licence ' + p.licence : '', p.subcat, teamNames(p.teamIds)].filter((x, i, a) => x && a.indexOf(x) === i).map(esc).join(' · ')}</p></div>
       <div class="head-actions"><button class="btn" data-act="back">${I.back}<span>Retour</span></button><button class="btn primary" data-act="edit">${I.edit}<span>Modifier</span></button></div></header>
       ${UI.kindSeg()}
       <div class="tiles">
@@ -5556,6 +5556,7 @@ var People = (() => {
       <p class="muted small">Saison ${esc(seasonLabel())} · les présences comptent les séances où le coach a fait l'appel.</p>
       <div class="cards2">
         ${Health.playerCard(p)}
+        ${p.strengths || p.weaknesses ? `<section class="card"><h2>🧍 Son profil (rempli par le joueur)</h2>${p.strengths ? `<p>💪 <b>Points forts :</b> ${esc(p.strengths)}</p>` : ''}${p.weaknesses ? `<p>🎯 <b>À travailler :</b> ${esc(p.weaknesses)}</p>` : ''}</section>` : ''}
         ${Progress.card(p)}
         ${Tips.card(p)}
         ${Tests.card(p)}
@@ -8267,14 +8268,16 @@ var Health = (() => {
   /* ---------- availability ---------- */
   // the unavailability running on a day (the return date is the first day he is back)
   const on = (p, date = today()) => (p && p.unavail || []).find(u => u.from <= date && (!u.to || date < u.to)) || null;
-  const label = u => `${KINDS[u.kind][0]} ${KINDS[u.kind][1]}${u.part ? ' · ' + u.part : u.reason ? ' · ' + u.reason : ''}${u.to ? ' · retour le ' + fmt(u.to) : ' · retour à confirmer'}`;
+  // (1.81) the part with its side and the kind of injury; « 📱 » when the player or his parents reported it
+  const side = u => u.side && typeof BodyMap !== 'undefined' ? ' ' + BodyMap.SIDE[u.side] : '';
+  const label = u => `${KINDS[u.kind][0]} ${KINDS[u.kind][1]}${u.part ? ' · ' + u.part + side(u) : u.reason ? ' · ' + u.reason : ''}${u.type ? ' · ' + u.type.toLowerCase() : ''}${u.to ? ' · retour le ' + fmt(u.to) : ' · retour à confirmer'}${u.self ? (u.parent ? ' · 📱 signalé par les parents' : ' · 📱 signalé par le joueur') : ''}`;
   // the small sign before a name (convocation, call of a session)
   const flag = (p, date) => { const u = on(p, date); return u ? `<span class="hl-flag" title="${esc(label(u))}" aria-label="${esc(label(u))}">${KINDS[u.kind][0]}</span>` : ''; };
 
   function dialog(p, done, u) {
-    const e = Object.assign({ kind: 'injury', from: today(), to: '', part: '', reason: '', note: '' }, u || {});
+    const e = Object.assign({ kind: 'injury', from: today(), to: '', part: '', zone: '', side: '', type: '', reason: '', note: '' }, u || {});
     const body = () => `<div class="chips">${Object.entries(KINDS).map(([k, [ic, l]]) => `<button class="chip ${e.kind === k ? 'on' : ''}" data-kind="${k}">${ic} ${l}</button>`).join('')}</div>
-      ${e.kind === 'injury' ? `<div class="lbl">Où ?</div><div class="chips hl-parts">${PARTS.map(x => `<button class="chip ${e.part === x ? 'on' : ''}" data-part="${esc(x)}">${esc(x)}</button>`).join('')}</div>` : ''}
+      ${e.kind === 'injury' ? `<div class="hl-bm">${BodyMap.html(e, { noDays: true })}</div>${e.part && !e.zone ? `<p class="muted small">Zone : ${esc(e.part)}</p>` : ''}` : ''}
       ${e.kind === 'away' ? `<div class="lbl">Pourquoi ?</div><div class="chips">${AWAY.map(x => `<button class="chip ${e.reason === x ? 'on' : ''}" data-reason="${esc(x)}">${esc(x)}</button>`).join('')}</div>` : ''}
       <div class="row2"><label class="fld"><span>Depuis le</span><input type="date" id="hlFrom" value="${esc(e.from)}"></label>
         <label class="fld"><span>${e.kind === 'susp' ? 'Rejoue le' : 'Retour prévu le'}</span><input type="date" id="hlTo" value="${esc(e.to)}"></label></div>
@@ -8284,6 +8287,7 @@ var Health = (() => {
       onOpen: r => {
         const keep = () => { e.from = $('#hlFrom', r).value || e.from; e.to = $('#hlTo', r).value; e.note = $('#hlNote', r).value; };
         r.querySelector('#hlBody').onclick = ev => {
+          if (BodyMap.click(ev, e)) { keep(); r.querySelector('#hlBody').innerHTML = body(); return; } // (1.81) the body: zone, injury, kind
           const b = ev.target.closest('button'); if (!b) return; keep();
           if (b.dataset.kind) e.kind = b.dataset.kind; if (b.dataset.part) e.part = b.dataset.part; if (b.dataset.reason) e.reason = b.dataset.reason;
           if (b.dataset.plus) e.to = addDays(e.from || today(), +b.dataset.plus);
@@ -8294,7 +8298,7 @@ var Health = (() => {
         { label: 'Annuler' }, { label: 'Enregistrer', kind: 'primary', onClick: (c, r) => {
           e.from = $('#hlFrom', r).value || today(); e.to = $('#hlTo', r).value; e.note = $('#hlNote', r).value.trim();
           if (e.to && e.to <= e.from) { toast('Le retour doit être après le début', 'err'); return false; }
-          if (e.kind !== 'injury') e.part = ''; if (e.kind !== 'away') e.reason = '';
+          if (e.kind !== 'injury') { e.part = ''; e.zone = ''; e.side = ''; e.type = ''; } if (e.kind !== 'away') e.reason = '';
           const list = p.unavail = (p.unavail || []).filter(x => x.id !== e.id);
           list.push(Object.assign(e, { id: e.id || Store.uid(), by: (Auth.current() || {}).id || null })); list.sort((a, b) => b.from.localeCompare(a.from));
           Store.upsert('players', p); toast(u ? 'Modifié' : `${Store.shortName(p)} : ${KINDS[e.kind][1].toLowerCase()}`); done && done();
@@ -8361,7 +8365,7 @@ var Health = (() => {
     const load = ps.map(p => [p, risk(p.id)]).filter(([, r]) => r.acute || r.chronic).sort((a, b) => (b[1].ratio || 0) - (a[1].ratio || 0));
     root.innerHTML = `<header class="page-head"><div><h1>🚑 Infirmerie</h1><p class="sub">Blessés, malades, absents, suspendus · charge d'entraînement</p></div>
       <div class="head-actions"><a class="btn" href="#/equipes">${I.back}<span>Équipes</span></a><button class="btn primary" data-hl="new">${I.plus}<span>Déclarer un joueur</span></button></div></header>
-      <div class="hl-sum">${Object.entries(KINDS).map(([k, [ic, l]]) => `<span>${ic} <b>${now.filter(([, u]) => u.kind === k).length}</b> ${l.toLowerCase()}${now.filter(([, u]) => u.kind === k).length > 1 ? 's' : ''}</span>`).join('')}</div>
+      ${followCard()}<div class="hl-sum">${Object.entries(KINDS).map(([k, [ic, l]]) => `<span>${ic} <b>${now.filter(([, u]) => u.kind === k).length}</b> ${l.toLowerCase()}${now.filter(([, u]) => u.kind === k).length > 1 ? 's' : ''}</span>`).join('')}</div>
       <h2 class="section">Indisponibles aujourd'hui (${now.length})</h2>
       <div class="list">${now.map(([p, u]) => `<div class="list-item hl-item k-${u.kind}"><a class="li-main" href="#/joueur/${p.id}"><b>${KINDS[u.kind][0]} ${esc(Store.fullName(p))}</b><span class="muted">${esc(teamsOf(p))} · ${esc(label(u).replace(/^\S+ /, ''))}${u.to ? ` · ${days(t, u.to)} j` : ''}${u.note ? ' · ' + esc(u.note) : ''}</span></a>
         <button class="btn soft" data-hlback="${p.id}|${u.id}">💪 De retour</button></div>`).join('') || '<p class="muted">Personne : tout le monde est disponible. 💪</p>'}</div>
@@ -8384,6 +8388,30 @@ var Health = (() => {
     };
   }
   const count = () => S().players.filter(Auth.seesPerson).filter(p => on(p)).length;
+
+  /* ---------- (1.81) news of the injured: a reminder to the coaches every 3 days (at once when the player reported it himself) ---------- */
+  const EVERY = 3;
+  function followUps() {
+    const t = today();
+    return S().players.filter(Auth.seesPerson).map(p => { const u = on(p, t); if (!u || u.kind !== 'injury') return null;
+      const checks = u.checks || [], last = checks.length ? checks[checks.length - 1] : null;
+      const due = last ? days(last, t) >= EVERY : (u.self || days(u.from, t) >= EVERY);
+      return due ? { p, u, last, since: days(u.from, t) } : null; }).filter(Boolean).sort((a, b) => b.since - a.since);
+  }
+  function followCard() {
+    const l = followUps(); if (!l.length) return '';
+    return `<section class="card hl-follow"><h2>📞 Prendre des nouvelles des blessés (${l.length})</h2><p class="muted small">Un petit appel ou un message : ça compte beaucoup pour un joueur blessé. Rappel tous les ${EVERY} jours.</p>
+      ${l.map(({ p, u, last, since }) => `<div class="hl-fu" data-fu="${p.id}|${u.id}"><a href="#/joueur/${p.id}"><b>${esc(Store.fullName(p))}</b><span class="muted small">${esc(label(u).replace(/^\S+ \S+ · /, ''))} · blessé depuis ${since} j · ${last ? 'nouvelles prises le ' + esc(fmt(last)) : 'pas encore de nouvelles'}</span></a>
+        <span class="chips">${p.phone ? `<a class="btn soft" href="tel:${esc(String(p.phone).replace(/[^\d+]/g, ''))}">📞<span>Appeler</span></a>` : ''}<button class="btn primary" data-hlcheck="${p.id}|${u.id}">✓<span>Nouvelles prises</span></button></span></div>`).join('')}</section>`;
+  }
+  // « Nouvelles prises »: kept on the injury (shared with the other coaches), the line leaves the list
+  if (typeof document !== 'undefined') document.addEventListener('click', ev => {
+    const b = ev.target.closest('[data-hlcheck]'); if (!b) return;
+    const [pid, uid] = b.dataset.hlcheck.split('|'), p = Store.get('players', pid), u = p && (p.unavail || []).find(x => x.id === uid); if (!u) return;
+    u.checks = [...(u.checks || []), today()].slice(-30); Store.upsert('players', p);
+    const row = b.closest('.hl-fu'), card = b.closest('.hl-follow'); if (row) row.remove(); if (card && !card.querySelector('.hl-fu')) card.remove();
+    toast(`Noté : nouvelles de ${Store.shortName(p)} prises 💚`);
+  });
 
   /* ---------- well-being: mood, mental, sleep, legs, soreness (1 to 10), filled in by the player on his page ---------- */
   const WB = [['mood', '🙂', 'Ressenti'], ['mental', '🧠', 'Mental'], ['sleep', '😴', 'Sommeil'], ['legs', '🦵', 'Jambes'], ['sore', '💪', 'Courbatures']];
@@ -8412,7 +8440,7 @@ var Health = (() => {
         return `<a href="#/joueur/${p.id}" class="${a <= 4.5 ? 'high' : ''}"><span>${esc(Store.fullName(p))}</span><b>${a.toFixed(1).replace('.', ',')}</b><i>${l.length} réponse${l.length > 1 ? 's' : ''} · moyenne sur 10</i></a>`; }).join('')}</div>`;
   }
 
-  return { on, flag, label, dialog, playerCard, click, rpeBox, rpeClick, risk, page, count, KINDS, WB, wellnessCard, wellnessSection, toCall };
+  return { followCard, followUps, on, flag, label, dialog, playerCard, click, rpeBox, rpeClick, risk, page, count, KINDS, WB, wellnessCard, wellnessSection, toCall };
 })();
 
 ;
@@ -13328,6 +13356,12 @@ var Demo = (() => {
 var News = (() => {
   const { esc, modal } = UI;
   const LIST = [
+    { n: 37, date: '2026-10-07', title: 'Silence, on tourne 🎬', items: [
+      ['🎬', 'Match → onglet Après : « Highlights » (liens vidéo + minute), puis « Envoyer aux joueurs ». Ils les regardent dans l\'appli, pop-corn non fourni.'],
+      ['💬', 'Les joueurs écrivent au coach (message, idée, bug) : notification sur ton téléphone.'],
+      ['🧍', 'Profil joueur : poids, taille, pied fort, points forts et faibles, IMC calculé tout seul.'],
+      ['🦴', 'Blessures : joueurs et parents touchent la zone sur un corps humain (avec les os), choisissent la blessure, le type et la durée. Tu es prévenu, et l\'Infirmerie te rappelle de prendre des nouvelles tous les 3 jours.'],
+    ] },
     { n: 36, date: '2026-10-07', title: 'Tout le programme au même endroit', items: [
       ['📅', 'Espaces joueur et parents, onglet Séances : les entraînements ET les matchs à venir, par date, avec « dispo / pas dispo » sur chaque match.'],
     ] },
@@ -13505,11 +13539,15 @@ var News = (() => {
     modal({ title: title || '🎉 Quoi de neuf ?', noFocus: true, body: list.map(block).join(''), actions: [{ label: 'C\'est parti !', kind: 'primary' }] });
   }
   // after an update: the news not seen yet on this device (a new install starts from the latest)
+  // (1.81) a bénévole or a referee (not a coach): only what is new, short (no bug fixed, no detail)
+  const FIX = /^(🐛|🐞|🔧|🩹|🛠️)$/, fixText = /corrig|r[ée]par|bug|plantait|ne marchait/i;
+  const brief = list => list.map(e => Object.assign({}, e, { items: e.items.filter(([ic, tx]) => !FIX.test(ic) && !fixText.test(tx)).slice(0, 2).map(([ic, tx]) => [ic, String(tx).split(/[.:(]/)[0]]) })).filter(e => e.items.length).slice(0, 3);
   function check() {
     const s = seen();
     const fresh = s ? LIST.filter(e => e.n > s) : LIST.slice(0, 2);
     setSeen(latest());
-    if (fresh.length) setTimeout(() => show(fresh), 700);
+    const pv = Auth.preview(), list = pv && pv.role !== 'coach' ? brief(fresh) : fresh;
+    if (list.length) setTimeout(() => show(list), 700);
   }
   const all = () => show(LIST, '📰 Les nouveautés');
   return { check, all, LIST };
@@ -14036,6 +14074,214 @@ var Game = (() => {
 })();
 
 ;
+/* ===== vplayer.js ===== */
+/* (1.81) A video player inside the app: YouTube, Vimeo, Dailymotion, Google Drive, Streamable or a video file (mp4, webm…).
+   Shared by the coach's app (highlights of a match) and the players' page (videos sent by the coach). Other links open in a new tab. */
+var VPlayer = (() => {
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  // « 1:23 », « 83 » or « 1m23 » → seconds
+  const secs = t => { const s = String(t || '').trim(); if (!s) return 0; if (/^\d+$/.test(s)) return +s; const p = s.split(/[:hm]/).map(x => +x || 0); return p.reduce((a, x) => a * 60 + x, 0); };
+  const mmss = n => n ? `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}` : '';
+  // the embeddable address of a link (null: not playable here)
+  function src(url, start) {
+    const u = String(url || '').trim(); if (!/^https:\/\//.test(u)) return null;
+    const st = secs(start) || secs((u.match(/[?&#]t=(\d+[hms\d]*)/) || [])[1]);
+    let m = u.match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|shorts\/|embed\/|live\/)|youtu\.be\/)([\w-]{11})/);
+    if (m) return { kind: 'frame', url: `https://www.youtube-nocookie.com/embed/${m[1]}?rel=0&playsinline=1${st ? '&start=' + st : ''}` };
+    if ((m = u.match(/vimeo\.com\/(?:video\/)?(\d+)/))) return { kind: 'frame', url: `https://player.vimeo.com/video/${m[1]}${st ? '#t=' + st + 's' : ''}` };
+    if ((m = u.match(/dai(?:lymotion\.com\/video|\.ly)\/([a-z0-9]+)/i))) return { kind: 'frame', url: `https://www.dailymotion.com/embed/video/${m[1]}${st ? '?start=' + st : ''}` };
+    if ((m = u.match(/drive\.google\.com\/(?:file\/d\/|open\?id=)([\w-]+)/))) return { kind: 'frame', url: `https://drive.google.com/file/d/${m[1]}/preview` };
+    if ((m = u.match(/streamable\.com\/([a-z0-9]+)/i))) return { kind: 'frame', url: `https://streamable.com/e/${m[1]}` };
+    if (/\.(mp4|webm|ogg|mov|m4v)(\?|#|$)/i.test(u)) return { kind: 'video', url: u + (st ? '#t=' + st : '') };
+    return null;
+  }
+  const label = url => { const h = (String(url).match(/^https:\/\/(?:www\.)?([^/]+)/) || [])[1] || 'lien'; return /youtu/.test(h) ? 'YouTube' : /vimeo/.test(h) ? 'Vimeo' : /drive\.google/.test(h) ? 'Google Drive' : h; };
+  function css() {
+    if (document.getElementById('vpCss')) return;
+    const st = document.createElement('style'); st.id = 'vpCss';
+    st.textContent = '.vp-back{position:fixed;inset:0;z-index:120;background:rgba(5,8,20,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:12px}'
+      + '.vp-box{width:min(960px,100%)}.vp-frame{position:relative;width:100%;aspect-ratio:16/9;background:#000;border-radius:12px;overflow:hidden}.vp-frame iframe,.vp-frame video{position:absolute;inset:0;width:100%;height:100%;border:0}'
+      + '.vp-bar{display:flex;justify-content:space-between;align-items:center;gap:10px;color:#fff;margin-bottom:8px}.vp-bar b{font-size:16px}.vp-bar button,.vp-bar a{background:rgba(255,255,255,.14);color:#fff;border:0;border-radius:10px;padding:8px 12px;font:inherit;font-weight:700;text-decoration:none;cursor:pointer}'
+      + '.vp-list{display:grid;gap:8px}.vp-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;border:1px solid var(--line,#ddd);background:var(--surface,#fff);color:inherit;font:inherit;text-align:left;cursor:pointer;width:100%}'
+      + '.vp-item .pl{flex:none;width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:#be123c;color:#fff;font-size:15px}.vp-item small{display:block;opacity:.7}';
+    document.head.appendChild(st);
+  }
+  // opens the player over the page
+  function open(url, start, title) {
+    css(); const s = src(url, start);
+    if (!s) { window.open(url, '_blank', 'noopener'); return; }
+    const o = document.createElement('div'); o.className = 'vp-back';
+    o.innerHTML = `<div class="vp-box"><div class="vp-bar"><b>${esc(title || 'Vidéo')}</b><span><a href="${esc(url)}" target="_blank" rel="noopener noreferrer">↗</a> <button type="button" data-vpx>✕ Fermer</button></span></div>
+      <div class="vp-frame">${s.kind === 'video' ? `<video src="${esc(s.url)}" controls autoplay playsinline></video>` : `<iframe src="${esc(s.url)}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>`}</div></div>`;
+    const close = () => { o.remove(); document.removeEventListener('keydown', key); };
+    const key = e => { if (e.key === 'Escape') close(); };
+    o.onclick = e => { if (e.target === o || e.target.closest('[data-vpx]')) close(); };
+    document.addEventListener('keydown', key); document.body.appendChild(o);
+  }
+  // a list of clips: [{ url, t, title }] → buttons that open the player (data-vp…)
+  function list(clips) {
+    css();
+    return `<div class="vp-list">${(clips || []).filter(c => c && c.url).map(c => `<button type="button" class="vp-item" data-vp="${esc(c.url)}" data-vpt="${esc(c.t || '')}" data-vptitle="${esc(c.title || '')}"><span class="pl">▶</span><span><b>${esc(c.title || 'Vidéo')}</b><small>${esc(label(c.url))}${secs(c.t) ? ' · à ' + mmss(secs(c.t)) : ''}</small></span></button>`).join('')}</div>`;
+  }
+  // a click on one of these buttons (delegated by the page); true when handled
+  function onClick(e) { const b = e.target.closest('[data-vp]'); if (!b) return false; open(b.dataset.vp, b.dataset.vpt, b.dataset.vptitle); return true; }
+  return { open, list, onClick, src, secs, mmss };
+})();
+
+;
+/* ===== highlights.js ===== */
+/* (1.81) Highlights of a match (coach and responsable, tab « Après »): the best moments as video links (YouTube, Drive, Veo…),
+   each with its title and its start time, then « Envoyer aux joueurs »: they see them in their space (tab Vidéos) and get a notification. */
+var Highlights = (() => {
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const uid = () => Math.random().toString(36).slice(2, 10);
+  function html(m) {
+    const cl = m.highlights || [];
+    return `<section class="card hl-card"><h2>🎬 Highlights du match</h2>
+      <p class="muted small">Colle le lien de chaque vidéo (YouTube, Google Drive, Vimeo, Veo, fichier mp4…) avec un titre et, si besoin, la minute où ça commence. Les joueurs les regardent dans l'appli.</p>
+      ${cl.length ? VPlayer.list(cl) + `<div class="chips" style="margin-top:6px">${cl.map(c => `<button class="chip" data-hldel="${esc(c.id)}">✕ ${esc(c.title || 'Vidéo')}</button>`).join('')}</div>` : ''}
+      <div class="row3" style="margin-top:10px">
+        <label class="fld"><span>Titre</span><input id="hlTitle" maxlength="80" placeholder="But de Yanis, 23e"></label>
+        <label class="fld"><span>Lien de la vidéo</span><input id="hlUrl" inputmode="url" placeholder="https://youtu.be/…"></label>
+        <label class="fld"><span>Début (min:s)</span><input id="hlT" maxlength="8" placeholder="1:23"></label>
+      </div>
+      <div class="chips"><button class="btn soft" data-hladd>＋ Ajouter la vidéo</button>
+        ${cl.length ? `<button class="btn primary" data-hlsend>📣 ${m.hlSent ? 'Renvoyer aux joueurs' : 'Envoyer aux joueurs'}</button>` : ''}</div>
+      ${m.hlSent ? `<p class="muted small">✓ Envoyé le ${esc(new Date(m.hlSent).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' }))} : les joueurs de l'équipe les voient dans l'onglet « Vidéos ».</p>` : ''}</section>`;
+  }
+  // box: the element to fill; save: stores the match; toast: the message bar
+  function mount(box, m, save, toast) {
+    if (!box) return;
+    const draw = () => { box.innerHTML = html(m); };
+    draw();
+    box.onclick = e => {
+      if (VPlayer.onClick(e)) return;
+      const d = e.target.closest('[data-hldel]');
+      if (d) { if (!confirm('Retirer cette vidéo ?')) return; m.highlights = (m.highlights || []).filter(c => c.id !== d.dataset.hldel); save(); return draw(); }
+      if (e.target.closest('[data-hladd]')) {
+        const url = box.querySelector('#hlUrl').value.trim(), title = box.querySelector('#hlTitle').value.trim(), t = box.querySelector('#hlT').value.trim();
+        if (!/^https:\/\//.test(url)) return toast('Colle un lien qui commence par https://', true);
+        m.highlights = [...(m.highlights || []), { id: uid(), url, title: title || 'Action ' + ((m.highlights || []).length + 1), t }];
+        save(); draw(); toast(VPlayer.src(url) ? 'Vidéo ajoutée ✓' : 'Ajoutée ✓ (ce lien s\'ouvrira dans un nouvel onglet)'); return;
+      }
+      if (e.target.closest('[data-hlsend]')) {
+        m.hlSent = new Date().toISOString(); save(); draw();
+        toast('Envoyé : les joueurs sont prévenus 🎬');
+      }
+    };
+  }
+  return { mount, html };
+})();
+
+;
+/* ===== bodymap.js ===== */
+/* (1.81) A human body (front and back) to point at the painful zone: a touch on a zone gives the usual injuries there
+   (groin, hamstrings, knee ligaments…). Shared by the coach's app (Infirmerie) and the players' and parents' pages.
+   html(sel) draws it; sel = { zone, side, part, type, days }. The page calls click(e, sel) and redraws when it returns true. */
+var BodyMap = (() => {
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  // zone: [name, the usual injuries]
+  const ZONES = {
+    head: ['Tête', ['Commotion (choc à la tête)', 'Nez', 'Mâchoire / dents', 'Arcade', 'Œil']],
+    neck: ['Cou / nuque', ['Torticolis', 'Cervicales', 'Coup du lapin']],
+    shoulder: ['Épaule', ['Luxation de l\'épaule', 'Clavicule', 'Coiffe des rotateurs', 'Acromio-claviculaire']],
+    arm: ['Bras / coude', ['Coude', 'Avant-bras', 'Biceps', 'Triceps']],
+    hand: ['Poignet / main', ['Entorse du poignet', 'Doigt', 'Pouce', 'Main']],
+    chest: ['Poitrine / côtes', ['Côtes', 'Pectoraux', 'Sternum']],
+    abdo: ['Ventre', ['Abdominaux', 'Point de côté', 'Obliques']],
+    groin: ['Aine / hanche', ['Aine (adducteurs)', 'Pubalgie', 'Psoas (fléchisseur de hanche)', 'Hanche']],
+    thigh: ['Cuisse (devant)', ['Quadriceps', 'Droit fémoral', 'Contusion (béquille)']],
+    knee: ['Genou', ['Ligament croisé (LCA)', 'Ligament latéral interne', 'Ligament latéral externe', 'Ménisque', 'Rotule / tendon rotulien']],
+    shin: ['Tibia / jambe', ['Tibia (périostite)', 'Contusion (coup de crampon)', 'Péroné']],
+    ankle: ['Cheville', ['Entorse de la cheville', 'Ligaments de la cheville', 'Malléole']],
+    foot: ['Pied', ['Orteil', 'Voûte plantaire', 'Métatarse', 'Dessus du pied']],
+    upback: ['Haut du dos', ['Dorsales', 'Omoplate', 'Trapèzes']],
+    lowback: ['Bas du dos', ['Lombaires', 'Lumbago', 'Sciatique']],
+    glute: ['Fessier', ['Fessier', 'Sciatique', 'Pyramidal']],
+    ham: ['Arrière de la cuisse', ['Ischio-jambiers', 'Élongation des ischios', 'Déchirure des ischios']],
+    calf: ['Mollet', ['Mollet', 'Tennis leg (déchirure du mollet)', 'Crampe']],
+    achilles: ['Talon / Achille', ['Tendon d\'Achille', 'Talon', 'Aponévrose plantaire']],
+  };
+  const TYPES = ['Entorse', 'Contracture', 'Élongation', 'Déchirure', 'Choc / contusion', 'Tendinite', 'Fracture', 'Luxation', 'Douleur', 'Autre'];
+  const DAYS = [[3, 'Quelques jours'], [7, '1 semaine'], [14, '2 semaines'], [21, '3 semaines'], [30, '1 mois'], [42, '6 semaines'], [90, '3 mois'], [0, 'Je ne sais pas']];
+  // the drawing (viewBox 120 × 240): a human body, the clickable zones over it, the skeleton on top (it lets the touches through).
+  // A shape is drawn on the left of the picture; MIR copies it to the right. Front view: his right on our left; back view: the opposite.
+  const MIR = ' transform="matrix(-1 0 0 1 120 0)"', mir = el => el.replace(/^<(\w+)/, '<$1' + MIR);
+  const P = {
+    head: '<ellipse cx="60" cy="19" rx="11" ry="13"/>', neck: '<path d="M54.5,29 L65.5,29 L66.5,39 L53.5,39 Z"/>',
+    torso: '<path d="M54,37 C44,38 36,40 33,46 C31,51 33,60 37,70 C39,78 42,84 43,90 C42,96 39,102 40,110 L80,110 C81,102 78,96 77,90 C78,84 81,78 83,70 C87,60 89,51 87,46 C84,40 76,38 66,37 Z"/>',
+    arm: '<path d="M35,45 C29,47 26.5,55 25.5,65 L23.5,84 C22,94 21,104 20.5,112 L27,113 C28,104 29.5,95 31,86 L33.5,70 C34.5,62 37,55 38,50 Z"/>',
+    hand: '<ellipse cx="23.5" cy="120" rx="4.5" ry="7.5"/>',
+    leg: '<path d="M40,108 C38.5,125 41,145 44,160 C45,167 44.5,170 44.2,175 C44,193 46,208 47.8,221 L54.2,221 C55.3,208 56.3,193 56.6,175 C56.4,170 56.5,166 57.5,160 C58.5,145 59.5,125 60,108 Z"/>',
+    foot: '<path d="M46.5,224 L55,224 L57,232 C57.5,236 53,237.5 48,237 C43.5,236.5 42,234 44,231 Z"/>',
+    shoulder: '<circle cx="37" cy="48" r="7"/>',
+    chest: '<path d="M44,40 C50,38.5 70,38.5 76,40 C80,42 82,50 81,58 L79,70 L41,70 L39,58 C38,50 40,42 44,40 Z"/>',
+    abdo: '<path d="M41,70 L79,70 C78,78 77,85 77.5,92 L42.5,92 C43,85 42,78 41,70 Z"/>',
+    groin: '<path d="M42.5,92 L77.5,92 C79,98 80,104 80,110 C73,113 66,114 60,114 C54,114 47,113 40,110 C40,104 41,98 42.5,92 Z"/>',
+    glute: '<path d="M41,92 L60,92 L60,114 C52,116 44,114 40.5,110 C40,104 40.5,97 41,92 Z"/>',
+    thigh: '<path d="M40,108 C38.5,125 41,145 44,160 L57.5,160 C58.5,145 59.5,125 60,108 Z"/>',
+    knee: '<ellipse cx="50.5" cy="166.5" rx="7" ry="7.5"/>',
+    shin: '<path d="M44.2,173 C44,193 46,208 47.8,218 L54.2,218 C55.3,208 56.3,193 56.6,173 Z"/>',
+    calf: '<path d="M44.2,173 C43.5,186 45,198 47.5,209 L54.5,209 C56.5,198 57.3,186 56.6,173 Z"/>',
+    ankle: '<ellipse cx="51" cy="221.5" rx="4.8" ry="3.6"/>', achilles: '<rect x="48" y="209" width="6" height="13" rx="3"/>',
+    heel: '<ellipse cx="51" cy="229" rx="5.5" ry="6"/>',
+  };
+  const BODY = [P.head, P.neck, P.torso, P.arm, mir(P.arm), P.hand, mir(P.hand), P.leg, mir(P.leg), P.foot, mir(P.foot)].join('');
+  // [zone, side, shape]: one per side for the limbs (the left one of the picture first)
+  const two = (z, el, front) => [[z, front ? 'd' : 'g', el], [z, front ? 'g' : 'd', mir(el)]];
+  const FRONT = [['head', '', P.head], ['neck', '', P.neck], ['chest', '', P.chest], ['abdo', '', P.abdo], ['groin', '', P.groin],
+    ...two('shoulder', P.shoulder, 1), ...two('arm', P.arm, 1), ...two('hand', P.hand, 1), ...two('thigh', P.thigh, 1), ...two('knee', P.knee, 1),
+    ...two('shin', P.shin, 1), ...two('ankle', P.ankle, 1), ...two('foot', P.foot, 1)];
+  const BACK = [['head', '', P.head], ['neck', '', P.neck], ['upback', '', P.chest], ['lowback', '', P.abdo],
+    ...two('glute', P.glute, 0), ...two('shoulder', P.shoulder, 0), ...two('arm', P.arm, 0), ...two('hand', P.hand, 0), ...two('ham', P.thigh, 0), ...two('knee', P.knee, 0),
+    ...two('calf', P.calf, 0), ...two('achilles', P.achilles, 0), ...two('foot', P.heel, 0)];
+  // the bones: one side of the limbs (copied to the other side), then the middle (skull, ribs, spine, pelvis)
+  const ribs = (y0, n) => Array.from({ length: n }, (_, i) => `M60,${y0 + 5 * i} C54,${y0 - 1 + 5 * i} 47,${y0 + 1 + 5 * i} 44.5,${y0 + 7 + 5 * i}`).join(' ');
+  const LIMB = 'M59,41 C52,40 44,41.5 37,45 M35.5,50 L28.5,82 M27.5,86 L22.5,110 M30,86 L25.5,111 M22,115 L21,126 M24,115 L24,127 M26,115 L27,126 '
+    + 'M47,106 L50.5,159 M50.5,164 a2.3,2.3 0 1,0 0.01,0 M50,172 L50.5,217 M46.2,175 L47.5,214 M49,225 L47.5,234 M51.5,225 L51.5,235 M54,225 L55,233';
+  const SKULL = 'M60,8 C52,8 50,14 50,19 C50,24 53,26 54,28 L66,28 C67,26 70,24 70,19 C70,14 68,8 60,8 Z ';
+  const PELVIS = 'M44,95 C43,104 50,110 60,108 C70,110 77,104 76,95 C70,100 65,103 60,103 C55,103 50,100 44,95 Z';
+  const BONES = {
+    front: [LIMB + ' ' + ribs(47, 5), SKULL + 'M55,15 a2.5,2.5 0 1,0 0.01,0 M65,15 a2.5,2.5 0 1,0 0.01,0 M54,24 Q60,32 66,24 M60,42 L60,66 M60,70 L60,90 ' + PELVIS],
+    back: [LIMB + ' ' + ribs(47, 5) + ' M41,48 L52,47 L46,64 Z', SKULL + 'M60,30 L60,100 ' + Array.from({ length: 14 }, (_, i) => `M58,${33 + 5 * i} L62,${33 + 5 * i}`).join(' ') + ' ' + PELVIS],
+  };
+  const bones = k => { const [side, mid] = BONES[k], d = side + ' ' + mid; return `<g class="bm-bones"><path class="bo" d="${d}"/><path class="bo" d="${side}"${MIR}/><path class="bi" d="${d}"/><path class="bi" d="${side}"${MIR}/></g>`; };
+  const SIDE = { d: 'droit', g: 'gauche' };
+  function css() {
+    if (document.getElementById('bmCss')) return;
+    const st = document.createElement('style'); st.id = 'bmCss';
+    st.textContent = '.bm{display:flex;justify-content:center;gap:14px;margin:6px 0}.bm figure{margin:0;text-align:center}.bm figcaption{font-size:12px;font-weight:700;opacity:.7}'
+      + '.bm svg{width:min(140px,41vw);height:auto;touch-action:manipulation}.bm-body *{fill:#f1cfb6;stroke:#c99a7c;stroke-width:.7}'
+      + '.bm [data-bz]{fill:rgba(220,38,38,0);stroke:none;cursor:pointer;transition:fill .15s}.bm [data-bz]:hover{fill:rgba(239,68,68,.3)}.bm [data-bz].on{fill:rgba(220,38,38,.62)}'
+      + '.bm-bones path{fill:none;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}.bm-bones .bo{stroke:#a38a74;stroke-width:2.5}.bm-bones .bi{stroke:#fffdf6;stroke-width:1.3}'
+      + '.bm-sug{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}.bm-sug button,.bm-chips button{border:1px solid #d6d0cb;background:#fff;color:#14172b;border-radius:999px;padding:8px 12px;font:inherit;font-size:14px;cursor:pointer}'
+      + '.bm-sug button.on,.bm-chips button.on{background:#dc2626;border-color:#dc2626;color:#fff}.bm-chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 10px}.bm-lbl{font-weight:700;margin:10px 0 2px}'
+      + '@media (prefers-color-scheme: dark){.bm-body *{fill:#8a6b58;stroke:#5c4536}.bm-sug button,.bm-chips button{background:#18223f;color:#eceef6;border-color:#263156}}';
+    document.head.appendChild(st);
+  }
+  const view = (shapes, sel, cap, k) => `<figure><svg viewBox="15 2 90 240" role="group" aria-label="${cap}"><g class="bm-body">${BODY}</g>${shapes.map(([z, s, el]) => el.replace(/^<(\w+)/, `<$1 data-bz="${z}" data-bs="${s}" class="${sel.zone === z && (sel.side || '') === s ? 'on' : ''}"`).replace('/>', `><title>${esc(ZONES[z][0] + (s ? ' ' + SIDE[s] : ''))}</title></${el.match(/^<(\w+)/)[1]}>`)).join('')}${bones(k)}</svg><figcaption>${cap}</figcaption></figure>`;
+  // the body, the injuries of the chosen zone, the kind, the time to recover (opts.noDays: without the time)
+  function html(sel, opts = {}) {
+    css(); const z = ZONES[sel.zone];
+    return `<p class="bm-lbl">1. Touche la zone douloureuse</p><div class="bm">${view(FRONT, sel, 'Face', 'front')}${view(BACK, sel, 'Dos', 'back')}</div>
+      ${z ? `<p class="bm-lbl">2. ${esc(z[0])}${sel.side ? ' ' + SIDE[sel.side] : ''} : c'est plutôt…</p><div class="bm-sug">${z[1].map(x => `<button type="button" class="${sel.part === x ? 'on' : ''}" data-bpart="${esc(x)}">${esc(x)}</button>`).join('')}<button type="button" class="${sel.part === z[0] ? 'on' : ''}" data-bpart="${esc(z[0])}">Je ne sais pas</button></div>` : ''}
+      ${z ? `<p class="bm-lbl">3. Le type de blessure</p><div class="bm-chips">${TYPES.map(x => `<button type="button" class="${sel.type === x ? 'on' : ''}" data-btype="${esc(x)}">${esc(x)}</button>`).join('')}</div>` : ''}
+      ${z && !opts.noDays ? `<p class="bm-lbl">4. Temps de rétablissement estimé</p><div class="bm-chips">${DAYS.map(([n, l]) => `<button type="button" class="${sel.days === n ? 'on' : ''}" data-bdays="${n}">${l}</button>`).join('')}</div>` : ''}`;
+  }
+  function click(e, sel) {
+    const z = e.target.closest('[data-bz]');
+    if (z) { const nz = z.dataset.bz; if (nz !== sel.zone) { sel.part = ''; } sel.zone = nz; sel.side = z.dataset.bs || ''; if (!sel.part) sel.part = ''; return true; }
+    const p = e.target.closest('[data-bpart]'); if (p) { sel.part = p.dataset.bpart; return true; }
+    const t = e.target.closest('[data-btype]'); if (t) { sel.type = sel.type === t.dataset.btype ? '' : t.dataset.btype; return true; }
+    const d = e.target.closest('[data-bdays]'); if (d) { sel.days = +d.dataset.bdays; return true; }
+    return false;
+  }
+  // « Ischio-jambiers (gauche) »
+  const partLabel = sel => sel.part ? sel.part + (sel.side ? ` (${SIDE[sel.side]})` : '') : '';
+  return { html, click, partLabel, ZONES, TYPES, DAYS, SIDE };
+})();
+
+;
 /* ===== views.js ===== */
 /* Views: every screen of the app except the board editor. */
 var Views = (() => {
@@ -14205,6 +14451,7 @@ var Views = (() => {
       ${Onboard.planCard()}
       ${Quick.matchDayCard()}
       ${Quick.tomorrowCard()}
+      ${Health.followCard()}
       ${Quick.backupCard()}
       ${President.homeReminder()}
       ${Weather.placeholder()}
@@ -14760,6 +15007,7 @@ var Views = (() => {
         <div ${panel('apres')}>
         ${m.played ? `<section class="card report-card"><div><h2>📄 Compte-rendu du match</h2><p class="muted small">Score, ${Sport.W().scorers}, temps forts, minutes, cartons, notes et le mot du coach, dans un PDF à envoyer (WhatsApp, e-mail…).</p></div><button class="btn primary" data-act="report">${I.pdf}<span>Envoyer le PDF</span></button></section>` : ''}
         ${Sources.sheetCard(m)}
+        <div id="hlBox"></div>
         <h2 class="section">Score</h2>
         <section class="card">
           <label class="switch"><input type="checkbox" id="mPlayed" ${m.played ? 'checked' : ''}><span>Le match est joué</span></label>
@@ -14782,6 +15030,7 @@ var Views = (() => {
       Parents.mountMatch(root, m, conv); Rooms.matchBox($('#roomsBox', root), m);
       const box = $('#rateBox', root); box.innerHTML = Ratings.section(m, conv, 'match'); Ratings.bind(box, m, save);
       Media.mount(root); Library.mountDocs($('#docsBox', root), m, save);
+      Highlights.mount($('#hlBox', root), m, save, toast);
     };
     const cheer = before => { if (Ratings.result(m) === 'V' && before !== 'V') Ratings.celebrate(); };
     const setMin = (pid, v) => { const mm = m.minutes = m.minutes || {}; if (v === '' || v == null) delete mm[pid]; else mm[pid] = Math.max(0, Math.min(150, Math.round(+v) || 0)); };
@@ -15267,7 +15516,7 @@ var App = (() => {
   })();
   /* Updates: version.json on the site says which build is online. When it is newer than this one,
      the app empties its offline copy and reloads (an iPhone can keep an old copy open for days). */
-  const BUILD = 161, UPD = AppCfg.key('update-tried');
+  const BUILD = 162, UPD = AppCfg.key('update-tried');
   async function onlineBuild() {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
     return (await r.json()).build || 0;
