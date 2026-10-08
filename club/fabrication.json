@@ -79,6 +79,16 @@
         "'img/corps-face.jpg', 'decouvrir.html',",
         "'img/corps-face.jpg',"
       ]
+    ],
+    "confidentialite.html": [
+      [
+        "Confidentialité · Clubbo",
+        "Confidentialité · FA Le Raincy · Coach"
+      ],
+      [
+        "données Clubbo garde",
+        "données FA Le Raincy · Coach garde"
+      ]
     ]
   }
 }

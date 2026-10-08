@@ -5,7 +5,7 @@
 const News = (() => {
   const { esc, modal } = UI;
   const LIST = [
-    { n: 78, date: '2026-10-08', title: 'La page confidentialité a rattrapé l'appli 🔒', items: [
+    { n: 78, date: '2026-10-08', title: 'La page confidentialité a rattrapé l\'appli 🔒', items: [
       ['🔒', "Page confidentialité complétée : profil et blessures signalés par les joueurs, messages au coach, highlights et vidéos (YouTube sans cookie, option Gemini avec accord des familles), jeu des pronos, anniversaires, imports AssistCoachAI / Footclubs, durées de conservation."],
     ] },
     { n: 77, date: '2026-10-08', title: 'Les notes des coachs d\'AssistCoachAI', items: [
