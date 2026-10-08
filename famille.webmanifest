@@ -1,23 +1,103 @@
 {
-  "name": "FA Le Raincy · Famille",
-  "short_name": "Raincy Famille",
-  "description": "L'espace des joueurs et des parents : convocations, matchs, séances",
+  "id": "./moi.html",
+  "name": "FA Le Raincy",
+  "short_name": "FA Le Raincy",
+  "description": "L'appli du FA Le Raincy : convocations, matchs, séances, chat des parents et des coachs, résultats et badges.",
   "lang": "fr",
+  "dir": "ltr",
   "start_url": "./moi.html",
   "scope": "./",
   "display": "standalone",
+  "orientation": "portrait",
   "background_color": "#0e1d45",
   "theme_color": "#0e1d45",
+  "categories": [
+    "sports"
+  ],
   "icons": [
     {
       "src": "icons/icon-192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
       "src": "icons/icon-512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icons/maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "store/1-matchs.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Les prochains matchs et la convocation"
+    },
+    {
+      "src": "store/2-chat.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Le chat des parents et des coachs"
+    },
+    {
+      "src": "store/3-saison.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "La saison du joueur"
+    },
+    {
+      "src": "store/5-badges.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Les badges à gagner"
+    },
+    {
+      "src": "store/4-code.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Entrer avec son code personnel"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Mon espace",
+      "url": "./moi.html",
+      "icons": [
+        {
+          "src": "icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Appli des coachs",
+      "short_name": "Coachs",
+      "url": "./index.html",
+      "icons": [
+        {
+          "src": "icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
     }
   ]
 }
