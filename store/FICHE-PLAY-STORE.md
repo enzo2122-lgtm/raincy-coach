@@ -1,7 +1,7 @@
-# Fiche Play Store — FA Le Raincy (mise à jour 8 octobre 2026, appli 4.91)
+# Fiche Play Store — FA Le Raincy (mise à jour 9 octobre 2026, appli 5.29)
 
 Tout est à copier-coller dans Play Console → Présence sur le Play Store → Fiche principale.
-Le plan complet (compte, PWABuilder, test fermé, questionnaires) est dans le doc « Publier FA Le Raincy sur le Play Store ».
+Le plan complet (compte, PWABuilder, test fermé, questionnaires) est dans `PUBLIER-PLAY-STORE.md`, à côté.
 
 | Champ | À mettre |
 |---|---|
