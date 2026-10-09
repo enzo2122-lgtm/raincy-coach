@@ -1,7 +1,7 @@
 {
   "_lisez-moi": "Raincy Coach est fabriqué à partir de Clubbo : dans le dossier de Clubbo, node tools/fabriquer.js ../raincy-coach [nouvelle version]. Ce fichier donne la version de Raincy et ses mots dans les pages.",
-  "version": "5.27",
-  "build": 244,
+  "version": "5.28",
+  "build": 245,
   "cache": "raincy-coach-v",
   "remplacer": {
     "*.html": [
@@ -88,6 +88,28 @@
       [
         "données Clubbo garde",
         "données FA Le Raincy · Coach garde"
+      ],
+      [
+        "Pour une question sur Clubbo lui-même : <a href=\"decouvrir.html#code\">formulaire de contact</a>.",
+        "Pour une question sur l'appli elle-même : écris au club, qui transmet à son créateur."
+      ],
+      [
+        "Contact : <a href=\"decouvrir.html#code\">formulaire</a>.",
+        "Contact : par le club FA Le Raincy."
+      ]
+    ],
+    "aide.html": [
+      [
+        "<title>Clubbo · Aide au match</title>",
+        "<title>FA Le Raincy · Aide au match</title>"
+      ],
+      [
+        "<meta name=\"apple-mobile-web-app-title\" content=\"Clubbo\">",
+        "<meta name=\"apple-mobile-web-app-title\" content=\"Raincy Aide\">"
+      ],
+      [
+        "<p id=\"club\">Clubbo</p>",
+        "<p id=\"club\">FA Le Raincy</p>"
       ]
     ]
   }
