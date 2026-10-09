@@ -75,6 +75,13 @@
       "type": "image/png",
       "form_factor": "narrow",
       "label": "Entrer avec son code personnel"
+    },
+    {
+      "src": "store/6-autorisations.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Les autorisations des familles, sans papier"
     }
   ],
   "shortcuts": [

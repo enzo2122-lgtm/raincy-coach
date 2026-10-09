@@ -12,7 +12,7 @@ Le plan complet (compte, PWABuilder, test fermé, questionnaires) est dans le do
 | Règles de confidentialité | https://enzo2122-lgtm.github.io/raincy-coach/confidentialite.html |
 | Icône 512 × 512 | https://enzo2122-lgtm.github.io/raincy-coach/icons/icon-512.png |
 | Image de présentation 1024 × 500 | https://enzo2122-lgtm.github.io/raincy-coach/store/banniere-1024x500.png |
-| Captures téléphone (1080 × 1920, dans l'ordre) | store/1-matchs.png · 2-chat.png · 3-saison.png · 5-badges.png · 4-code.png |
+| Captures téléphone (1080 × 1920, dans l'ordre) | store/1-matchs.png · 2-chat.png · 3-saison.png · 5-badges.png · 6-autorisations.png · 4-code.png |
 | Adresse de l'appli pour PWABuilder | https://enzo2122-lgtm.github.io/raincy-coach/moi.html |
 | Package ID (définitif) | fr.falraincy.app |
 | Fichier assetlinks.json | dossier `enzo2122-lgtm.github.io` sur le bureau (dépôt prêt à pousser, voir son LISEZMOI) |
