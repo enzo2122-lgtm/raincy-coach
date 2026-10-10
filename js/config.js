@@ -18,5 +18,6 @@ const CLUB_SERVER = {
     city: 'Le Raincy', lat: 48.8993, lon: 2.5183,
     fffUrl: 'https://epreuves.fff.fr/competition/club/552176-f-association-le-raincy/equipes.html',
     homeBib: 'bordeaux', awayBib: 'blanc',
+    fees: { town: 'Le Raincy', local: 250, ext: 270, mute: 365 }, // (5.77) tarifs des licences : Raincéens, non-Raincéens, mutés
   },
 };
