@@ -94,6 +94,8 @@ const Analyse = (() => {
         <p class="muted small an-keys">Sur ordinateur : la lettre de l'action la marque, Espace = lecture / pause, ← → = 5 s, , . = une image.</p></section>
       ${yt ? '' : `<section class="card an-auto"><div class="row-head"><h2>🤖 Analyse automatique</h2><button class="btn primary" data-a="auto">🤖<span>Repérer les actions automatiquement</span></button></div>
         <p class="muted small">Sans regarder le match : l'appli écoute le son de la vidéo (cris, sifflets, applaudissements) et crée une séquence à chaque moment fort. Rien n'est envoyé : tout se passe sur cet appareil. Ensuite, regarde seulement ces séquences et choisis ce que c'est (but, occasion…). Pour une analyse par l'IA qui regarde l'image : fiche du match → Après → Highlights → « Créer automatiquement ».</p></section>`}
+      <section class="card an-ia"><div class="row-head"><h2>🧠 Analyse par l'image (ordinateur du club)</h2><button class="btn soft" data-a="iaimport">${I.upload}<span>Importer les propositions de l'IA</span></button></div>
+        <p class="muted small">Le programme « Raincy Vidéo » regarde le match sur l'ordinateur qui a la carte graphique (joueurs, ballon, équipes) et propose des buts, tirs, corners, coups francs et pertes de balle. Importe son fichier « .raincy-ia.json » : chaque proposition devient une séquence à vérifier.</p></section>
       <div id="anLive"></div>
       <div id="anStats"></div>
       <h2 class="section">Séquences</h2><div id="anClips"></div>`;
@@ -190,6 +192,24 @@ const Analyse = (() => {
         } catch (e) { toast(e.message || 'Analyse impossible', 'err'); }
         finally { bz.done(); }
         return;
+      }
+      // (3.38) the proposals of « Raincy Vidéo » (analyser.py on the club's computer): one sequence each, to check
+      if (a === 'iaimport') {
+        const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.json,application/json';
+        inp.onchange = async () => {
+          const f = inp.files && inp.files[0]; if (!f) return;
+          let r; try { r = JSON.parse(await f.text()); } catch (e) { r = null; }
+          if (!r || r.format !== 'raincy-ia' || !Array.isArray(r.clips)) return toast('Ce fichier ne vient pas de Raincy Vidéo (fichier .raincy-ia.json)', 'err');
+          const dur = isFinite(v.duration) && v.duration ? v.duration : Infinity, num = x => Number.isFinite(+x) ? +x : null;
+          const add = r.clips.filter(c => TAGS.some(t => t[0] === c.tag) && num(c.start) != null && num(c.end) > num(c.start) && num(c.start) < dur)
+            .filter(c => rec.clips.every(x => x.tag !== c.tag || Math.abs((x.at != null ? x.at : x.start) - (num(c.at) != null ? +c.at : +c.start)) > 8))
+            .map(c => ({ id: Store.uid(), tag: c.tag, start: Math.max(0, +c.start), end: Math.min(dur, +c.end), at: num(c.at) != null ? +c.at : +c.start, note: String(c.note || "🤖 Proposition de l'IA : à vérifier").slice(0, 120), players: [], auto: true }));
+          const ko = (r.envois || []).map(Number).filter(Number.isFinite);
+          if (rec.ko1 == null && ko.length) rec.ko1 = ko[0];
+          rec.clips.push(...add); await save(); drawClips(); drawLive();
+          toast(add.length ? `${add.length} proposition${add.length > 1 ? 's' : ''} de l'IA ajoutée${add.length > 1 ? 's' : ''} : regarde chacune, corrige l'action, touche les joueurs ou supprime-la` : 'Aucune nouvelle proposition dans ce fichier', add.length ? '' : 'err');
+        };
+        inp.click(); return;
       }
       if (b.dataset.rate) { v.playbackRate = +b.dataset.rate; $$('[data-rate]', root).forEach(x => x.classList.toggle('on', x === b)); return; }
       if (b.dataset.tag) {
