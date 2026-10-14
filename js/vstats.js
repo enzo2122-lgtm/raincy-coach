@@ -57,13 +57,14 @@ const VStats = (() => {
     const vOf = c => vs.find(v => v.id === c.vid) || {};
     const rows = cl.slice().sort((a, b) => (a.vid === b.vid ? 0 : a.vid < b.vid ? -1 : 1) || a.start - b.start).map(c => {
       const t = tagOf(c.tag), names = (c.players || []).map(id => Store.get('players', id)).filter(Boolean).map(Store.shortName).join(', '), mn = minute(vOf(c), c.at != null ? c.at : c.start);
-      const play = c.url ? `<button type="button" class="btn soft small" data-vp="${esc(c.url)}" data-vpt="${Math.floor(c.start)}" data-vptitle="${esc(t[2] + (names ? ' · ' + names : ''))}">▶<span>Voir</span></button>`
+      const play = c.clip ? `<button type="button" class="btn soft small" data-vsclip="${esc(c.clip)}" data-vptitle="${esc(t[2] + (names ? ' · ' + names : ''))}">▶<span>Voir${c.draws ? ' 🎨' : ''}</span></button>`
+        : c.url ? `<button type="button" class="btn soft small" data-vp="${esc(c.url)}" data-vpt="${Math.floor(c.start)}" data-vptitle="${esc(t[2] + (names ? ' · ' + names : ''))}">▶<span>Voir</span></button>`
         : `<a class="btn soft small" href="#/analyse/${esc(c.vid)}" title="La vidéo est sur l'appareil qui l'a importée">▶<span>Voir</span></a>`;
       return `<li class="vs-row" style="--c:${t[3]}"><span class="vs-t">${t[1]} <b>${esc(t[2])}</b>${mn ? ` <span class="muted">${mn}</span>` : ''} <span class="muted small">(${Analyse.mmss(c.start)})</span>${names ? `<br><span class="small">${esc(names)}</span>` : ''}${c.note ? `<br><i class="small">${esc(c.note)}</i>` : ''}</span>
         ${play}${c.url && !(m.highlights || []).some(h => h.vsClip === c.id) ? `<button type="button" class="btn soft small" data-vshl="${esc(c.vid)}|${esc(c.id)}" title="Ajouter aux highlights du match (les joueurs les voient quand tu les envoies)">＋🎬</button>` : ''}</li>`;
     }).join('');
     return `<section class="card vs-card"><h2>🎬 Analyse vidéo</h2>
-      <p class="muted small">${vs.length} vidéo${vs.length > 1 ? 's' : ''} analysée${vs.length > 1 ? 's' : ''} · ${cl.length} séquence${cl.length > 1 ? 's' : ''}. Rempli par la page « Analyse vidéo » (Bibliothèque → la vidéo → Analyser), visible par les éducateurs sur tous les appareils.</p>
+      <p class="muted small">${vs.length} vidéo${vs.length > 1 ? 's' : ''} analysée${vs.length > 1 ? 's' : ''} · ${cl.length} séquence${cl.length > 1 ? 's' : ''}. Rempli par la page « Analyse vidéo » (Bibliothèque → la vidéo → Analyser) ou par l'application Raincy Vidéo de l'ordinateur du club, visible par les éducateurs sur tous les appareils.</p>
       ${chips(all)}
       ${ps.length && tags.length ? `<div class="vs-scroll"><table class="vs-table"><thead><tr><th>Joueur</th>${tags.map(([k, ic, l]) => `<th title="${esc(l)}">${ic}</th>`).join('')}</tr></thead>
         <tbody>${ps.map(({ p, n }) => `<tr><th><a href="#/joueur/${esc(p.id)}">${esc(Store.shortName(p))}</a></th>${tags.map(([k]) => `<td>${n[k] || ''}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`
@@ -75,8 +76,13 @@ const VStats = (() => {
   function mount(box, m, save, redraw) {
     if (!box) return;
     box.innerHTML = matchCard(m);
-    box.onclick = e => {
+    box.onclick = async e => {
       if (VPlayer.onClick(e)) return;
+      const cb = e.target.closest('[data-vsclip]');
+      if (cb) { // (3.38) un clip de Raincy Vidéo : rangé dans le stockage privé du club, lu avec une adresse valable 1 heure
+        try { VPlayer.open(await clipUrl(cb.dataset.vsclip), 0, cb.dataset.vptitle); } catch (err) { UI.toast(err.message, 'err'); }
+        return;
+      }
       const b = e.target.closest('[data-vshl]'); if (!b) return;
       const [vid, cid] = b.dataset.vshl.split('|'), v = (m.video || {})[vid], c = v && (v.clips || []).find(x => x.id === cid);
       if (!c || !v.url) return;
@@ -84,6 +90,18 @@ const VStats = (() => {
       m.highlights = [...(m.highlights || []), { id: Store.uid(), vsClip: c.id, url: v.url, title: (tagOf(c.tag)[2] + (names ? ' · ' + names : '') + (mn ? ', ' + mn : '')).slice(0, 80), t: Analyse.mmss(c.start) }];
       save(); UI.toast('Ajouté aux highlights du match ✓'); redraw();
     };
+  }
+
+  // the address of a clip of the club's storage (function « raincy-clips » of the server, which checks the connection)
+  async function clipUrl(path) {
+    const c = Cloud.cfg(), t = Cloud.token && Cloud.token();
+    if (!c || !t) throw new Error('Connecte-toi au serveur du club pour voir ce clip.');
+    const headers = { apikey: c.key, 'Content-Type': 'application/json' }; if (!String(c.key).startsWith('sb_')) headers.Authorization = 'Bearer ' + c.key;
+    let r; try { r = await fetch(c.url.replace(/\/+$/, '') + '/functions/v1/raincy-clips', { method: 'POST', headers, body: JSON.stringify({ k: t, action: 'read', paths: [path] }) }); }
+    catch (e) { throw new Error('Pas de connexion internet.'); }
+    const o = await r.json().catch(() => ({}));
+    if (!r.ok || !o.urls || !o.urls[path]) throw new Error(r.status === 401 ? 'Ta connexion a expiré : reconnecte-toi.' : r.status === 404 ? 'Les clips ne sont pas encore installés sur le serveur du club.' : 'Clip introuvable.');
+    return o.urls[path];
   }
 
   /* ---------- the card of a player: his actions in the analysed matches of the season ---------- */
@@ -99,5 +117,5 @@ const VStats = (() => {
         : '<p class="muted">Il n\'est encore sur aucune séquence : dans l\'analyse, touche son nom sous les séquences où il apparaît.</p>'}</section>`;
   }
 
-  return { sync, count, matchCard, mount, playerCard, minute };
+  return { sync, count, matchCard, mount, playerCard, minute, clipUrl };
 })();
