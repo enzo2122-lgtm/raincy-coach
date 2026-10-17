@@ -1,7 +1,7 @@
 {
   "_lisez-moi": "Raincy Coach est fabriqué à partir de Clubbo : dans le dossier de Clubbo, node tools/fabriquer.js ../raincy-coach [nouvelle version]. Ce fichier donne la version de Raincy et ses mots dans les pages.",
-  "version": "6.12",
-  "build": 329,
+  "version": "6.13",
+  "build": 330,
   "cache": "raincy-coach-v",
   "remplacer": {
     "*.html": [
